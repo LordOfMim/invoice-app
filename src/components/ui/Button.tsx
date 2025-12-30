@@ -9,17 +9,17 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const base =
-  "inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-sand-50)] disabled:opacity-50 disabled:pointer-events-none";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-sm hover:shadow",
+    "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-[var(--glass-shadow-sm)] hover:shadow-[var(--glass-shadow)]",
   secondary:
-    "bg-white/70 text-[var(--color-ink)] border border-[var(--glass-border)] hover:bg-white/90 hover:border-[var(--color-sand-300)] backdrop-blur-sm",
+    "bg-[var(--glass-bg)] text-[var(--color-ink)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-solid)] hover:border-[var(--color-sand-400)] backdrop-blur-sm",
   danger:
-    "bg-white/70 text-[var(--color-danger)] border border-[var(--glass-border)] hover:bg-[var(--color-danger)]/10 hover:border-[var(--color-danger)]/30",
+    "bg-[var(--glass-bg)] text-[var(--color-danger)] border border-[var(--glass-border)] hover:bg-[var(--color-danger)]/10 hover:border-[var(--color-danger)]/30",
   ghost:
-    "text-[var(--color-ink-muted)] hover:bg-white/50 hover:text-[var(--color-ink)]",
+    "text-[var(--color-ink-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--color-ink)]",
 };
 
 const sizes: Record<Size, string> = {

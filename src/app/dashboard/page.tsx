@@ -83,7 +83,7 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-[var(--content-max-width)]">
+        <div className="mx-auto max-w-(--content-max-width)">
           <div className="text-sm text-[var(--color-ink-subtle)]">{t(language, "common.loading")}</div>
         </div>
       </main>
@@ -92,7 +92,7 @@ export default function DashboardPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-[var(--content-max-width)]">
+      <div className="mx-auto max-w-(--content-max-width)">
         <Stack gap="lg">
           <PageHeader
             title={t(language, "dashboard.title")}

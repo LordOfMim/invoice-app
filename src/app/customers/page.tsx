@@ -39,7 +39,7 @@ export default function CustomersPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-[var(--content-max-width)]">
+      <div className="mx-auto max-w-(--content-max-width)">
         <Stack gap="lg">
           <PageHeader
             title={t(language, "customers.title")}

@@ -41,7 +41,7 @@ export default function CreditNotesPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "creditNotes.title")}
           subtitle="Stornos and credit notes linked to invoices"

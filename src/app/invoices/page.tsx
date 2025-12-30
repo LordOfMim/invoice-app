@@ -50,7 +50,7 @@ export default function InvoicesPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <Stack gap="lg">
           <PageHeader
             title={t(language, "invoices.title")}

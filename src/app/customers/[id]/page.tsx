@@ -26,7 +26,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
   if (!adapter) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Surface className="p-6 text-sm text-(--color-ink-muted)">
             {t(language, "common.loading")}
           </Surface>
@@ -38,7 +38,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
   if (!customer) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
             <p className="text-sm text-(--color-ink-muted)">Customer not found.</p>
             <Link href="/customers" className="text-sm text-(--color-accent) hover:underline">
@@ -61,7 +61,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={customer.name || t(language, "customers.new")}
           breadcrumb={

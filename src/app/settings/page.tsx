@@ -20,7 +20,7 @@ export default function SettingsPage() {
   if (!adapter || !settings) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-[var(--content-max-width)]">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Surface variant="solid" padding="lg">
             <div className="text-sm text-[var(--color-ink-subtle)]">Loading…</div>
           </Surface>
@@ -31,7 +31,7 @@ export default function SettingsPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-[var(--content-max-width)]">
+      <div className="mx-auto max-w-(--content-max-width)">
         <Stack gap="xl">
           <PageHeader
             title={t(language, "settings.title")}

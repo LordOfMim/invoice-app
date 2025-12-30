@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
+import { AppBackground } from "@/components/AppBackground";
 
 export const metadata: Metadata = {
   title: "Invoice App",
@@ -14,8 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de">
-      <body className="min-h-dvh bg-zinc-50 text-zinc-900 antialiased">
-        <AppShell>{children}</AppShell>
+      <body className="min-h-dvh antialiased relative">
+        <AppBackground />
+        <div className="relative z-10">
+          <AppShell>{children}</AppShell>
+        </div>
       </body>
     </html>
   );

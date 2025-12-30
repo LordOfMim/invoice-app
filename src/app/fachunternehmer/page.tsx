@@ -110,7 +110,7 @@ export default function FachunternehmerPage() {
   return (
     <main className="flex-1 overflow-auto">
       <PrintStyles />
-      <div className="mx-auto max-w-5xl p-6 lg:p-10">
+      <div className="mx-auto max-w-(--content-max-width) p-6 lg:p-10">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between no-print">
           <div>

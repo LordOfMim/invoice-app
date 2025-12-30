@@ -44,7 +44,7 @@ export default function TemplatesPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "templates.title")}
           subtitle="Customize spacing, fonts, and styling without coding"

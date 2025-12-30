@@ -11,7 +11,7 @@ type BadgeProps = {
 const variants: Record<BadgeVariant, string> = {
   default: "bg-[var(--color-sand-200)] text-[var(--color-ink-muted)]",
   success: "bg-[var(--color-success)]/15 text-[var(--color-success)]",
-  warning: "bg-[var(--color-warning)]/15 text-[#8a7640]",
+  warning: "bg-[var(--color-warning)]/15 text-[var(--color-warning)]",
   danger: "bg-[var(--color-danger)]/15 text-[var(--color-danger)]",
   info: "bg-[var(--color-accent)]/15 text-[var(--color-accent)]",
 };
@@ -40,7 +40,7 @@ type StatProps = {
 };
 
 const statVariants = {
-  default: "bg-white/60",
+  default: "bg-[var(--glass-bg)]",
   success: "bg-[var(--color-success)]/5 border-[var(--color-success)]/20",
   warning: "bg-[var(--color-warning)]/5 border-[var(--color-warning)]/20",
   danger: "bg-[var(--color-danger)]/5 border-[var(--color-danger)]/20",
@@ -119,7 +119,7 @@ type ListItemProps = {
 };
 
 export function ListItem({ children, onClick, href, className = "" }: ListItemProps) {
-  const baseClass = `flex items-center justify-between gap-4 rounded-xl p-3 transition-colors hover:bg-white/60 ${className}`;
+  const baseClass = `flex items-center justify-between gap-4 rounded-xl p-3 transition-colors hover:bg-[var(--glass-bg)] ${className}`;
 
   if (href) {
     return (
@@ -151,7 +151,7 @@ type AlertProps = {
 const alertVariants = {
   info: "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/20 text-[var(--color-accent)]",
   success: "bg-[var(--color-success)]/10 border-[var(--color-success)]/20 text-[var(--color-success)]",
-  warning: "bg-[var(--color-warning)]/10 border-[var(--color-warning)]/20 text-[#8a7640]",
+  warning: "bg-[var(--color-warning)]/10 border-[var(--color-warning)]/20 text-[var(--color-warning)]",
   danger: "bg-[var(--color-danger)]/10 border-[var(--color-danger)]/20 text-[var(--color-danger)]",
 };
 

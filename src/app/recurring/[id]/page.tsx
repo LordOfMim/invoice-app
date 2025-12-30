@@ -36,15 +36,12 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
     return data?.recurringInvoices.find((ri) => ri.id === id) ?? null;
   }, [data?.recurringInvoices, id]);
 
-  const customers = useMemo(() => {
-    if (!adapter) return [];
-    return listCustomers(adapter);
-  }, [adapter, data?.customers]);
+  const customers = adapter ? listCustomers(adapter) : [];
 
   if (!adapter) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Surface className="p-6 text-sm text-(--color-ink-muted)">
             {t(language, "common.loading")}
           </Surface>
@@ -56,7 +53,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
   if (!recurring) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
             <p className="text-sm text-(--color-ink-muted)">Recurring invoice not found.</p>
             <Link href="/recurring" className="text-sm text-(--color-accent) hover:underline">
@@ -100,7 +97,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={recurring.name || t(language, "recurring.new")}
           breadcrumb={

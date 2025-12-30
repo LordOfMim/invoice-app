@@ -32,7 +32,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
   if (!adapter) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Surface className="p-6 text-sm text-(--color-ink-muted)">
             {t(language, "common.loading")}
           </Surface>
@@ -44,7 +44,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
   if (!product) {
     return (
       <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
             <p className="text-sm text-(--color-ink-muted)">Product not found.</p>
             <Link href="/products" className="text-sm text-(--color-accent) hover:underline">
@@ -67,7 +67,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={product.name || t(language, "products.new")}
           breadcrumb={

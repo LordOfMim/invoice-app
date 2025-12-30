@@ -131,8 +131,8 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
       onClick={onClick}
       className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
         active
-          ? "bg-white/80 text-[var(--color-ink)] shadow-sm"
-          : "text-[var(--color-ink-muted)] hover:bg-white/50 hover:text-[var(--color-ink)]"
+          ? "bg-[var(--glass-bg-solid)] text-[var(--color-ink)] shadow-[var(--glass-shadow-sm)]"
+          : "text-[var(--color-ink-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--color-ink)]"
       }`}
     >
       <Icon className={`h-5 w-5 flex-shrink-0 transition-colors ${
@@ -242,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-ink-muted)] hover:bg-white/60"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-ink-muted)] hover:bg-[var(--glass-bg)]"
           >
             {mobileMenuOpen ? (
               <CloseIcon className="h-5 w-5" />
@@ -277,7 +277,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
             <button
               onClick={() => setMobileMenuOpen(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-ink-muted)] hover:bg-white/60"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-ink-muted)] hover:bg-[var(--glass-bg)]"
             >
               <CloseIcon className="h-5 w-5" />
             </button>

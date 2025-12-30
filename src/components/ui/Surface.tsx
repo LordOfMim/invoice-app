@@ -11,11 +11,11 @@ type SurfaceProps = HTMLAttributes<HTMLDivElement> & {
 
 const variants: Record<SurfaceVariant, string> = {
   glass:
-    "bg-white/60 backdrop-blur-xl border border-[var(--glass-border)] shadow-[var(--glass-shadow-sm)]",
+    "bg-[var(--glass-bg)] backdrop-blur-xl border border-[var(--glass-border)] shadow-[var(--glass-shadow-sm)]",
   solid:
-    "bg-white/90 backdrop-blur-sm border border-[var(--glass-border)] shadow-[var(--glass-shadow)]",
+    "bg-[var(--glass-bg-solid)] backdrop-blur-sm border border-[var(--glass-border)] shadow-[var(--glass-shadow)]",
   soft:
-    "bg-[var(--color-sand-100)]/60",
+    "bg-[var(--color-sand-100)]/70",
   outline:
     "border border-[var(--glass-border)]",
 };

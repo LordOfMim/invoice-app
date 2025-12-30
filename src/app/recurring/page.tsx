@@ -66,7 +66,7 @@ export default function RecurringPage() {
 
   return (
     <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "recurring.title")}
           subtitle="Monthly/quarterly generation with next-run reminders"
