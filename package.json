@@ -11,10 +11,10 @@
     "start": "next start",
     "lint": "eslint .",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "next build && electron-builder",
-    "electron:build:win": "next build && electron-builder --win",
-    "electron:build:mac": "next build && electron-builder --mac",
-    "electron:build:linux": "next build && electron-builder --linux",
+    "electron:build": "next build && node scripts/prepare-electron-standalone.mjs && electron-builder",
+    "electron:build:win": "next build && node scripts/prepare-electron-standalone.mjs && electron-builder --win",
+    "electron:build:mac": "next build && node scripts/prepare-electron-standalone.mjs && electron-builder --mac",
+    "electron:build:linux": "next build && node scripts/prepare-electron-standalone.mjs && electron-builder --linux",
     "export": "next build"
   },
   "build": {
@@ -30,16 +30,7 @@
       "public/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": ".next/static",
-        "to": ".next/standalone/.next/static"
-      },
-      {
-        "from": "public",
-        "to": ".next/standalone/public"
-      }
-    ],
+    "extraResources": [],
     "asar": false,
     "win": {
       "target": [

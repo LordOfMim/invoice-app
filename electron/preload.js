@@ -12,6 +12,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // App info
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+
+  // Startup logs (main process)
+  getStartupLogs: () => ipcRenderer.invoke('startup-log-get'),
+  onStartupLog: (callback) => {
+    const listener = (_event, line) => callback(line);
+    ipcRenderer.on('startup-log', listener);
+    return () => ipcRenderer.removeListener('startup-log', listener);
+  },
   
   // PDF generation
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),

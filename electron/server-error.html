@@ -16,8 +16,14 @@
     <div class="details" id="error-details"></div>
   </div>
   <script>
-    // Optionally, error details can be injected here
-    window.electronError && (document.getElementById('error-details').textContent = window.electronError);
+    // Show error details from `?message=` when provided.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const message = params.get('message');
+      if (message) {
+        document.getElementById('error-details').textContent = message;
+      }
+    } catch {}
   </script>
 </body>
 </html>

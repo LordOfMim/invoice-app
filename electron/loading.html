@@ -5,11 +5,293 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loading...</title>
   <style>
-    body { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f8fafc; margin: 0; }
-    .loader { font-size: 1.5rem; color: #333; }
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-strong: rgba(255, 255, 255, 0.10);
+      --text: rgba(255, 255, 255, 0.92);
+      --muted: rgba(255, 255, 255, 0.65);
+      --faint: rgba(255, 255, 255, 0.10);
+      --accent: rgba(255, 255, 255, 0.92);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --panel: rgba(15, 23, 42, 0.05);
+        --panel-strong: rgba(15, 23, 42, 0.08);
+        --text: rgba(15, 23, 42, 0.92);
+        --muted: rgba(15, 23, 42, 0.62);
+        --faint: rgba(15, 23, 42, 0.10);
+        --accent: rgba(15, 23, 42, 0.92);
+      }
+    }
+
+    body {
+      height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+    }
+
+    /* Subtle background texture */
+    .bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(800px 400px at 15% 20%, rgba(255, 255, 255, 0.08), transparent 60%),
+        radial-gradient(700px 450px at 85% 30%, rgba(255, 255, 255, 0.06), transparent 60%),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.04), transparent 35%);
+      filter: saturate(110%);
+    }
+
+    .grain {
+      position: fixed;
+      inset: -40px;
+      pointer-events: none;
+      opacity: 0.10;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+
+    .wrap {
+      width: min(860px, calc(100vw - 48px));
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      border-radius: 18px;
+      background: var(--panel);
+      border: 1px solid var(--panel-strong);
+      backdrop-filter: blur(10px);
+      padding: 22px 22px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.20);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin: 0;
+    }
+
+    .subtitle {
+      margin: 6px 0 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 2px solid var(--faint);
+      border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite;
+      flex: 0 0 auto;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .progress {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      border: 1px solid var(--panel-strong);
+    }
+
+    .bar {
+      height: 100%;
+      width: 42%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+      animation: move 1.2s ease-in-out infinite;
+    }
+
+    @keyframes move {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(260%); }
+    }
+
+    .meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--panel-strong);
+    }
+
+    .logs {
+      position: relative;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.18);
+      border: 1px solid var(--panel-strong);
+      overflow: hidden;
+    }
+
+    @media (prefers-color-scheme: light) {
+      .logs { background: rgba(15, 23, 42, 0.04); }
+    }
+
+    .logsHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--panel-strong);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 12px;
+      max-height: 180px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    @media (prefers-color-scheme: light) {
+      pre { color: rgba(15, 23, 42, 0.65); }
+    }
+
+    .watermark {
+      position: fixed;
+      inset: auto 0 10px 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.2px;
+      opacity: 0.75;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
-  <div class="loader">Starting Invoice App...<br/>Please wait while the server starts.</div>
+  <div class="bg"></div>
+  <div class="grain"></div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div class="spinner" aria-hidden="true"></div>
+        <div>
+          <p class="title" id="title">Starting Helferlein…</p>
+          <p class="subtitle" id="subtitle">Booting the local server and loading your workspace.</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px" class="progress" aria-hidden="true">
+        <div class="bar"></div>
+      </div>
+
+      <div class="meta" id="meta">
+        <span class="pill" id="pill-version">Version: …</span>
+        <span class="pill" id="pill-platform">Platform: …</span>
+        <span class="pill" id="pill-status">Status: starting</span>
+      </div>
+      <div class="hint">Tip: If startup hangs, the live log below usually explains why.</div>
+    </div>
+
+    <div class="logs">
+      <div class="logsHeader">
+        <div>Startup log (live)</div>
+        <div id="logCount">0 lines</div>
+      </div>
+      <pre id="log"></pre>
+    </div>
+  </div>
+
+  <div class="watermark">Invoice App • Local-first • Offline-ready</div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const logCountEl = document.getElementById('logCount');
+    const pillStatus = document.getElementById('pill-status');
+    const pillVersion = document.getElementById('pill-version');
+    const pillPlatform = document.getElementById('pill-platform');
+
+    const lines = [];
+    const LIMIT = 200;
+
+    function render() {
+      logEl.textContent = lines.join('\n');
+      logCountEl.textContent = `${lines.length} line${lines.length === 1 ? '' : 's'}`;
+      // Keep scrolled to bottom.
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function pushLine(line) {
+      lines.push(line);
+      if (lines.length > LIMIT) lines.splice(0, lines.length - LIMIT);
+      render();
+
+      // Lightweight status heuristics.
+      const lower = String(line).toLowerCase();
+      if (lower.includes('waiting for next.js server')) pillStatus.textContent = 'Status: starting server';
+      if (lower.includes('server ready')) pillStatus.textContent = 'Status: loading UI';
+      if (lower.includes('did-fail-load') || lower.includes('failed')) pillStatus.textContent = 'Status: error';
+    }
+
+    (async () => {
+      try {
+        if (window.electronAPI?.getAppInfo) {
+          const info = await window.electronAPI.getAppInfo();
+          if (info?.version) pillVersion.textContent = `Version: ${info.version}`;
+          if (info?.name) document.getElementById('title').textContent = `Starting ${info.name}…`;
+        }
+      } catch {}
+
+      try {
+        if (window.electronAPI?.platform) {
+          pillPlatform.textContent = `Platform: ${window.electronAPI.platform}`;
+        }
+      } catch {}
+
+      try {
+        const initial = (await window.electronAPI?.getStartupLogs?.()) || [];
+        for (const line of initial) pushLine(line);
+      } catch {}
+
+      try {
+        window.electronAPI?.onStartupLog?.((line) => pushLine(line));
+      } catch {}
+    })();
+  </script>
 </body>
 </html>

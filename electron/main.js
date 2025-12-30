@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const http = require('http');
+const fs = require('fs');
 
 // electron-store is ESM, need dynamic import
 let store;
@@ -22,6 +23,34 @@ let mainWindow;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const PORT = isDev ? 3000 : 3456;
+const HOST = '127.0.0.1';
+
+const startupLogBuffer = [];
+const STARTUP_LOG_LIMIT = 250;
+
+function log(...args) {
+  const message = args
+    .map((v) => (typeof v === 'string' ? v : JSON.stringify(v, null, 2)))
+    .join(' ');
+  startupLogBuffer.push(message);
+  if (startupLogBuffer.length > STARTUP_LOG_LIMIT) {
+    startupLogBuffer.splice(0, startupLogBuffer.length - STARTUP_LOG_LIMIT);
+  }
+  // Console logs help in dev; file logs help in packaged builds.
+  try {
+    console.log(message);
+  } catch {}
+  try {
+    const logPath = path.join(app.getPath('userData'), 'main.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`);
+  } catch {}
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('startup-log', message);
+    }
+  } catch {}
+}
 
 // Check if Node.js is installed
 function isNodeInstalled() {
@@ -52,7 +81,11 @@ function waitForServer(url, timeout = 90000) {
     let lastError = null;
     const check = () => {
       http.get(url, (res) => {
-        if (res.statusCode === 200 || res.statusCode === 304) {
+        // Treat any non-5xx response as "server is up".
+        // (Next may redirect or return 404 for some paths.)
+        const status = res.statusCode || 0;
+        res.resume();
+        if (status > 0 && status < 500) {
           resolve();
         } else {
           retry();
@@ -75,59 +108,49 @@ function waitForServer(url, timeout = 90000) {
 
 async function startNextServer() {
   if (isDev) return; // In dev mode, Next.js runs separately
-  
-  // Check if Node.js is installed
-  if (!isNodeInstalled()) {
-    showNodeRequiredError();
-    return;
-  }
-  
+
+  // In packaged builds, prefer Electron's embedded Node mode so the app
+  // does not depend on an external Node.js installation.
   return new Promise(async (resolve) => {
+    let standaloneDir, serverPath;
     const appPath = app.getAppPath();
-    const fs = require('fs');
-    
-    // Path to standalone server
-    let standaloneDir = path.join(appPath, '.next', 'standalone');
-    let serverPath = path.join(standaloneDir, 'server.js');
-    
-    console.log('App path:', appPath);
-    console.log('Standalone dir:', standaloneDir);
-    console.log('Server path:', serverPath);
-    
-    // Check if standalone server exists, try alternative paths
+
+
+    // In production, check app/.next/standalone first (electron-builder output)
+    standaloneDir = path.join(process.resourcesPath, 'app', '.next', 'standalone');
+    serverPath = path.join(standaloneDir, 'server.js');
+    log('Production (app/) standalone dir:', standaloneDir);
+    log('Production (app/) server path:', serverPath);
+
     if (!fs.existsSync(serverPath)) {
-      console.log('Server not found at app path, trying resources path...');
+      // Fallback: try resourcesPath/.next/standalone (older config)
       standaloneDir = path.join(process.resourcesPath, '.next', 'standalone');
       serverPath = path.join(standaloneDir, 'server.js');
-      console.log('Alternative server path:', serverPath);
+      log('Fallback (resources/.next) server path:', serverPath);
     }
-    
+
     if (!fs.existsSync(serverPath)) {
-      console.error('Standalone server not found!');
-      console.log('Directory contents of appPath:', fs.readdirSync(appPath));
+      // Fallback: try appPath (for dev/testing)
+      standaloneDir = path.join(appPath, '.next', 'standalone');
+      serverPath = path.join(standaloneDir, 'server.js');
+      log('Fallback (appPath) server path:', serverPath);
+    }
+
+    if (!fs.existsSync(serverPath)) {
+      log('Standalone server not found!');
       resolve();
       return;
     }
-    
-    // Copy static files if needed
-    const staticSrc = path.join(appPath, '.next', 'static');
-    const staticDest = path.join(standaloneDir, '.next', 'static');
-    if (fs.existsSync(staticSrc) && !fs.existsSync(staticDest)) {
-      console.log('Copying static files...');
-      fs.cpSync(staticSrc, staticDest, { recursive: true });
-    }
-    
-    // Copy public folder if needed  
-    const publicSrc = path.join(appPath, 'public');
-    const publicDest = path.join(standaloneDir, 'public');
-    if (fs.existsSync(publicSrc) && !fs.existsSync(publicDest)) {
-      console.log('Copying public files...');
-      fs.cpSync(publicSrc, publicDest, { recursive: true });
-    }
+
+    // NOTE: Do not copy assets at runtime in production.
+    // Installed apps often live in read-only locations (e.g. Program Files),
+    // which causes startup failures and the loading screen to hang.
+    // Assets should be copied into `.next/standalone` during the build step.
     
     try {
-      // Try to find node executable
-      const nodeCmd = process.platform === 'win32' ? 'node.exe' : 'node';
+      const nodeCmd = isDev
+        ? (process.platform === 'win32' ? 'node.exe' : 'node')
+        : process.execPath;
       
       nextServer = spawn(nodeCmd, [serverPath], {
         cwd: standaloneDir,
@@ -135,35 +158,36 @@ async function startNextServer() {
           ...process.env, 
           NODE_ENV: 'production',
           PORT: PORT.toString(),
-          HOSTNAME: 'localhost'
+          HOSTNAME: HOST,
+          ...(isDev ? {} : { ELECTRON_RUN_AS_NODE: '1' })
         },
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
+        shell: false,
         windowsHide: true
       });
 
       nextServer.stdout.on('data', (data) => {
-        console.log('Next.js:', data.toString());
+        log('Next.js:', data.toString());
       });
 
       nextServer.stderr.on('data', (data) => {
-        console.error('Next.js error:', data.toString());
+        log('Next.js error:', data.toString());
       });
 
       nextServer.on('error', (err) => {
-        console.error('Failed to start Next.js:', err);
+        log('Failed to start Next.js:', err);
       });
       
       nextServer.on('exit', (code, signal) => {
-        console.log('Next.js server exited with code:', code, 'signal:', signal);
+        log('Next.js server exited with code:', code, 'signal:', signal);
       });
       
       // Wait for server to be ready
-      console.log('Waiting for Next.js server on port', PORT);
-      await waitForServer(`http://localhost:${PORT}`);
-      console.log('Next.js server ready!');
+      log('Waiting for Next.js server on', `http://${HOST}:${PORT}`);
+      await waitForServer(`http://${HOST}:${PORT}`);
+      log('Next.js server ready!');
     } catch (err) {
-      console.error('Error starting Next.js server:', err);
+      log('Error starting Next.js server:', err);
     }
     
     resolve();
@@ -172,15 +196,14 @@ async function startNextServer() {
 
 async function createWindow() {
   await initStore();
-  await initStore();
 
   const bounds = store.get('windowBounds') || { width: 1400, height: 900 };
 
   mainWindow = new BrowserWindow({
-    width,
-    height,
-    x,
-    y,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 1024,
     minHeight: 700,
     webPreferences: {
@@ -193,40 +216,59 @@ async function createWindow() {
     icon: path.join(__dirname, '../public/icon.png')
   });
 
-  // Show loading screen immediately
+  // Show loading screen instantly
   mainWindow.loadFile(path.join(__dirname, 'loading.html'));
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  let serverError = null;
-  if (!isDev) {
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log('did-fail-load', { errorCode, errorDescription, validatedURL });
     try {
-      console.log('Starting Next.js server...');
-      await startNextServer();
-      // Wait for server to be ready (with error handling)
-      await waitForServer(`http://localhost:${PORT}`);
-    } catch (err) {
-      console.error('Server failed to start:', err);
-      serverError = err;
+      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
+        query: { message: `Failed to load: ${validatedURL} (${errorCode}) ${errorDescription}` }
+      });
+    } catch (e) {
+      log('Failed to show server-error.html after did-fail-load', e);
     }
-  }
+  });
 
-  const url = `http://localhost:${PORT}`;
-  if (!serverError) {
-    // Try to load the app
-    mainWindow.loadURL(url).catch((err) => {
-      console.error('Failed to load app URL:', err);
-      mainWindow.loadFile(path.join(__dirname, 'server-error.html'));
-    });
-  } else {
-    // Show error screen
-    mainWindow.loadFile(path.join(__dirname, 'server-error.html'));
-  }
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    log('render-process-gone', details);
+  });
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Start server and wait, but do not block window display
+  (async () => {
+    let serverError = null;
+    if (!isDev) {
+      try {
+        log('Starting Next.js server...');
+        await startNextServer();
+        await waitForServer(`http://${HOST}:${PORT}`);
+      } catch (err) {
+        log('Server failed to start:', err);
+        serverError = err;
+      }
+    }
+    const url = `http://${HOST}:${PORT}`;
+    if (!serverError) {
+      // Try to load the app
+      mainWindow.loadURL(url).catch((err) => {
+        log('Failed to load app URL:', err);
+        mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
+          query: { message: `Failed to load URL: ${url}. ${String(err)}` }
+        });
+      });
+    } else {
+      // Show error screen
+      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
+        query: { message: String(serverError) }
+      });
+    }
+    if (isDev) {
+      mainWindow.webContents.openDevTools();
+    }
+  })();
 
   mainWindow.on('close', () => {
     if (store) {
@@ -244,6 +286,10 @@ async function createWindow() {
     return { action: 'deny' };
   });
 }
+
+ipcMain.handle('startup-log-get', async () => {
+  return startupLogBuffer.slice();
+});
 
 app.whenReady().then(createWindow);
 
