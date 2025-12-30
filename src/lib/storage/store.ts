@@ -534,6 +534,7 @@ export function generateInvoiceFromRecurring(adapter: StorageAdapter, recurringI
     customerId: recurring.customerId,
     lineItems: recurring.lineItems.map((li) => ({ ...li, id: newId() })),
     footerText: recurring.footerText,
+    notesText: "",
     paid: false,
     payments: [],
     tagIds: [],

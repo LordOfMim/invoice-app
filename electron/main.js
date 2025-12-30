@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
+const http = require('http');
 
 // electron-store is ESM, need dynamic import
 let store;
@@ -22,40 +23,149 @@ let mainWindow;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const PORT = isDev ? 3000 : 3456;
 
+// Check if Node.js is installed
+function isNodeInstalled() {
+  try {
+    execSync('node --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Show error dialog
+function showNodeRequiredError() {
+  dialog.showMessageBoxSync({
+    type: 'error',
+    title: 'Node.js Required',
+    message: 'Node.js is required to run this application.',
+    detail: 'Please install Node.js from https://nodejs.org and restart the application.\n\nRecommended: Download the LTS version.',
+    buttons: ['OK']
+  });
+  app.quit();
+}
+
+// Check if server is ready
+function waitForServer(url, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const check = () => {
+      http.get(url, (res) => {
+        if (res.statusCode === 200 || res.statusCode === 304) {
+          resolve();
+        } else {
+          retry();
+        }
+      }).on('error', retry);
+    };
+    
+    const retry = () => {
+      if (Date.now() - startTime > timeout) {
+        resolve(); // Continue anyway after timeout
+      } else {
+        setTimeout(check, 500);
+      }
+    };
+    
+    check();
+  });
+}
+
 async function startNextServer() {
   if (isDev) return; // In dev mode, Next.js runs separately
   
-  return new Promise((resolve) => {
-    const serverPath = path.join(__dirname, '..');
+  // Check if Node.js is installed
+  if (!isNodeInstalled()) {
+    showNodeRequiredError();
+    return;
+  }
+  
+  return new Promise(async (resolve) => {
+    const appPath = app.getAppPath();
+    const fs = require('fs');
     
-    nextServer = spawn(
-      process.platform === 'win32' ? 'npm.cmd' : 'npm',
-      ['run', 'start', '--', '-p', PORT.toString()],
-      { 
-        cwd: serverPath,
-        stdio: 'pipe',
-        env: { ...process.env, NODE_ENV: 'production' }
-      }
-    );
-
-    nextServer.stdout.on('data', (data) => {
-      const output = data.toString();
-      console.log('Next.js:', output);
-      if (output.includes('Ready') || output.includes('started') || output.includes('✓')) {
-        setTimeout(resolve, 1000);
-      }
-    });
-
-    nextServer.stderr.on('data', (data) => {
-      console.error('Next.js error:', data.toString());
-    });
-
-    nextServer.on('error', (err) => {
-      console.error('Failed to start Next.js:', err);
+    // Path to standalone server
+    let standaloneDir = path.join(appPath, '.next', 'standalone');
+    let serverPath = path.join(standaloneDir, 'server.js');
+    
+    console.log('App path:', appPath);
+    console.log('Standalone dir:', standaloneDir);
+    console.log('Server path:', serverPath);
+    
+    // Check if standalone server exists, try alternative paths
+    if (!fs.existsSync(serverPath)) {
+      console.log('Server not found at app path, trying resources path...');
+      standaloneDir = path.join(process.resourcesPath, '.next', 'standalone');
+      serverPath = path.join(standaloneDir, 'server.js');
+      console.log('Alternative server path:', serverPath);
+    }
+    
+    if (!fs.existsSync(serverPath)) {
+      console.error('Standalone server not found!');
+      console.log('Directory contents of appPath:', fs.readdirSync(appPath));
       resolve();
-    });
+      return;
+    }
     
-    setTimeout(resolve, 30000);
+    // Copy static files if needed
+    const staticSrc = path.join(appPath, '.next', 'static');
+    const staticDest = path.join(standaloneDir, '.next', 'static');
+    if (fs.existsSync(staticSrc) && !fs.existsSync(staticDest)) {
+      console.log('Copying static files...');
+      fs.cpSync(staticSrc, staticDest, { recursive: true });
+    }
+    
+    // Copy public folder if needed  
+    const publicSrc = path.join(appPath, 'public');
+    const publicDest = path.join(standaloneDir, 'public');
+    if (fs.existsSync(publicSrc) && !fs.existsSync(publicDest)) {
+      console.log('Copying public files...');
+      fs.cpSync(publicSrc, publicDest, { recursive: true });
+    }
+    
+    try {
+      // Try to find node executable
+      const nodeCmd = process.platform === 'win32' ? 'node.exe' : 'node';
+      
+      nextServer = spawn(nodeCmd, [serverPath], {
+        cwd: standaloneDir,
+        env: { 
+          ...process.env, 
+          NODE_ENV: 'production',
+          PORT: PORT.toString(),
+          HOSTNAME: 'localhost'
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        windowsHide: true
+      });
+
+      nextServer.stdout.on('data', (data) => {
+        console.log('Next.js:', data.toString());
+      });
+
+      nextServer.stderr.on('data', (data) => {
+        console.error('Next.js error:', data.toString());
+      });
+
+      nextServer.on('error', (err) => {
+        console.error('Failed to start Next.js:', err);
+      });
+      
+      nextServer.on('exit', (code, signal) => {
+        console.log('Next.js server exited with code:', code, 'signal:', signal);
+      });
+      
+      // Wait for server to be ready
+      console.log('Waiting for Next.js server on port', PORT);
+      await waitForServer(`http://localhost:${PORT}`);
+      console.log('Next.js server ready!');
+    } catch (err) {
+      console.error('Error starting Next.js server:', err);
+    }
+    
+    resolve();
   });
 }
 

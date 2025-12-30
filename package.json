@@ -25,9 +25,22 @@
     },
     "files": [
       "electron/**/*",
-      "out/**/*",
-      "public/**/*"
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "public/**/*",
+      "package.json"
     ],
+    "extraResources": [
+      {
+        "from": ".next/static",
+        "to": ".next/standalone/.next/static"
+      },
+      {
+        "from": "public",
+        "to": ".next/standalone/public"
+      }
+    ],
+    "asar": false,
     "win": {
       "target": [
         {
