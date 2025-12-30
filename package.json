@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.invoiceapp.desktop",
-    "productName": "Invoice App",
+    "productName": "Helferlein",
     "directories": {
       "output": "dist-electron"
     },
@@ -45,11 +45,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "public/icon.ico"
@@ -58,14 +62,20 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "public/icon.icns",
       "category": "public.app-category.business"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "public/icon.png",
       "category": "Office"
     },
@@ -93,6 +103,7 @@
     "electron-builder": "^26.0.12",
     "eslint": "latest",
     "eslint-config-next": "latest",
+    "png-to-ico": "^3.0.1",
     "postcss": "latest",
     "tailwindcss": "latest",
     "typescript": "latest",
