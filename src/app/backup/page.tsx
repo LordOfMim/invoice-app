@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { t } from "@/lib/i18n";
 import { usePersistedData } from "@/lib/storage/useStore";
+import { isElectron } from "@/lib/storage/electronAdapter";
 import { exportData, importData } from "@/lib/storage/store";
 import { Surface, PageHeader, Section, Stack, Grid } from "@/components/ui/Surface";
 import { Stat, Alert } from "@/components/ui/DataDisplay";
@@ -70,6 +71,7 @@ export default function BackupPage() {
     recurringInvoices: data?.recurringInvoices.length ?? 0,
   };
 
+  const status = typeof window !== "undefined" && isElectron() ? "Electron Mode" : "Browser Mode";
   return (
     <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-3xl">
@@ -80,7 +82,7 @@ export default function BackupPage() {
           />
 
           {/* Data Overview */}
-          <Section title={t(language, "backup.dataInfo")}>
+          <Section title={t(language, "backup.dataInfo")}> 
             <Grid cols={3} gap="md">
               <Stat label={t(language, "nav.invoices")} value={stats.invoices} />
               <Stat label={t(language, "nav.customers")} value={stats.customers} />
@@ -95,7 +97,7 @@ export default function BackupPage() {
           </Section>
 
           {/* Export */}
-          <Section title={t(language, "backup.export")}>
+          <Section title={t(language, "backup.export")}> 
             <Surface variant="solid" padding="lg">
               <p className="text-sm text-[var(--color-ink-muted)]">
                 Download all your data as a JSON file. Keep this file safe for backup purposes.
@@ -107,7 +109,7 @@ export default function BackupPage() {
           </Section>
 
           {/* Import */}
-          <Section title={t(language, "backup.import")}>
+          <Section title={t(language, "backup.import")}> 
             <Surface variant="solid" padding="lg">
               <Stack gap="md">
                 <div>
@@ -153,7 +155,7 @@ export default function BackupPage() {
               <div className="mt-4 flex items-center gap-2 text-sm text-[var(--color-ink-subtle)]">
                 <span>Status:</span>
                 <span className="rounded-full bg-[var(--color-sand-200)] px-2.5 py-0.5 text-xs font-medium">
-                  Browser Mode
+                  {status}
                 </span>
               </div>
             </Surface>
