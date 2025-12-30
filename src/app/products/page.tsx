@@ -45,7 +45,7 @@ export default function ProductsPage() {
           <PageHeader
             title={t(language, "products.title")}
             description="Reusable line items to speed up invoice entry."
-            action={
+            actions={
               <Button variant="primary" onClick={handleCreate}>
                 {t(language, "products.new")}
               </Button>

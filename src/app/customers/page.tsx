@@ -44,7 +44,7 @@ export default function CustomersPage() {
           <PageHeader
             title={t(language, "customers.title")}
             description="Save recipients and pick them when creating invoices."
-            action={
+            actions={
               <Button variant="primary" onClick={handleCreate}>
                 {t(language, "customers.new")}
               </Button>

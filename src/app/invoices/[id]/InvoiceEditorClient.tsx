@@ -140,13 +140,46 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     upsertInvoice(adapter, next);
   };
 
-  const onPrint = () => {
+  const onPrint = async () => {
     const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
     const filename = buildPdfFilename(pattern, invoice);
-    const original = document.title;
-    document.title = filename.replace(/\.pdf$/i, "");
-    window.print();
-    document.title = original;
+    
+    // Check if running in Electron with PDF generation support
+    const electronAPI = (window as { electronAPI?: { printToPDF?: (opts: Record<string, unknown>) => Promise<ArrayBuffer | null>; saveFile?: (filename: string, data: ArrayBuffer) => Promise<boolean> } }).electronAPI;
+    
+    if (electronAPI?.printToPDF) {
+      // Use Electron's native PDF generation
+      try {
+        const pdfData = await electronAPI.printToPDF({ 
+          printBackground: true,
+          pageSize: 'A4',
+          margins: { marginType: 'default' }
+        });
+        if (pdfData) {
+          // Create download link
+          const blob = new Blob([pdfData], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (err) {
+        console.error('PDF generation failed:', err);
+        // Fallback to window.print
+        const original = document.title;
+        document.title = filename.replace(/\.pdf$/i, "");
+        window.print();
+        document.title = original;
+      }
+    } else {
+      // Browser: use window.print()
+      const original = document.title;
+      document.title = filename.replace(/\.pdf$/i, "");
+      window.print();
+      document.title = original;
+    }
   };
 
   const handleSelectCustomer = (customerId: string) => {

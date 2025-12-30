@@ -62,7 +62,7 @@ export function ClassicInvoice({ invoice, currency, locale, logoDataUrl }: { inv
   })();
 
   return (
-    <div className="flex min-h-[273mm] print:min-h-[calc(297mm-24mm)] flex-col" style={customStyles}>
+    <div className="flex min-h-[273mm] print:min-h-0 flex-col" style={customStyles}>
       <div className="space-y-6">
         {logo ? <Logo dataUrl={logo} position={invoice.layout.logoPosition} size={invoice.layout.logoSize} /> : null}
 
@@ -99,7 +99,7 @@ export function ClassicInvoice({ invoice, currency, locale, logoDataUrl }: { inv
       </div>
 
       {/* Footer with page indicator */}
-      <div className="mt-auto pt-6">
+      <div className="invoice-footer mt-auto pt-6">
         <PageIndicator invoice={invoice} />
       </div>
     </div>

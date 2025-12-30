@@ -104,7 +104,7 @@ export default function TagsPage() {
           <PageHeader
             title={t(language, "tags.title")}
             description="Label invoices by client, project, or time period."
-            action={
+            actions={
               <Button variant="primary" onClick={handleCreate}>
                 {t(language, "tags.new")}
               </Button>
