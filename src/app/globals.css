@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  
+  /* Japandi-inspired warm neutral palette */
+  --color-sand-50: #faf9f7;
+  --color-sand-100: #f5f3f0;
+  --color-sand-200: #e8e4de;
+  --color-sand-300: #d4cec4;
+  --color-sand-400: #b8b0a2;
+  --color-sand-500: #9c9285;
+  --color-sand-600: #7d7368;
+  --color-sand-700: #5e564d;
+  --color-sand-800: #403b35;
+  --color-sand-900: #262320;
+  
+  /* Accent colors - muted and calm */
+  --color-ink: #2c2825;
+  --color-ink-muted: #5c5650;
+  --color-ink-subtle: #8a847c;
+  
+  /* Functional colors */
+  --color-accent: #6b7c6e;
+  --color-accent-hover: #5a6b5d;
+  --color-success: #6b8068;
+  --color-warning: #b8a060;
+  --color-danger: #b86b6b;
+  
+  /* Glass surface colors */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-bg-solid: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.08);
+  --glass-shadow-sm: 0 2px 8px -2px rgba(0, 0, 0, 0.06);
+  
+  /* Layout */
+  --sidebar-width: 240px;
+  --content-max-width: 1200px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
+
+/* Base styles */
+html {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: linear-gradient(135deg, var(--color-sand-100) 0%, var(--color-sand-50) 50%, #f0ede8 100%);
+  background-attachment: fixed;
+  color: var(--color-ink);
+  min-height: 100dvh;
+}
+
+/* Typography refinements */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-ink);
+  letter-spacing: -0.02em;
+}
+
+/* Scrollbar styling for macOS-like feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-sand-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sand-400);
+}
+
+/* Glass panel utility classes */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-panel-solid {
+  background: var(--glass-bg-solid);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-surface {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+}
+
+/* Soft container for grouped content */
+.soft-container {
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+
+/* Focus states */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(107, 124, 110, 0.2);
+}
+
+/* Link styling */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, box-shadow, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dialog / Modal styles - native UI feel */
+.dialog-overlay {
+  background: rgba(38, 35, 32, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.dialog-content {
+  background: var(--glass-bg-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 
+    0 24px 48px -12px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  border-radius: var(--radius-xl);
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  background: var(--color-sand-200);
+  color: var(--color-ink-muted);
+}
+
+.badge-success {
+  background: rgba(107, 128, 104, 0.15);
+  color: var(--color-success);
+}
+
+.badge-warning {
+  background: rgba(184, 160, 96, 0.15);
+  color: #8a7640;
+}
+
+.badge-danger {
+  background: rgba(184, 107, 107, 0.15);
+  color: var(--color-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
