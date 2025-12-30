@@ -46,10 +46,10 @@ function showNodeRequiredError() {
 }
 
 // Check if server is ready
-function waitForServer(url, timeout = 30000) {
+function waitForServer(url, timeout = 90000) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    
+    let lastError = null;
     const check = () => {
       http.get(url, (res) => {
         if (res.statusCode === 200 || res.statusCode === 304) {
@@ -57,17 +57,18 @@ function waitForServer(url, timeout = 30000) {
         } else {
           retry();
         }
-      }).on('error', retry);
+      }).on('error', (err) => {
+        lastError = err;
+        retry();
+      });
     };
-    
     const retry = () => {
       if (Date.now() - startTime > timeout) {
-        resolve(); // Continue anyway after timeout
+        reject(lastError || new Error('Timeout waiting for server'));
       } else {
         setTimeout(check, 500);
       }
     };
-    
     check();
   });
 }
@@ -171,14 +172,9 @@ async function startNextServer() {
 
 async function createWindow() {
   await initStore();
-  
-  if (!isDev) {
-    console.log('Starting Next.js server...');
-    await startNextServer();
-  }
-  
+  await initStore();
+
   const bounds = store.get('windowBounds') || { width: 1400, height: 900 };
-  const { width, height, x, y } = bounds;
 
   mainWindow = new BrowserWindow({
     width,
@@ -197,17 +193,40 @@ async function createWindow() {
     icon: path.join(__dirname, '../public/icon.png')
   });
 
-  const url = `http://localhost:${PORT}`;
-  console.log('Loading:', url);
-  mainWindow.loadURL(url);
-  
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
-
+  // Show loading screen immediately
+  mainWindow.loadFile(path.join(__dirname, 'loading.html'));
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
+
+  let serverError = null;
+  if (!isDev) {
+    try {
+      console.log('Starting Next.js server...');
+      await startNextServer();
+      // Wait for server to be ready (with error handling)
+      await waitForServer(`http://localhost:${PORT}`);
+    } catch (err) {
+      console.error('Server failed to start:', err);
+      serverError = err;
+    }
+  }
+
+  const url = `http://localhost:${PORT}`;
+  if (!serverError) {
+    // Try to load the app
+    mainWindow.loadURL(url).catch((err) => {
+      console.error('Failed to load app URL:', err);
+      mainWindow.loadFile(path.join(__dirname, 'server-error.html'));
+    });
+  } else {
+    // Show error screen
+    mainWindow.loadFile(path.join(__dirname, 'server-error.html'));
+  }
+
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.on('close', () => {
     if (store) {

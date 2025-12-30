@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Server Error</title>
+  <style>
+    body { display: flex; align-items: center; justify-content: center; height: 100vh; background: #fff0f0; margin: 0; }
+    .error { font-size: 1.5rem; color: #b91c1c; text-align: center; }
+    .details { color: #7f1d1d; font-size: 1rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="error">Failed to start Invoice App server.<br/>Please try restarting the app.</div>
+    <div class="details" id="error-details"></div>
+  </div>
+  <script>
+    // Optionally, error details can be injected here
+    window.electronError && (document.getElementById('error-details').textContent = window.electronError);
+  </script>
+</body>
+</html>
