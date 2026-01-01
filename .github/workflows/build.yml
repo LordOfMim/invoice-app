@@ -37,6 +37,9 @@ jobs:
       - name: Build Next.js
         run: npm run build
 
+      - name: Prepare Next.js standalone for Electron
+        run: node scripts/prepare-electron-standalone.mjs
+
       - name: Build Electron (Windows)
         if: matrix.platform == 'win'
         run: npx electron-builder --win

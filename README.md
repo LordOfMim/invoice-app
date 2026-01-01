@@ -19,6 +19,26 @@ Open:
 - `npm run start` – run production server (after build)
 - `npm run lint` – ESLint
 
+## Electron (Desktop)
+
+This repo can be packaged as an Electron desktop app.
+
+- Dev (Electron + Next): `npm run electron:dev`
+- Build (Electron installers):
+	- Windows: `npm run electron:build:win`
+	- macOS: `npm run electron:build:mac`
+	- Linux: `npm run electron:build:linux`
+
+Note: The Electron build scripts run `scripts/prepare-electron-standalone.mjs` to copy Next.js assets into the standalone server output. If you run `electron-builder --mac` directly without the prepare step, the packaged app may load with missing CSS ("unstyled/scuffed").
+
+### macOS troubleshooting ("layout is scuffed")
+
+If the macOS installer/app looks unstyled:
+
+- Ensure you built with `npm run electron:build:mac` (not a bare `electron-builder --mac`).
+- Build with lockfile installs for consistent versions: `npm ci`.
+- Check the startup log shown in the loading screen and the persisted log at `~/Library/Application Support/Helferlein/main.log` for 404s to `/_next/static/*` or server startup errors.
+
 ## Data & Offline
 
 - Data is stored locally in the browser via `localStorage` (no backend).
