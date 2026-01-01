@@ -34,21 +34,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js
-        run: npm run build
-
-      - name: Prepare Next.js standalone for Electron
-        run: node scripts/prepare-electron-standalone.mjs
-
       - name: Build Electron (Windows)
         if: matrix.platform == 'win'
-        run: npx electron-builder --win
+        run: npm run electron:build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron (Mac)
         if: matrix.platform == 'mac'
-        run: npx electron-builder --mac
+        run: npm run electron:build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

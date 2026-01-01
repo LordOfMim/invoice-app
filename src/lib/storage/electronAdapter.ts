@@ -12,6 +12,12 @@ declare global {
       };
       getAppInfo: () => Promise<{ version: string; name: string; path: string }>;
       printToPDF: (options?: object) => Promise<Buffer | null>;
+      emailInvoiceWithPdf?: (payload: {
+        to?: string;
+        subject: string;
+        body: string;
+        filename: string;
+      }) => Promise<{ ok: boolean; error?: string }>;
       platform: string;
       isElectron: boolean;
     };

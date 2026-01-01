@@ -1,8 +1,85 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFile } = require('child_process');
 const http = require('http');
 const fs = require('fs');
+
+function escapeAppleScriptString(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\r/g, "")
+    .replace(/\n/g, "\\n")
+    .replace(/"/g, "\\\"");
+}
+
+function encodeRfc2047(value) {
+  const v = String(value ?? "");
+  const base64 = Buffer.from(v, "utf8").toString("base64");
+  return `=?UTF-8?B?${base64}?=`;
+}
+
+function buildEmlWithAttachment({ to, subject, body, attachmentFilename, attachmentMime, attachmentBase64 }) {
+  const boundary = `----invoice-app-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const safeTo = String(to ?? "");
+  const safeSubject = String(subject ?? "");
+  const safeBody = String(body ?? "");
+  const filename = String(attachmentFilename ?? "Invoice.pdf");
+  const mime = String(attachmentMime ?? "application/pdf");
+
+  // 76-char wrapped base64 is typical for MIME
+  const wrappedBase64 = String(attachmentBase64 ?? "").replace(/(.{1,76})/g, "$1\r\n").trimEnd();
+
+  return [
+    `To: ${safeTo}`,
+    `Subject: ${encodeRfc2047(safeSubject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
+    "",
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=\"utf-8\"`,
+    `Content-Transfer-Encoding: 8bit`,
+    "",
+    safeBody.replace(/\n/g, "\r\n"),
+    "",
+    `--${boundary}`,
+    `Content-Type: ${mime}; name=\"${filename}\"`,
+    `Content-Transfer-Encoding: base64`,
+    `Content-Disposition: attachment; filename=\"${filename}\"`,
+    "",
+    wrappedBase64,
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+}
+
+function openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath }) {
+  return new Promise((resolve, reject) => {
+    const toEsc = escapeAppleScriptString(to ?? "");
+    const subjectEsc = escapeAppleScriptString(subject ?? "");
+    const bodyEsc = escapeAppleScriptString(body ?? "");
+    const attachmentEsc = escapeAppleScriptString(attachmentPath);
+
+    const script = [
+      'tell application "Mail"',
+      `set newMessage to make new outgoing message with properties {subject:"${subjectEsc}", content:"${bodyEsc}\\n\\n"}`,
+      'tell newMessage',
+      'set visible to true',
+      toEsc
+        ? `make new to recipient at end of to recipients with properties {address:"${toEsc}"}`
+        : '(* no recipient provided *)',
+      `make new attachment with properties {file name:((POSIX file "${attachmentEsc}") as alias)} at after the last paragraph`,
+      'end tell',
+      'activate',
+      'end tell',
+    ].join("\n");
+
+    execFile('osascript', ['-e', script], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
 
 // electron-store is ESM, need dynamic import
 let store;
@@ -361,5 +438,50 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
   } catch (error) {
     console.error('PDF generation failed:', error);
     return null;
+  }
+});
+
+ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { ok: false, error: 'No active window' };
+
+  const to = payload?.to ?? "";
+  const subject = payload?.subject ?? "";
+  const body = payload?.body ?? "";
+  const requestedFilename = payload?.filename ?? "Invoice.pdf";
+  const filename = String(requestedFilename).toLowerCase().endsWith('.pdf')
+    ? String(requestedFilename)
+    : `${requestedFilename}.pdf`;
+
+  try {
+    const pdfData = await win.webContents.printToPDF({
+      marginsType: 0,
+      printBackground: true,
+      pageSize: 'A4',
+    });
+
+    const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'invoice-app-'));
+    const pdfPath = path.join(tempDir, filename);
+    fs.writeFileSync(pdfPath, pdfData);
+
+    if (process.platform === 'darwin') {
+      await openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath: pdfPath });
+      return { ok: true };
+    }
+
+    const eml = buildEmlWithAttachment({
+      to,
+      subject,
+      body,
+      attachmentFilename: filename,
+      attachmentMime: 'application/pdf',
+      attachmentBase64: Buffer.from(pdfData).toString('base64'),
+    });
+    const emlPath = path.join(tempDir, 'invoice-email.eml');
+    fs.writeFileSync(emlPath, eml);
+    await shell.openPath(emlPath);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error) };
   }
 });

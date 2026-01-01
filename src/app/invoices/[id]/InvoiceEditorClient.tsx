@@ -215,15 +215,43 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     alert(`Credit note creation (${type}) will be implemented soon.`);
   };
 
-  const handleEmailInvoice = () => {
+  const handleEmailInvoice = async () => {
     if (!invoice) return;
-    const subject = encodeURIComponent(`${invoice.texts.documentTitle} ${invoice.invoiceNumber}`);
-    const body = encodeURIComponent(
+
+    const customerEmail = invoice.customerId
+      ? customers.find((c) => c.id === invoice.customerId)?.email
+      : undefined;
+
+    const to = customerEmail ?? "";
+    const subjectText = `${invoice.texts.documentTitle} ${invoice.invoiceNumber}`.trim();
+    const bodyText =
       `${language === "de" ? "Sehr geehrte Damen und Herren" : "Dear Sir or Madam"},\n\n` +
       `${language === "de" ? "anbei erhalten Sie" : "Please find attached"} ${invoice.texts.documentTitle} ${invoice.invoiceNumber}.\n\n` +
-      `${language === "de" ? "Mit freundlichen Grüßen" : "Best regards"},\n${invoice.sender.name}`
-    );
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      `${language === "de" ? "Mit freundlichen Grüßen" : "Best regards"},\n${invoice.sender.name}`;
+
+    const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
+    const filename = buildPdfFilename(pattern, invoice);
+
+    // Electron: generate PDF + open email compose with attachment
+    if (window.electronAPI?.emailInvoiceWithPdf) {
+      const result = await window.electronAPI.emailInvoiceWithPdf({
+        to,
+        subject: subjectText,
+        body: bodyText,
+        filename,
+      });
+      if (result?.ok) return;
+      console.error('Email compose failed:', result?.error);
+      // fall through to mailto
+    }
+
+    // Web fallback: mailto (cannot attach files)
+    const subject = encodeURIComponent(subjectText);
+    const body = encodeURIComponent(bodyText);
+    const mailto = to
+      ? `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`
+      : `mailto:?subject=${subject}&body=${body}`;
+    window.location.href = mailto;
   };
 
   return (

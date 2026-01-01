@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // PDF generation
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
+
+  // Email with PDF attachment (best-effort; fully supported on macOS Apple Mail)
+  emailInvoiceWithPdf: (payload) => ipcRenderer.invoke('email-invoice-with-pdf', payload),
   
   // Platform detection
   platform: process.platform,
