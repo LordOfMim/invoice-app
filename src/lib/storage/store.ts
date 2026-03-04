@@ -34,6 +34,55 @@ const listeners = new Set<Listener>();
 // This is important for `useSyncExternalStore`, which uses `Object.is` on snapshots.
 let cachedData: PersistedDataV1 | null = null;
 
+const PERSIST_DEBOUNCE_MS = 200;
+let pendingPersistData: PersistedDataV1 | null = null;
+let pendingPersistAdapter: StorageAdapter | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistLifecycleBound = false;
+
+function flushPendingPersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+
+  if (!pendingPersistAdapter || !pendingPersistData) return;
+
+  pendingPersistAdapter.setItem(STORAGE_KEY, JSON.stringify(pendingPersistData));
+  pendingPersistAdapter = null;
+  pendingPersistData = null;
+}
+
+function bindPersistLifecycleHooks() {
+  if (persistLifecycleBound) return;
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
+  persistLifecycleBound = true;
+
+  window.addEventListener("beforeunload", flushPendingPersist);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushPendingPersist();
+    }
+  });
+}
+
+function schedulePersist(adapter: StorageAdapter, data: PersistedDataV1) {
+  pendingPersistAdapter = adapter;
+  pendingPersistData = data;
+
+  bindPersistLifecycleHooks();
+
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    flushPendingPersist();
+  }, PERSIST_DEBOUNCE_MS);
+}
+
 function emitChange() {
   for (const listener of listeners) listener();
 }
@@ -125,8 +174,8 @@ export function loadData(adapter: StorageAdapter): PersistedDataV1 {
 }
 
 export function saveData(adapter: StorageAdapter, data: PersistedDataV1): void {
-  adapter.setItem(STORAGE_KEY, JSON.stringify(data));
   cachedData = data;
+  schedulePersist(adapter, data);
   emitChange();
 }
 

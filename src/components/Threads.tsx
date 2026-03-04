@@ -6,6 +6,10 @@ interface ThreadsProps {
   amplitude?: number;
   distance?: number;
   enableMouseInteraction?: boolean;
+  lineCount?: number;
+  fps?: number;
+  pixelRatioCap?: number;
+  pauseWhenHidden?: boolean;
 }
 
 const vertexShader = `
@@ -18,7 +22,10 @@ void main() {
 }
 `;
 
-const fragmentShader = `
+function createFragmentShader(lineCount: number) {
+  const safeLineCount = Math.max(8, Math.min(60, Math.floor(lineCount)));
+
+  return `
 precision highp float;
 
 uniform float iTime;
@@ -30,7 +37,7 @@ uniform vec2 uMouse;
 
 #define PI 3.1415926538
 
-const int u_line_count = 40;
+const int u_line_count = ${safeLineCount};
 const float u_line_width = 7.0;
 const float u_line_blur = 10.0;
 
@@ -124,12 +131,17 @@ void main() {
     mainImage(gl_FragColor, gl_FragCoord.xy);
 }
 `;
+}
 
 const Threads: React.FC<ThreadsProps> = ({
   color = [1, 1, 1],
   amplitude = 1,
   distance = 0,
   enableMouseInteraction = false,
+  lineCount = 28,
+  fps = 30,
+  pixelRatioCap = 1.25,
+  pauseWhenHidden = true,
   ...rest
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -139,7 +151,10 @@ const Threads: React.FC<ThreadsProps> = ({
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    const renderer = new Renderer({ alpha: true });
+    const renderer = new Renderer({
+      alpha: true,
+      dpr: Math.min(window.devicePixelRatio || 1, Math.max(1, pixelRatioCap)),
+    });
     const gl = renderer.gl;
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
@@ -149,7 +164,7 @@ const Threads: React.FC<ThreadsProps> = ({
     const geometry = new Triangle(gl);
     const program = new Program(gl, {
       vertex: vertexShader,
-      fragment: fragmentShader,
+      fragment: createFragmentShader(lineCount),
       uniforms: {
         iTime: { value: 0 },
         iResolution: {
@@ -171,7 +186,14 @@ const Threads: React.FC<ThreadsProps> = ({
       program.uniforms.iResolution.value.g = clientHeight;
       program.uniforms.iResolution.value.b = clientWidth / clientHeight;
     }
-    window.addEventListener('resize', resize);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(container);
+    } else {
+      window.addEventListener('resize', resize);
+    }
     resize();
 
     let currentMouse = [0.5, 0.5];
@@ -191,7 +213,17 @@ const Threads: React.FC<ThreadsProps> = ({
       container.addEventListener('mouseleave', handleMouseLeave);
     }
 
+    const frameInterval = 1000 / Math.max(1, fps);
+    let lastFrameTime = 0;
+
     function update(t: number) {
+      animationFrameId.current = requestAnimationFrame(update);
+
+      if (frameInterval > 0 && t - lastFrameTime < frameInterval) {
+        return;
+      }
+      lastFrameTime = t;
+
       if (enableMouseInteraction) {
         const smoothing = 0.05;
         currentMouse[0] += smoothing * (targetMouse[0] - currentMouse[0]);
@@ -205,22 +237,71 @@ const Threads: React.FC<ThreadsProps> = ({
       program.uniforms.iTime.value = t * 0.001;
 
       renderer.render({ scene: mesh });
-      animationFrameId.current = requestAnimationFrame(update);
     }
-    animationFrameId.current = requestAnimationFrame(update);
+
+    const startLoop = () => {
+      if (animationFrameId.current !== null) return;
+      lastFrameTime = 0;
+      animationFrameId.current = requestAnimationFrame(update);
+    };
+
+    const stopLoop = () => {
+      if (animationFrameId.current === null) return;
+      cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = null;
+    };
+
+    const handleVisibilityChange = () => {
+      if (!pauseWhenHidden) return;
+      if (document.hidden) stopLoop();
+      else startLoop();
+    };
+
+    const handleWindowBlur = () => {
+      if (pauseWhenHidden) stopLoop();
+    };
+
+    const handleWindowFocus = () => {
+      if (!pauseWhenHidden) return;
+      if (!document.hidden) startLoop();
+    };
+
+    if (pauseWhenHidden) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('blur', handleWindowBlur);
+      window.addEventListener('focus', handleWindowFocus);
+    }
+
+    if (pauseWhenHidden && document.hidden) {
+      stopLoop();
+    } else {
+      startLoop();
+    }
 
     return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      window.removeEventListener('resize', resize);
+      stopLoop();
+
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', resize);
+      }
 
       if (enableMouseInteraction) {
         container.removeEventListener('mousemove', handleMouseMove);
         container.removeEventListener('mouseleave', handleMouseLeave);
       }
+
+      if (pauseWhenHidden) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('blur', handleWindowBlur);
+        window.removeEventListener('focus', handleWindowFocus);
+      }
+
       if (container.contains(gl.canvas)) container.removeChild(gl.canvas);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
-  }, [color, amplitude, distance, enableMouseInteraction]);
+  }, [color, amplitude, distance, enableMouseInteraction, lineCount, fps, pixelRatioCap, pauseWhenHidden]);
 
   return <div ref={containerRef} className="w-full h-full relative" {...rest} />;
 };

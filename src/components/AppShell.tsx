@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { t } from "@/lib/i18n";
-import { usePersistedData } from "@/lib/storage/useStore";
+import { usePersistedSettings } from "@/lib/storage/useStore";
 
 // Icon components for navigation
 function DashboardIcon({ className }: { className?: string }) {
@@ -157,8 +157,8 @@ function NavSection({ title, children }: { title: string; children: React.ReactN
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { data } = usePersistedData();
-  const language = data?.settings.language ?? "de";
+  const { settings } = usePersistedSettings();
+  const language = settings?.language ?? "de";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const mainNavItems: NavItem[] = [
