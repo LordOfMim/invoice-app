@@ -6,6 +6,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   store: {
     get: (key) => ipcRenderer.invoke('store-get', key),
     set: (key, value) => ipcRenderer.invoke('store-set', key, value),
+    getSync: (key) => {
+      const result = ipcRenderer.sendSync('store-get-sync', key);
+      if (!result?.ok) throw new Error(result?.error || 'Failed to read store');
+      return result.value;
+    },
+    setSync: (key, value) => {
+      const result = ipcRenderer.sendSync('store-set-sync', key, value);
+      if (!result?.ok) throw new Error(result?.error || 'Failed to write store');
+      return true;
+    },
     delete: (key) => ipcRenderer.invoke('store-delete', key),
     clear: () => ipcRenderer.invoke('store-clear')
   },

@@ -76,7 +76,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
   };
 
   const handleGenerate = () => {
-    const invoice = generateInvoiceFromRecurring(adapter, id);
+    const invoice = generateInvoiceFromRecurring(adapter, id, recurring.nextRunDate);
     if (invoice) {
       window.location.assign(`/invoices/${invoice.id}`);
     }

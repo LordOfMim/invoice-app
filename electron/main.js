@@ -4,6 +4,10 @@ const { spawn, execSync, execFile } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 
+const APP_DATA_KEY = 'invoice-app:v1';
+const RECOVERY_KEY_PREFIX = `${APP_DATA_KEY}:recovery`;
+const STORE_NAME = 'invoice-app-data';
+
 function escapeAppleScriptString(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
@@ -87,20 +91,41 @@ let nextServer = null;
 
 async function initStore() {
   const Store = (await import('electron-store')).default;
-  store = new Store({
-    name: 'invoice-app-data',
+  const options = {
+    name: STORE_NAME,
     encryptionKey: 'invoice-app-secure-key-2024',
     defaults: {
       windowBounds: { width: 1400, height: 900 }
     }
-  });
+  };
+
+  try {
+    store = new Store(options);
+  } catch (error) {
+    const storePath = path.join(app.getPath('userData'), `${STORE_NAME}.json`);
+    const backupPath = path.join(
+      app.getPath('userData'),
+      `${STORE_NAME}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    );
+    try {
+      if (fs.existsSync(storePath)) {
+        fs.renameSync(storePath, backupPath);
+        log('Moved corrupt electron-store file to:', backupPath);
+      }
+    } catch (backupError) {
+      log('Failed to move corrupt electron-store file:', backupError);
+    }
+    store = new Store(options);
+    log('Started with a fresh electron-store after recovery from:', String(error));
+  }
 }
 
 let mainWindow;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-const PORT = isDev ? 3000 : 3456;
 const HOST = '127.0.0.1';
+let appPort = isDev ? 3000 : null;
+let appOrigin = `http://${HOST}:${appPort ?? 0}`;
 
 const startupLogBuffer = [];
 const STARTUP_LOG_LIMIT = 250;
@@ -183,6 +208,21 @@ function waitForServer(url, timeout = 90000) {
   });
 }
 
+function findAvailablePort(host) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer();
+    server.on('error', reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : null;
+      server.close(() => {
+        if (port) resolve(port);
+        else reject(new Error('Could not allocate a local port'));
+      });
+    });
+  });
+}
+
 async function startNextServer() {
   if (isDev) return; // In dev mode, Next.js runs separately
 
@@ -225,6 +265,10 @@ async function startNextServer() {
     // Assets should be copied into `.next/standalone` during the build step.
     
     try {
+      appPort = await findAvailablePort(HOST);
+      appOrigin = `http://${HOST}:${appPort}`;
+      log('Allocated local app port:', appPort);
+
       const nodeCmd = isDev
         ? (process.platform === 'win32' ? 'node.exe' : 'node')
         : process.execPath;
@@ -234,7 +278,7 @@ async function startNextServer() {
         env: { 
           ...process.env, 
           NODE_ENV: 'production',
-          PORT: PORT.toString(),
+          PORT: appPort.toString(),
           HOSTNAME: HOST,
           ...(isDev ? {} : { ELECTRON_RUN_AS_NODE: '1' })
         },
@@ -260,8 +304,8 @@ async function startNextServer() {
       });
       
       // Wait for server to be ready
-      log('Waiting for Next.js server on', `http://${HOST}:${PORT}`);
-      await waitForServer(`http://${HOST}:${PORT}`);
+      log('Waiting for Next.js server on', appOrigin);
+      await waitForServer(appOrigin);
       log('Next.js server ready!');
     } catch (err) {
       log('Error starting Next.js server:', err);
@@ -272,9 +316,13 @@ async function startNextServer() {
 }
 
 async function createWindow() {
-  await initStore();
+  try {
+    await initStore();
+  } catch (error) {
+    log('Failed to initialize electron-store:', error);
+  }
 
-  const bounds = store.get('windowBounds') || { width: 1400, height: 900 };
+  const bounds = store?.get('windowBounds') || { width: 1400, height: 900 };
 
   mainWindow = new BrowserWindow({
     width: bounds.width,
@@ -321,13 +369,13 @@ async function createWindow() {
       try {
         log('Starting Next.js server...');
         await startNextServer();
-        await waitForServer(`http://${HOST}:${PORT}`);
+        await waitForServer(appOrigin);
       } catch (err) {
         log('Server failed to start:', err);
         serverError = err;
       }
     }
-    const url = `http://${HOST}:${PORT}`;
+    const url = appOrigin;
     if (!serverError) {
       // Try to load the app
       mainWindow.loadURL(url).catch((err) => {
@@ -359,7 +407,12 @@ async function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        shell.openExternal(url);
+      }
+    } catch {}
     return { action: 'deny' };
   });
 }
@@ -391,31 +444,81 @@ app.on('before-quit', () => {
   }
 });
 
+function isTrustedSender(event, { allowFile = false } = {}) {
+  const senderUrl = event.senderFrame?.url || event.sender.getURL();
+  try {
+    const parsed = new URL(senderUrl);
+    if (allowFile && parsed.protocol === 'file:') return true;
+    return parsed.origin === appOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function ensureTrustedSender(event, options) {
+  if (!isTrustedSender(event, options)) {
+    throw new Error('Blocked IPC call from untrusted sender');
+  }
+}
+
+function isAllowedStoreKey(key) {
+  return key === APP_DATA_KEY || String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`);
+}
+
+ipcMain.on('store-get-sync', (event, key) => {
+  try {
+    ensureTrustedSender(event);
+    if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
+    if (!store) throw new Error('Store is not initialized');
+    event.returnValue = { ok: true, value: store.get(key) };
+  } catch (error) {
+    event.returnValue = { ok: false, error: String(error) };
+  }
+});
+
+ipcMain.on('store-set-sync', (event, key, value) => {
+  try {
+    ensureTrustedSender(event);
+    if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
+    if (!store) throw new Error('Store is not initialized');
+    store.set(key, value);
+    event.returnValue = { ok: true };
+  } catch (error) {
+    event.returnValue = { ok: false, error: String(error) };
+  }
+});
+
 // IPC handlers for storage
 ipcMain.handle('store-get', async (event, key) => {
+  ensureTrustedSender(event);
+  if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
   if (!store) await initStore();
   return store.get(key);
 });
 
 ipcMain.handle('store-set', async (event, key, value) => {
+  ensureTrustedSender(event);
+  if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
   if (!store) await initStore();
   store.set(key, value);
   return true;
 });
 
 ipcMain.handle('store-delete', async (event, key) => {
+  ensureTrustedSender(event);
+  if (!String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`)) throw new Error('Blocked store key');
   if (!store) await initStore();
   store.delete(key);
   return true;
 });
 
-ipcMain.handle('store-clear', async () => {
-  if (!store) await initStore();
-  store.clear();
-  return true;
+ipcMain.handle('store-clear', async (event) => {
+  ensureTrustedSender(event);
+  throw new Error('Clearing the entire store is disabled');
 });
 
-ipcMain.handle('get-app-info', () => {
+ipcMain.handle('get-app-info', (event) => {
+  ensureTrustedSender(event, { allowFile: true });
   return {
     version: app.getVersion(),
     name: app.getName(),
@@ -424,6 +527,7 @@ ipcMain.handle('get-app-info', () => {
 });
 
 ipcMain.handle('print-to-pdf', async (event, options) => {
+  ensureTrustedSender(event);
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
   
@@ -442,6 +546,7 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
 });
 
 ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
+  ensureTrustedSender(event);
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { ok: false, error: 'No active window' };
 

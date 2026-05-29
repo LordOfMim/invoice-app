@@ -11,6 +11,8 @@ type ElectronAPI = {
   store: {
     get: (key: string) => Promise<unknown>;
     set: (key: string, value: unknown) => Promise<boolean>;
+    getSync?: (key: string) => unknown;
+    setSync?: (key: string, value: unknown) => boolean;
   };
   platform?: string;
   isElectron: boolean;
@@ -91,6 +93,7 @@ async function writeElectronStore(value: string): Promise<boolean> {
 
 // Load from electron-store on startup (only once)
 let electronStoreLoaded = false;
+let electronWriteQueue: Promise<boolean> = Promise.resolve(true);
 async function loadFromElectronStore(): Promise<void> {
   if (!isElectron() || electronStoreLoaded) return;
   electronStoreLoaded = true;
@@ -145,31 +148,79 @@ async function loadFromElectronStore(): Promise<void> {
   }
 }
 
-export async function flushElectronStoreSync(): Promise<boolean> {
+export async function flushElectronStoreSync(value?: string): Promise<boolean> {
   if (!isElectron()) return true;
 
-  const data = localStorage.getItem(STORAGE_KEY);
+  const data = value ?? localStorage.getItem(STORAGE_KEY);
   if (!data) return false;
 
-  try {
-    return await writeElectronStore(data);
-  } catch (err) {
-    console.error("Failed to flush electron-store:", err);
-    return false;
+  const api = getElectronAPI();
+  if (api?.store.setSync) {
+    try {
+      return api.store.setSync(STORAGE_KEY, data);
+    } catch (err) {
+      console.error("Failed to synchronously flush electron-store:", err);
+      return false;
+    }
   }
+
+  electronWriteQueue = electronWriteQueue
+    .catch(() => false)
+    .then(() => writeElectronStore(data))
+    .catch((err) => {
+      console.error("Failed to flush electron-store:", err);
+      return false;
+    });
+
+  return electronWriteQueue;
 }
 
 // Create a wrapped adapter that syncs to electron-store
 function createHybridAdapter(): StorageAdapter | null {
   const baseAdapter = getBrowserLocalStorageAdapter();
   if (!baseAdapter) return null;
+  const api = getElectronAPI();
+  const hasSyncElectronStore = isElectron() && !!api?.store.getSync && !!api.store.setSync;
 
   return {
-    getItem: (key: string) => baseAdapter.getItem(key),
-    setItem: (key: string, value: string) => {
-      baseAdapter.setItem(key, value);
-      void flushElectronStoreSync();
+    getItem: (key: string) => {
+      if (key === STORAGE_KEY && hasSyncElectronStore) {
+        const value = api!.store.getSync!(key);
+        return typeof value === "string" ? value : null;
+      }
+      return baseAdapter.getItem(key);
     },
+    setItem: (key: string, value: string) => {
+      if (key === STORAGE_KEY) {
+        if (hasSyncElectronStore) {
+          api!.store.setSync!(key, value);
+        }
+        baseAdapter.setItem(key, value);
+        if (!hasSyncElectronStore) {
+          void flushElectronStoreSync(value);
+        }
+        return;
+      }
+      baseAdapter.setItem(key, value);
+    },
+  };
+}
+
+function subscribeStorage(adapter: StorageAdapter | null, listener: () => void) {
+  if (!adapter || typeof window === "undefined") return () => {};
+
+  const unsubscribe = subscribe(listener);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== STORAGE_KEY) return;
+    clearDataCache();
+    listener();
+    void flushElectronStoreSync(event.newValue ?? undefined);
+  };
+
+  window.addEventListener("storage", onStorage);
+  return () => {
+    unsubscribe();
+    window.removeEventListener("storage", onStorage);
   };
 }
 
@@ -202,10 +253,7 @@ export function usePersistedData() {
   };
 
   const data = useSyncExternalStore(
-    (listener) => {
-      if (!adapter) return () => {};
-      return subscribe(listener);
-    },
+    (listener) => subscribeStorage(adapter, listener),
     getSnapshot,
     () => null
   );
@@ -235,10 +283,7 @@ export function usePersistedSettings() {
   const [electronReady, setElectronReady] = useState(false);
 
   const settings = useSyncExternalStore(
-    (listener) => {
-      if (!adapter) return () => {};
-      return subscribe(listener);
-    },
+    (listener) => subscribeStorage(adapter, listener),
     () => (adapter && electronReady ? loadData(adapter).settings : null),
     () => null
   ) as AppSettings | null;

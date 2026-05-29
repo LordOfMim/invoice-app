@@ -48,9 +48,9 @@ export default function RecurringPage() {
     setDeleteId(null);
   };
 
-  const handleGenerate = (id: string) => {
+  const handleGenerate = (id: string, expectedNextRunDate: string) => {
     if (!adapter) return;
-    const invoice = generateInvoiceFromRecurring(adapter, id);
+    const invoice = generateInvoiceFromRecurring(adapter, id, expectedNextRunDate);
     if (invoice) {
       window.location.assign(`/invoices/${invoice.id}`);
     }
@@ -151,7 +151,7 @@ export default function RecurringPage() {
 
                       <div className="flex items-center gap-2">
                         {isDue && (
-                          <Button variant="primary" onClick={() => handleGenerate(ri.id)}>
+                          <Button variant="primary" onClick={() => handleGenerate(ri.id, ri.nextRunDate)}>
                             {t(language, "actions.generate")}
                           </Button>
                         )}

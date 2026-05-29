@@ -17,7 +17,7 @@ import type { CreditNote } from "@/lib/domain";
 function parseNumber(input: string): number {
   const normalized = input.replace(",", ".");
   const n = Number(normalized);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
 export default function CreditNoteEditorPage({ params }: { params: Promise<{ id: string }> }) {

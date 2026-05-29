@@ -1,4 +1,5 @@
 import type { StorageAdapter } from "@/lib/storage/types";
+import { STORAGE_KEY } from "@/lib/storage/keys";
 
 // Type declaration for the Electron API exposed via preload
 declare global {
@@ -7,6 +8,8 @@ declare global {
       store: {
         get: (key: string) => Promise<string | null>;
         set: (key: string, value: string) => Promise<boolean>;
+        getSync?: (key: string) => string | null;
+        setSync?: (key: string, value: string) => boolean;
         delete: (key: string) => Promise<boolean>;
         clear: () => Promise<boolean>;
       };
@@ -44,9 +47,9 @@ async function initializeCache(): Promise<void> {
   
   cacheInitPromise = (async () => {
     try {
-      const data = await window.electronAPI!.store.get('invoice-app-data');
+      const data = await window.electronAPI!.store.get(STORAGE_KEY);
       if (data) {
-        electronCache['invoice-app-data'] = data;
+        electronCache[STORAGE_KEY] = data;
       }
       cacheInitialized = true;
     } catch (error) {
