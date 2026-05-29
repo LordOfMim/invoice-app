@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { t } from "@/lib/i18n";
-import { computeInvoiceTotals } from "@/lib/calc";
+import { computeInvoiceBalance } from "@/lib/calc";
 import { formatMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import {
@@ -33,20 +33,31 @@ export default function InvoicesPage() {
 
   const invoices = useMemo(() => {
     const all = data?.invoices ?? [];
+    const creditNotes = data?.creditNotes ?? [];
 
     const filtered =
       filterKey === "all"
         ? all
-        : all.filter((inv) => (filterKey === "paid" ? inv.paid : !inv.paid));
+        : all.filter((inv) => {
+            const balance = computeInvoiceBalance(
+              inv,
+              creditNotes.filter((cn) => cn.linkedInvoiceId === inv.id)
+            );
+            return filterKey === "paid" ? balance.isFullyPaid : !balance.isFullyPaid;
+          });
 
     const sorted = [...filtered].sort((a, b) => {
       if (sortKey === "number") return (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "");
-      if (sortKey === "total") return computeInvoiceTotals(b).total - computeInvoiceTotals(a).total;
+      if (sortKey === "total") {
+        const aBalance = computeInvoiceBalance(a, creditNotes.filter((cn) => cn.linkedInvoiceId === a.id));
+        const bBalance = computeInvoiceBalance(b, creditNotes.filter((cn) => cn.linkedInvoiceId === b.id));
+        return bBalance.effectiveTotal - aBalance.effectiveTotal;
+      }
       return (b.invoiceDate || "").localeCompare(a.invoiceDate || "");
     });
 
     return sorted;
-  }, [data?.invoices, filterKey, sortKey]);
+  }, [data?.creditNotes, data?.invoices, filterKey, sortKey]);
 
   return (
     <main className="p-6 lg:p-8">
@@ -115,10 +126,11 @@ export default function InvoicesPage() {
             ) : null}
 
             {invoices.map((inv) => {
-              const totals = computeInvoiceTotals(inv);
+              const balance = computeInvoiceBalance(
+                inv,
+                (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === inv.id)
+              );
               const isDefault = (data?.settings.defaultInvoiceId ?? null) === inv.id;
-              const paidAmount = inv.payments.reduce((sum, p) => sum + p.amount, 0);
-              const isPartiallyPaid = paidAmount > 0 && paidAmount < totals.total;
               
               return (
                 <Surface
@@ -136,9 +148,9 @@ export default function InvoicesPage() {
                         {inv.invoiceNumber || "(ohne Nummer)"}
                       </Link>
                       {isDefault && <Badge>Default</Badge>}
-                      {inv.paid ? (
+                      {balance.isFullyPaid ? (
                         <Badge variant="success">{t(language, "invoice.paid")}</Badge>
-                      ) : isPartiallyPaid ? (
+                      ) : balance.isPartiallyPaid ? (
                         <Badge variant="warning">Partial</Badge>
                       ) : null}
                     </div>
@@ -146,7 +158,7 @@ export default function InvoicesPage() {
                       <span>{inv.invoiceDate}</span>
                       <span>·</span>
                       <span className="font-medium text-[var(--color-ink-muted)]">
-                        {formatMoney(totals.total, currency, locale)}
+                        {formatMoney(balance.effectiveTotal, inv.currency ?? currency, locale)}
                       </span>
                       {inv.recipient.name && (
                         <>
@@ -165,7 +177,7 @@ export default function InvoicesPage() {
                         togglePaid(adapter, inv.id);
                       }}
                     >
-                      {inv.paid ? t(language, "actions.markUnpaid") : t(language, "actions.markPaid")}
+                      {balance.isFullyPaid ? t(language, "actions.markUnpaid") : t(language, "actions.markPaid")}
                     </Button>
 
                     <Button

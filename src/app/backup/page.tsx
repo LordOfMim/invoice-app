@@ -3,9 +3,10 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { t } from "@/lib/i18n";
-import { usePersistedData } from "@/lib/storage/useStore";
+import { todayLocalISO } from "@/lib/date";
+import { flushElectronStoreSync, usePersistedData } from "@/lib/storage/useStore";
 import { isElectron } from "@/lib/storage/electronAdapter";
-import { exportData, importData } from "@/lib/storage/store";
+import { exportData, flushPendingPersist, importData } from "@/lib/storage/store";
 import { Surface, PageHeader, Section, Stack, Grid } from "@/components/ui/Surface";
 import { Stat, Alert } from "@/components/ui/DataDisplay";
 
@@ -24,7 +25,7 @@ export default function BackupPage() {
     
     const a = document.createElement("a");
     a.href = url;
-    a.download = `invoice-app-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `invoice-app-backup-${todayLocalISO()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -38,7 +39,7 @@ export default function BackupPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const result = reader.result;
       if (typeof result !== "string") {
         setImportStatus("error");
@@ -46,6 +47,10 @@ export default function BackupPage() {
       }
       
       const success = importData(adapter, result);
+      if (success) {
+        flushPendingPersist();
+        await flushElectronStoreSync();
+      }
       setImportStatus(success ? "success" : "error");
       
       if (success) {

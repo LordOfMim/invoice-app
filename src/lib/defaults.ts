@@ -14,6 +14,8 @@ import type {
   TemplateCustomization, 
   TemplateVariant 
 } from "@/lib/domain";
+import { computeInvoiceTotals } from "@/lib/calc";
+import { dateToLocalISO } from "@/lib/date";
 
 function isoDateToday(): string {
   const now = new Date();
@@ -295,6 +297,7 @@ export function createDefaultCreditNoteTextsDe(): CreditNoteTexts {
 
 export function createCreditNoteFromInvoice(invoice: Invoice, type: "storno" | "gutschrift"): CreditNote {
   const nowIso = new Date().toISOString();
+  const invoiceTotal = computeInvoiceTotals(invoice).total;
   return {
     schemaVersion: 1,
     id: newId(),
@@ -304,7 +307,7 @@ export function createCreditNoteFromInvoice(invoice: Invoice, type: "storno" | "
     linkedInvoiceId: invoice.id,
     linkedInvoiceNumber: invoice.invoiceNumber,
     reason: "",
-    amount: 0,
+    amount: type === "storno" ? invoiceTotal : 0,
     sender: { ...invoice.sender },
     recipient: { ...invoice.recipient },
     footerText: invoice.footerText,
@@ -328,7 +331,7 @@ export function createDefaultRecurringInvoice(settings: AppSettings): RecurringI
   // Calculate next month's first day
   const now = new Date();
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextRunDate = nextMonth.toISOString().split("T")[0];
+  const nextRunDate = dateToLocalISO(nextMonth);
 
   return {
     id: newId(),

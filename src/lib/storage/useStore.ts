@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppSettings } from "@/lib/domain";
 import { getBrowserLocalStorageAdapter } from "@/lib/storage/localStorageAdapter";
-import { loadData, subscribe } from "@/lib/storage/store";
+import { clearDataCache, loadData, parsePersistedData, subscribe } from "@/lib/storage/store";
 import type { StorageAdapter } from "@/lib/storage/types";
 import { STORAGE_KEY } from "@/lib/storage/keys";
 
@@ -28,49 +28,65 @@ function getElectronAPI(): ElectronAPI | null {
   return (window as { electronAPI?: ElectronAPI }).electronAPI ?? null;
 }
 
-// Sync localStorage to electron-store (debounced)
-const ELECTRON_SYNC_DEBOUNCE_MS = 1500;
-let syncTimeout: ReturnType<typeof setTimeout> | null = null;
-let lastSyncedValue: string | null = null;
+const RECOVERY_KEY_PREFIX = `${STORAGE_KEY}:recovery`;
 
-function runWhenIdle(task: () => void) {
-  if (typeof window === "undefined") {
-    task();
-    return;
-  }
+function recoveryKey(reason: string) {
+  return `${RECOVERY_KEY_PREFIX}:${new Date().toISOString()}:${reason}`;
+}
 
-  const win = window as Window & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-  };
-
-  if (typeof win.requestIdleCallback === "function") {
-    win.requestIdleCallback(task, { timeout: 2000 });
-  } else {
-    setTimeout(task, 0);
+function backupLocalData(value: string | null, reason: string) {
+  if (!value || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(recoveryKey(reason), value);
+  } catch (err) {
+    console.error("Failed to create local recovery copy:", err);
   }
 }
 
-function syncToElectronStore() {
-  if (!isElectron()) return;
+async function backupElectronData(api: ElectronAPI, value: string | null, reason: string) {
+  if (!value) return;
+  try {
+    await api.store.set(recoveryKey(reason), value);
+  } catch (err) {
+    console.error("Failed to create electron-store recovery copy:", err);
+  }
+}
 
-  if (syncTimeout) clearTimeout(syncTimeout);
+function dataIsEmpty(raw: string | null): boolean {
+  const data = parsePersistedData(raw);
+  if (!data) return true;
+  return (
+    data.invoices.length === 0 &&
+    data.customers.length === 0 &&
+    data.products.length === 0 &&
+    data.tags.length === 0 &&
+    data.creditNotes.length === 0 &&
+    data.recurringInvoices.length === 0 &&
+    data.templateVariants.length === 0
+  );
+}
 
-  syncTimeout = setTimeout(async () => {
-    runWhenIdle(async () => {
-      try {
-        const api = getElectronAPI();
-        const data = localStorage.getItem(STORAGE_KEY);
-        if (!api || !data || data === lastSyncedValue) return;
+function dataFreshness(raw: string | null): number {
+  const data = parsePersistedData(raw);
+  if (!data) return 0;
+  const dates = [
+    data.settings.lastBackupDate,
+    ...data.invoices.flatMap((item) => [item.createdAt, item.updatedAt]),
+    ...data.customers.flatMap((item) => [item.createdAt, item.updatedAt]),
+    ...data.products.flatMap((item) => [item.createdAt, item.updatedAt]),
+    ...data.creditNotes.flatMap((item) => [item.createdAt, item.updatedAt]),
+    ...data.recurringInvoices.flatMap((item) => [item.createdAt, item.updatedAt]),
+    ...data.templateVariants.flatMap((item) => [item.createdAt, item.updatedAt]),
+  ].filter(Boolean) as string[];
+  return dates.reduce((latest, value) => Math.max(latest, Date.parse(value) || 0), 0);
+}
 
-        const synced = await api.store.set(STORAGE_KEY, data);
-        if (synced) {
-          lastSyncedValue = data;
-        }
-      } catch (err) {
-        console.error("Failed to sync to electron-store:", err);
-      }
-    });
-  }, ELECTRON_SYNC_DEBOUNCE_MS);
+async function writeElectronStore(value: string): Promise<boolean> {
+  const api = getElectronAPI();
+  if (!api) return false;
+
+  const synced = await api.store.set(STORAGE_KEY, value);
+  return synced;
 }
 
 // Load from electron-store on startup (only once)
@@ -83,19 +99,63 @@ async function loadFromElectronStore(): Promise<void> {
     const api = getElectronAPI();
     if (!api) return;
 
-    const data = await api.store.get(STORAGE_KEY);
-    if (data && typeof data === "string") {
-      // Only load from electron-store if localStorage is empty
-      const localData = localStorage.getItem(STORAGE_KEY);
-      if (!localData) {
-        localStorage.setItem(STORAGE_KEY, data);
-        lastSyncedValue = data;
-        // Trigger storage event for React to pick up
+    const electronData = await api.store.get(STORAGE_KEY);
+    const electronRaw = typeof electronData === "string" ? electronData : null;
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    const electronParsed = parsePersistedData(electronRaw);
+    const localParsed = parsePersistedData(localRaw);
+
+    if (electronRaw && !electronParsed) {
+      await backupElectronData(api, electronRaw, "invalid-electron");
+    }
+    if (localRaw && !localParsed) {
+      backupLocalData(localRaw, "invalid-local");
+    }
+
+    if (electronParsed && !localParsed) {
+      backupLocalData(localRaw, "before-electron-restore");
+      localStorage.setItem(STORAGE_KEY, electronRaw!);
+      clearDataCache();
+      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+      return;
+    }
+
+    if (!electronParsed && localParsed && localRaw) {
+      await writeElectronStore(localRaw);
+      return;
+    }
+
+    if (electronParsed && localParsed && electronRaw && localRaw && electronRaw !== localRaw) {
+      const preferElectron =
+        (dataIsEmpty(localRaw) && !dataIsEmpty(electronRaw)) ||
+        (!dataIsEmpty(electronRaw) && dataFreshness(electronRaw) > dataFreshness(localRaw));
+
+      if (preferElectron) {
+        backupLocalData(localRaw, "before-electron-newer-restore");
+        localStorage.setItem(STORAGE_KEY, electronRaw);
+        clearDataCache();
         window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+      } else {
+        await backupElectronData(api, electronRaw, "before-local-newer-sync");
+        await writeElectronStore(localRaw);
       }
     }
   } catch (err) {
     console.error("Failed to load from electron-store:", err);
+  }
+}
+
+export async function flushElectronStoreSync(): Promise<boolean> {
+  if (!isElectron()) return true;
+
+  const data = localStorage.getItem(STORAGE_KEY);
+  if (!data) return false;
+
+  try {
+    return await writeElectronStore(data);
+  } catch (err) {
+    console.error("Failed to flush electron-store:", err);
+    return false;
   }
 }
 
@@ -108,7 +168,7 @@ function createHybridAdapter(): StorageAdapter | null {
     getItem: (key: string) => baseAdapter.getItem(key),
     setItem: (key: string, value: string) => {
       baseAdapter.setItem(key, value);
-      syncToElectronStore();
+      void flushElectronStoreSync();
     },
   };
 }
@@ -119,9 +179,10 @@ export function useStorageAdapter() {
 
 export function usePersistedData() {
   const adapter = useStorageAdapter();
+  const [electronReady, setElectronReady] = useState(false);
 
   const getSnapshot = () => {
-    if (!adapter) return null;
+    if (!adapter || !electronReady) return null;
     return loadData(adapter);
   };
 
@@ -136,38 +197,51 @@ export function usePersistedData() {
 
   // Load from electron-store on first client render
   useEffect(() => {
-    loadFromElectronStore();
+    let cancelled = false;
+    loadFromElectronStore().finally(() => {
+      if (!cancelled) setElectronReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Ensure we initialize storage on first client render.
   useEffect(() => {
-    if (!adapter) return;
+    if (!adapter || !electronReady) return;
     loadData(adapter);
-  }, [adapter]);
+  }, [adapter, electronReady]);
 
   return { adapter, data };
 }
 
 export function usePersistedSettings() {
   const adapter = useStorageAdapter();
+  const [electronReady, setElectronReady] = useState(false);
 
   const settings = useSyncExternalStore(
     (listener) => {
       if (!adapter) return () => {};
       return subscribe(listener);
     },
-    () => (adapter ? loadData(adapter).settings : null),
+    () => (adapter && electronReady ? loadData(adapter).settings : null),
     () => null
   ) as AppSettings | null;
 
   useEffect(() => {
-    loadFromElectronStore();
+    let cancelled = false;
+    loadFromElectronStore().finally(() => {
+      if (!cancelled) setElectronReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!adapter) return;
+    if (!adapter || !electronReady) return;
     loadData(adapter);
-  }, [adapter]);
+  }, [adapter, electronReady]);
 
   return { adapter, settings };
 }

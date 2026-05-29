@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Surface, PageHeader, Stack, Section, Grid } from "@/components/ui/Surface";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { t } from "@/lib/i18n";
+import { formatTaxPercent, parseTaxPercentInput } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { 
   deleteRecurringInvoice, 
@@ -294,14 +295,13 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                               }}
                             />
                           </Field>
-                          <Field label="Tax Rate" hint="e.g., 0.19">
+                          <Field label="Tax Rate" hint="e.g., 19 for 19%">
                             <Input
                               inputMode="decimal"
-                              placeholder="0.19"
-                              value={li.taxRate === undefined ? "" : String(li.taxRate)}
+                              placeholder="19"
+                              value={formatTaxPercent(li.taxRate)}
                               onChange={(e) => {
-                                const value = e.target.value.trim();
-                                const nextRate = value === "" ? undefined : parseNumber(value);
+                                const nextRate = parseTaxPercentInput(e.target.value);
                                 save({
                                   ...recurring,
                                   lineItems: recurring.lineItems.map((x) =>

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Surface, PageHeader, Stack, Grid, Section } from "@/components/ui/Surface";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { t } from "@/lib/i18n";
+import { formatTaxPercent, parseTaxPercentInput } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { deleteProduct, upsertProduct } from "@/lib/storage/store";
 import type { Product } from "@/lib/domain";
@@ -132,16 +133,15 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
                   />
                 </Field>
 
-                <Field label={t(language, "products.taxRate")} hint="e.g., 0.19 for 19%">
+                <Field label={t(language, "products.taxRate")} hint="e.g., 19 for 19%">
                   <Input
                     inputMode="decimal"
-                    value={product.taxRate === undefined ? "" : String(product.taxRate)}
+                    value={formatTaxPercent(product.taxRate)}
                     onChange={(e) => {
-                      const value = e.target.value.trim();
-                      const nextRate = value === "" ? undefined : parseNumber(value);
+                      const nextRate = parseTaxPercentInput(e.target.value);
                       save({ ...product, taxRate: nextRate });
                     }}
-                    placeholder="0.19"
+                    placeholder="19"
                   />
                 </Field>
               </Grid>

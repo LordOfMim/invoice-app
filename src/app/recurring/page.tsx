@@ -8,6 +8,7 @@ import { Surface, PageHeader, Stack } from "@/components/ui/Surface";
 import { Badge, EmptyState, ListItem } from "@/components/ui/DataDisplay";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { t } from "@/lib/i18n";
+import { dateToLocalISO, formatDateOnly, todayLocalISO } from "@/lib/date";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { 
   createRecurringInvoice, 
@@ -33,7 +34,7 @@ export default function RecurringPage() {
     );
   }, [data?.recurringInvoices, search]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalISO();
 
   const handleCreate = () => {
     if (!adapter) return;
@@ -106,7 +107,7 @@ export default function RecurringPage() {
                 const isDue = ri.nextRunDate <= today;
                 const upcomingDate = new Date();
                 upcomingDate.setDate(upcomingDate.getDate() + ri.reminderDays);
-                const isUpcoming = !isDue && ri.nextRunDate <= upcomingDate.toISOString().split("T")[0];
+                const isUpcoming = !isDue && ri.nextRunDate <= dateToLocalISO(upcomingDate);
                 
                 return (
                   <ListItem
@@ -138,12 +139,12 @@ export default function RecurringPage() {
                         <div className="text-sm">
                           <span className="text-(--color-ink-subtle)">{t(language, "recurring.nextRun")}:</span>{" "}
                           <span className={isDue ? "font-medium text-(--color-warning)" : "text-(--color-ink-muted)"}>
-                            {new Date(ri.nextRunDate).toLocaleDateString(locale)}
+                            {formatDateOnly(ri.nextRunDate, locale)}
                           </span>
                         </div>
                         {ri.lastRunDate && (
                           <div className="text-xs text-(--color-ink-subtle)">
-                            {t(language, "recurring.lastRun")}: {new Date(ri.lastRunDate).toLocaleDateString(locale)}
+                            {t(language, "recurring.lastRun")}: {formatDateOnly(ri.lastRunDate, locale)}
                           </div>
                         )}
                       </div>

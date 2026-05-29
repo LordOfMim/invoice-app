@@ -10,25 +10,27 @@ import { Textarea } from "@/components/ui/Textarea";
 import { InvoicePreview } from "@/components/templates/InvoicePreview";
 import { PrintStyles } from "@/components/PrintStyles";
 import type { Invoice, InvoiceTexts, InvoiceTemplateId, LayoutPreferences, LogoPosition, Payment, Attachment, LineItemType } from "@/lib/domain";
-import { createDefaultLineItem, createDefaultPayment, createLineItemFromProduct, newId } from "@/lib/defaults";
+import { createDefaultLineItem, createLineItemFromProduct } from "@/lib/defaults";
 import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
+import { todayLocalISO } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
-import { computeInvoiceTotals } from "@/lib/calc";
+import { computeInvoiceBalance, formatTaxPercent, parseTaxPercentInput } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { 
   deleteInvoice, 
   duplicateInvoiceById, 
   togglePaid, 
   upsertInvoice,
+  updateInvoice,
   updateSettings,
   addPaymentToInvoice,
   removePaymentFromInvoice,
-  addAttachmentToInvoice,
   removeAttachmentFromInvoice,
   listCustomers,
   listProducts,
   listTags,
+  createCreditNote,
 } from "@/lib/storage/store";
 
 // Common currencies with metadata
@@ -74,7 +76,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
-  const [newPaymentDate, setNewPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newPaymentDate, setNewPaymentDate] = useState(todayLocalISO());
   const [newPaymentMethod, setNewPaymentMethod] = useState("");
   const [newPaymentReference, setNewPaymentReference] = useState("");
 
@@ -94,20 +96,16 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     return (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === id);
   }, [data?.creditNotes, id]);
 
-  // Calculate payment status
-  const invoiceTotals = useMemo(() => {
-    if (!invoice) return { subtotal: 0, taxTotal: 0, total: 0 };
-    return computeInvoiceTotals(invoice);
-  }, [invoice]);
+  const balance = useMemo(() => {
+    if (!invoice) return null;
+    return computeInvoiceBalance(invoice, creditNotes);
+  }, [creditNotes, invoice]);
 
-  const paidAmount = useMemo(() => {
-    if (!invoice) return 0;
-    return invoice.payments.reduce((sum, p) => sum + p.amount, 0);
-  }, [invoice]);
-
-  const remainingAmount = invoiceTotals.total - paidAmount;
-  const isFullyPaid = remainingAmount <= 0;
-  const isPartiallyPaid = paidAmount > 0 && remainingAmount > 0;
+  const invoiceTotal = balance?.invoiceTotal ?? 0;
+  const paidAmount = balance?.paidAmount ?? 0;
+  const remainingAmount = balance?.remainingAmount ?? 0;
+  const isFullyPaid = balance?.isFullyPaid ?? false;
+  const isPartiallyPaid = balance?.isPartiallyPaid ?? false;
 
   const currency = invoice?.currency || defaultCurrency;
 
@@ -136,8 +134,12 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     );
   }
 
-  const save = (next: Invoice) => {
-    upsertInvoice(adapter, next);
+  const save = (next: Invoice | ((prev: Invoice) => Invoice)) => {
+    if (typeof next === "function") {
+      updateInvoice(adapter, invoice.id, next);
+    } else {
+      upsertInvoice(adapter, next);
+    }
   };
 
   const onPrint = async () => {
@@ -211,8 +213,10 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const handleCreateCreditNote = (type: "storno" | "gutschrift") => {
     if (!adapter || !invoice) return;
-    // TODO: implement credit note creation
-    alert(`Credit note creation (${type}) will be implemented soon.`);
+    const creditNote = createCreditNote(adapter, invoice.id, type);
+    if (creditNote) {
+      window.location.assign(`/credit-notes/${creditNote.id}`);
+    }
   };
 
   const handleEmailInvoice = async () => {
@@ -277,7 +281,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
               {t(language, "invoice.partiallyPaid")}
             </span>
-          ) : invoice.dueDate < new Date().toISOString().split("T")[0] ? (
+          ) : balance?.isOverdue ? (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
               {t(language, "invoice.overdue")}
             </span>
@@ -383,7 +387,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   id: crypto.randomUUID(),
                   amount,
                   currency: invoice.currency ?? "EUR",
-                  date: newPaymentDate || new Date().toISOString().split("T")[0],
+                  date: newPaymentDate || todayLocalISO(),
                   method: (newPaymentMethod || "bank_transfer") as Payment["method"],
                 };
                 save(addPaymentToInvoice(invoice, payment));
@@ -591,9 +595,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                       <Field label={invoice.texts.itemsQuantityLabel}>
                         <Input
                           inputMode="decimal"
-                          defaultValue={String(li.quantity)}
-                          key={`qty-${li.id}`}
-                          onBlur={(e) => {
+                          value={String(li.quantity)}
+                          onChange={(e) => {
                             const next = {
                               ...invoice,
                               lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, quantity: parseNumber(e.target.value) } : x)),
@@ -618,9 +621,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                       <Field label={invoice.texts.itemsUnitPriceLabel}>
                         <Input
                           inputMode="decimal"
-                          defaultValue={String(li.unitPrice)}
-                          key={`price-${li.id}`}
-                          onBlur={(e) => {
+                          value={String(li.unitPrice)}
+                          onChange={(e) => {
                             const next = {
                               ...invoice,
                               lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, unitPrice: parseNumber(e.target.value) } : x)),
@@ -633,10 +635,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                         <Input
                           inputMode="decimal"
                           placeholder="19"
-                          value={li.taxRate === undefined ? "" : String(Math.round(li.taxRate * 10000) / 100)}
+                          value={formatTaxPercent(li.taxRate)}
                           onChange={(e) => {
-                            const value = e.target.value.trim();
-                            const nextRate = value === "" ? undefined : parseNumber(value) / 100;
+                            const nextRate = parseTaxPercentInput(e.target.value);
                             const next = {
                               ...invoice,
                               lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, taxRate: nextRate } : x)),
@@ -864,7 +865,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     reader.onload = () => {
                       const result = reader.result;
                       if (typeof result !== "string") return;
-                      save({ ...invoice, logoDataUrl: result });
+                      save((prev) => ({ ...prev, logoDataUrl: result }));
                     };
                     reader.readAsDataURL(file);
                   }}
@@ -1041,7 +1042,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             <div className="mt-4 space-y-3">
               <div className="flex justify-between text-sm">
                 <span>{t(language, "invoices.invoiceTotal")}:</span>
-                <span className="font-medium">{formatMoney(invoiceTotals.total, invoice.currency ?? "EUR", locale)}</span>
+                <span className="font-medium">{formatMoney(invoiceTotal, invoice.currency ?? "EUR", locale)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span>{t(language, "invoices.paidAmount")}:</span>
@@ -1129,7 +1130,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                         id: crypto.randomUUID(),
                         amount,
                         currency: invoice.currency ?? "EUR",
-                        date: newPaymentDate || new Date().toISOString().split("T")[0],
+                        date: newPaymentDate || todayLocalISO(),
                         method: newPaymentMethod as Payment["method"],
                         reference: newPaymentReference || undefined,
                       };
@@ -1198,11 +1199,23 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   const files = e.target.files;
                   if (!files) return;
 
+                  const attachments: Attachment[] = [];
+                  let remainingFiles = files.length;
+
                   Array.from(files).forEach((file) => {
                     const reader = new FileReader();
                     reader.onload = () => {
                       const dataUrl = reader.result;
-                      if (typeof dataUrl !== "string") return;
+                      remainingFiles -= 1;
+                      if (typeof dataUrl !== "string") {
+                        if (remainingFiles === 0 && attachments.length > 0) {
+                          save((prev) => ({
+                            ...prev,
+                            attachments: [...(prev.attachments ?? []), ...attachments],
+                          }));
+                        }
+                        return;
+                      }
 
                       const attachment: Attachment = {
                         id: crypto.randomUUID(),
@@ -1212,8 +1225,22 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                         dataUrl,
                         createdAt: new Date().toISOString(),
                       };
-                      const updated = addAttachmentToInvoice(invoice, attachment);
-                      save(updated);
+                      attachments.push(attachment);
+                      if (remainingFiles === 0 && attachments.length > 0) {
+                        save((prev) => ({
+                          ...prev,
+                          attachments: [...(prev.attachments ?? []), ...attachments],
+                        }));
+                      }
+                    };
+                    reader.onerror = () => {
+                      remainingFiles -= 1;
+                      if (remainingFiles === 0 && attachments.length > 0) {
+                        save((prev) => ({
+                          ...prev,
+                          attachments: [...(prev.attachments ?? []), ...attachments],
+                        }));
+                      }
                     };
                     reader.readAsDataURL(file);
                   });

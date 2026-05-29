@@ -6,7 +6,8 @@ import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { getDashboardStats, getUpcomingReminders, getDueRecurringInvoices } from "@/lib/storage/store";
-import { computeInvoiceTotals } from "@/lib/calc";
+import { computeInvoiceBalance } from "@/lib/calc";
+import { daysBetweenDateOnly, formatDateOnly, formatMonthKey, todayLocalISO } from "@/lib/date";
 import { Surface, PageHeader, Grid, Section, Stack } from "@/components/ui/Surface";
 import { Stat, Badge, Alert, EmptyState } from "@/components/ui/DataDisplay";
 import { Button } from "@/components/ui/Button";
@@ -16,19 +17,19 @@ function RevenueChart({ data, locale, currency }: {
   locale: string;
   currency: string;
 }) {
-  const maxRevenue = Math.max(...data.map(d => d.revenue), 1);
+  const maxRevenue = Math.max(...data.map(d => Math.abs(d.revenue)), 1);
   
   return (
     <div className="space-y-3">
       {data.map(({ month, revenue }) => (
         <div key={month} className="flex items-center gap-3">
           <div className="w-16 text-xs text-[var(--color-ink-subtle)]">
-            {new Date(month + "-01").toLocaleDateString(locale, { month: "short", year: "2-digit" })}
+            {formatMonthKey(month, locale)}
           </div>
           <div className="flex-1 h-7 bg-[var(--color-sand-100)] rounded-lg overflow-hidden">
             <div 
               className="h-full bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-accent)]/70 rounded-lg transition-all duration-500"
-              style={{ width: `${(revenue / maxRevenue) * 100}%`, minWidth: revenue > 0 ? "4px" : "0" }}
+              style={{ width: `${(Math.abs(revenue) / maxRevenue) * 100}%`, minWidth: revenue !== 0 ? "4px" : "0" }}
             />
           </div>
           <div className="w-24 text-right text-xs font-medium text-[var(--color-ink-muted)]">
@@ -72,13 +73,16 @@ export default function DashboardPage() {
   }, [data?.invoices]);
 
   const overdueInvoices = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayLocalISO();
     return (data?.invoices ?? []).filter((inv) => {
-      const paidAmount = inv.payments.reduce((sum, p) => sum + p.amount, 0);
-      const total = computeInvoiceTotals(inv).total;
-      return paidAmount < total && inv.dueDate < today;
+      const balance = computeInvoiceBalance(
+        inv,
+        (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === inv.id),
+        today
+      );
+      return balance.isOverdue;
     });
-  }, [data?.invoices]);
+  }, [data?.creditNotes, data?.invoices]);
 
   if (!stats) {
     return (
@@ -171,8 +175,10 @@ export default function DashboardPage() {
                 {recentInvoices.length > 0 ? (
                   <div className="space-y-1">
                     {recentInvoices.map((inv) => {
-                      const totals = computeInvoiceTotals(inv);
-                      const paidAmount = inv.payments.reduce((sum, p) => sum + p.amount, 0);
+                      const balance = computeInvoiceBalance(
+                        inv,
+                        (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === inv.id)
+                      );
                       return (
                         <Link
                           key={inv.id}
@@ -187,11 +193,11 @@ export default function DashboardPage() {
                           </div>
                           <div className="text-right">
                             <div className="text-sm font-medium text-[var(--color-ink)]">
-                              {formatMoney(totals.total, currency, locale)}
+                              {formatMoney(balance.effectiveTotal, inv.currency ?? currency, locale)}
                             </div>
-                            {paidAmount > 0 && paidAmount < totals.total && (
+                            {balance.isPartiallyPaid && (
                               <div className="text-xs text-[var(--color-warning)]">
-                                {formatMoney(totals.total - paidAmount, currency, locale)} remaining
+                                {formatMoney(balance.remainingAmount, inv.currency ?? currency, locale)} remaining
                               </div>
                             )}
                           </div>
@@ -215,11 +221,11 @@ export default function DashboardPage() {
               <Surface variant="glass" padding="md" className="border-[var(--color-danger)]/20 bg-[var(--color-danger)]/5">
                 <div className="space-y-2">
                   {overdueInvoices.slice(0, 5).map((inv) => {
-                    const totals = computeInvoiceTotals(inv);
-                    const paidAmount = inv.payments.reduce((sum, p) => sum + p.amount, 0);
-                    const daysOverdue = Math.floor(
-                      (new Date().getTime() - new Date(inv.dueDate).getTime()) / (1000 * 60 * 60 * 24)
+                    const balance = computeInvoiceBalance(
+                      inv,
+                      (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === inv.id)
                     );
+                    const daysOverdue = daysBetweenDateOnly(inv.dueDate, todayLocalISO());
                     return (
                       <Link
                         key={inv.id}
@@ -232,7 +238,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-sm font-medium text-[var(--color-danger)]">
-                            {formatMoney(totals.total - paidAmount, currency, locale)}
+                            {formatMoney(balance.remainingAmount, inv.currency ?? currency, locale)}
                           </div>
                           <div className="text-xs text-[var(--color-danger)]/70">{daysOverdue} days overdue</div>
                         </div>
@@ -257,7 +263,7 @@ export default function DashboardPage() {
                     >
                       <div className="text-sm font-medium text-[var(--color-ink)]">{ri.name}</div>
                       <Badge variant="info">
-                        Next: {new Date(ri.nextRunDate).toLocaleDateString(locale)}
+                        Next: {formatDateOnly(ri.nextRunDate, locale)}
                       </Badge>
                     </Link>
                   ))}

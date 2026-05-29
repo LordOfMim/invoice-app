@@ -12,6 +12,12 @@ import type {
   TemplateVariant 
 } from "@/lib/domain";
 import { 
+  computeInvoiceBalance,
+  computeInvoiceTotals,
+  convertInvoiceAmountToCurrency,
+} from "@/lib/calc";
+import { addMonthsClamped, monthKey, todayLocalISO } from "@/lib/date";
+import { 
   createDefaultSettings, 
   createInvoiceFromDefaults, 
   duplicateInvoice,
@@ -34,13 +40,14 @@ const listeners = new Set<Listener>();
 // This is important for `useSyncExternalStore`, which uses `Object.is` on snapshots.
 let cachedData: PersistedDataV1 | null = null;
 
+const MANUAL_PAID_METHOD = "manual_paid";
 const PERSIST_DEBOUNCE_MS = 200;
 let pendingPersistData: PersistedDataV1 | null = null;
 let pendingPersistAdapter: StorageAdapter | null = null;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let persistLifecycleBound = false;
 
-function flushPendingPersist() {
+export function flushPendingPersist() {
   if (persistTimer) {
     clearTimeout(persistTimer);
     persistTimer = null;
@@ -94,7 +101,7 @@ export function subscribe(listener: Listener): () => void {
   };
 }
 
-function safeParse(json: string | null): PersistedDataV1 | null {
+export function parsePersistedData(json: string | null): PersistedDataV1 | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json) as unknown;
@@ -161,7 +168,7 @@ function createEmptyData(): PersistedDataV1 {
 export function loadData(adapter: StorageAdapter): PersistedDataV1 {
   if (cachedData) return cachedData;
 
-  const existing = safeParse(adapter.getItem(STORAGE_KEY));
+  const existing = parsePersistedData(adapter.getItem(STORAGE_KEY));
   if (existing) {
     cachedData = existing;
     return existing;
@@ -176,6 +183,16 @@ export function loadData(adapter: StorageAdapter): PersistedDataV1 {
 export function saveData(adapter: StorageAdapter, data: PersistedDataV1): void {
   cachedData = data;
   schedulePersist(adapter, data);
+  emitChange();
+}
+
+export function clearDataCache(): void {
+  cachedData = null;
+}
+
+export function replaceData(adapter: StorageAdapter, data: PersistedDataV1): void {
+  cachedData = data;
+  adapter.setItem(STORAGE_KEY, JSON.stringify(data));
   emitChange();
 }
 
@@ -215,6 +232,23 @@ export function upsertInvoice(adapter: StorageAdapter, invoice: Invoice): void {
   saveData(adapter, { ...data, invoices });
 }
 
+export function updateInvoice(
+  adapter: StorageAdapter,
+  id: string,
+  updater: (prev: Invoice) => Invoice
+): Invoice | null {
+  const data = loadData(adapter);
+  const idx = data.invoices.findIndex((inv) => inv.id === id);
+  if (idx < 0) return null;
+
+  const nowIso = new Date().toISOString();
+  const nextInvoice = { ...updater(data.invoices[idx]), updatedAt: nowIso };
+  const invoices = [...data.invoices];
+  invoices[idx] = nextInvoice;
+  saveData(adapter, { ...data, invoices });
+  return nextInvoice;
+}
+
 export function deleteInvoice(adapter: StorageAdapter, id: string): void {
   const data = loadData(adapter);
   const invoices = data.invoices.filter((inv) => inv.id !== id);
@@ -227,7 +261,7 @@ export function deleteInvoice(adapter: StorageAdapter, id: string): void {
 
 export function createInvoice(adapter: StorageAdapter): Invoice {
   const data = loadData(adapter);
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalISO();
 
   const defaultInvoiceId = data.settings.defaultInvoiceId;
   const defaultInvoice = defaultInvoiceId ? data.invoices.find((inv) => inv.id === defaultInvoiceId) ?? null : null;
@@ -255,7 +289,39 @@ export function duplicateInvoiceById(adapter: StorageAdapter, id: string): Invoi
 
 export function togglePaid(adapter: StorageAdapter, id: string): void {
   const data = loadData(adapter);
-  const invoices = data.invoices.map((inv) => (inv.id === id ? { ...inv, paid: !inv.paid } : inv));
+  const today = todayLocalISO();
+  const invoices = data.invoices.map((inv) => {
+    if (inv.id !== id) return inv;
+    const linkedCreditNotes = data.creditNotes.filter((cn) => cn.linkedInvoiceId === inv.id);
+    const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
+
+    if (balance.isFullyPaid) {
+      return {
+        ...inv,
+        paid: false,
+        payments: (inv.payments ?? []).filter((payment) => payment.method !== MANUAL_PAID_METHOD),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const remaining = balance.remainingAmount;
+    const manualPayment: Payment = {
+      id: newId(),
+      amount: remaining,
+      currency: inv.currency ?? "EUR",
+      date: today,
+      method: MANUAL_PAID_METHOD,
+      reference: "Marked paid",
+      createdAt: new Date().toISOString(),
+    };
+
+    return {
+      ...inv,
+      paid: true,
+      payments: [...(inv.payments ?? []), manualPayment],
+      updatedAt: new Date().toISOString(),
+    };
+  });
   saveData(adapter, { ...data, invoices });
 }
 
@@ -265,18 +331,24 @@ export function togglePaid(adapter: StorageAdapter, id: string): void {
 
 /** Add a payment to an invoice (pure function, returns new Invoice) */
 export function addPaymentToInvoice(invoice: Invoice, payment: Payment): Invoice {
+  const payments = [...(invoice.payments ?? []), payment];
+  const total = computeInvoiceTotals(invoice).total;
+  const paid = computeInvoiceBalance({ ...invoice, payments, paid: false }).paidAmount >= total;
   return {
     ...invoice,
-    payments: [...invoice.payments, payment],
+    paid,
+    payments,
     updatedAt: new Date().toISOString(),
   };
 }
 
 /** Remove a payment from an invoice (pure function, returns new Invoice) */
 export function removePaymentFromInvoice(invoice: Invoice, paymentId: string): Invoice {
+  const payments = (invoice.payments ?? []).filter((p) => p.id !== paymentId);
   return {
     ...invoice,
-    payments: invoice.payments.filter((p) => p.id !== paymentId),
+    paid: false,
+    payments,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -307,10 +379,7 @@ export function addPayment(adapter: StorageAdapter, invoiceId: string, payment: 
   const data = loadData(adapter);
   const invoices = data.invoices.map((inv) => {
     if (inv.id !== invoiceId) return inv;
-    const payments = [...inv.payments, payment];
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    // Auto-mark as paid if fully paid (we'll calculate this in the UI)
-    return { ...inv, payments, updatedAt: new Date().toISOString() };
+    return addPaymentToInvoice(inv, payment);
   });
   saveData(adapter, { ...data, invoices });
 }
@@ -319,11 +388,7 @@ export function removePayment(adapter: StorageAdapter, invoiceId: string, paymen
   const data = loadData(adapter);
   const invoices = data.invoices.map((inv) => {
     if (inv.id !== invoiceId) return inv;
-    return { 
-      ...inv, 
-      payments: inv.payments.filter((p) => p.id !== paymentId),
-      updatedAt: new Date().toISOString(),
-    };
+    return removePaymentFromInvoice(inv, paymentId);
   });
   saveData(adapter, { ...data, invoices });
 }
@@ -569,15 +634,15 @@ export function generateInvoiceFromRecurring(adapter: StorageAdapter, recurringI
   if (!recurring) return null;
 
   const nowIso = new Date().toISOString();
-  const today = new Date().toISOString().split("T")[0];
+  const scheduledDate = recurring.nextRunDate || todayLocalISO();
   
   // Create invoice from recurring template
   const invoice: Invoice = {
     schemaVersion: 1,
     id: newId(),
     invoiceNumber: "",
-    invoiceDate: today,
-    dueDate: today,
+    invoiceDate: scheduledDate,
+    dueDate: scheduledDate,
     sender: { ...recurring.sender },
     recipient: { ...recurring.recipient },
     customerId: recurring.customerId,
@@ -603,7 +668,7 @@ export function generateInvoiceFromRecurring(adapter: StorageAdapter, recurringI
   // Update recurring invoice
   const updatedRecurring: RecurringInvoice = {
     ...recurring,
-    lastRunDate: today,
+    lastRunDate: scheduledDate,
     nextRunDate,
     updatedAt: nowIso,
   };
@@ -622,24 +687,21 @@ export function generateInvoiceFromRecurring(adapter: StorageAdapter, recurringI
 }
 
 function calculateNextRunDate(currentDate: string, frequency: RecurringInvoice["frequency"]): string {
-  const date = new Date(currentDate);
   switch (frequency) {
     case "monthly":
-      date.setMonth(date.getMonth() + 1);
-      break;
+      return addMonthsClamped(currentDate, 1);
     case "quarterly":
-      date.setMonth(date.getMonth() + 3);
-      break;
+      return addMonthsClamped(currentDate, 3);
     case "yearly":
-      date.setFullYear(date.getFullYear() + 1);
-      break;
+      return addMonthsClamped(currentDate, 12);
+    default:
+      return addMonthsClamped(currentDate, 1);
   }
-  return date.toISOString().split("T")[0];
 }
 
 export function getDueRecurringInvoices(adapter: StorageAdapter): RecurringInvoice[] {
   const data = loadData(adapter);
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalISO();
   return data.recurringInvoices.filter((ri) => ri.active && ri.nextRunDate <= today);
 }
 
@@ -648,7 +710,7 @@ export function getUpcomingReminders(adapter: StorageAdapter): RecurringInvoice[
   const today = new Date();
   return data.recurringInvoices.filter((ri) => {
     if (!ri.active) return false;
-    const nextRun = new Date(ri.nextRunDate);
+    const nextRun = new Date(`${ri.nextRunDate}T00:00:00`);
     const reminderDate = new Date(nextRun);
     reminderDate.setDate(reminderDate.getDate() - ri.reminderDays);
     return reminderDate <= today && nextRun > today;
@@ -779,7 +841,8 @@ export type DashboardStats = {
 
 export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   const data = loadData(adapter);
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalISO();
+  const baseCurrency = data.settings.currency || "EUR";
   
   let unpaidTotal = 0;
   let overdueCount = 0;
@@ -788,27 +851,32 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   const revenueMap = new Map<string, number>();
   
   for (const inv of data.invoices) {
-    // Calculate invoice total (simplified - should use calc.ts)
-    const total = inv.lineItems.reduce((sum, li) => {
-      const net = li.quantity * li.unitPrice;
-      const tax = li.taxRate ? net * li.taxRate : 0;
-      return sum + net + tax;
-    }, 0);
-    
-    const paidAmount = inv.payments.reduce((sum, p) => sum + p.amount, 0);
-    const remaining = total - paidAmount;
+    const linkedCreditNotes = data.creditNotes.filter((cn) => cn.linkedInvoiceId === inv.id);
+    const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
+    const remaining = convertInvoiceAmountToCurrency(balance.remainingAmount, inv, baseCurrency);
     
     if (remaining > 0) {
       unpaidTotal += remaining;
-      if (inv.dueDate < today) {
+      if (balance.isOverdue) {
         overdueCount++;
         overdueTotal += remaining;
       }
     }
     
-    // Revenue by month (based on invoice date)
-    const month = inv.invoiceDate.substring(0, 7); // YYYY-MM
-    revenueMap.set(month, (revenueMap.get(month) || 0) + total);
+    for (const payment of inv.payments ?? []) {
+      const month = monthKey(payment.date);
+      if (!month) continue;
+      const paymentAmount = convertInvoiceAmountToCurrency(payment.amount, inv, baseCurrency);
+      revenueMap.set(month, (revenueMap.get(month) || 0) + paymentAmount);
+    }
+  }
+
+  for (const creditNote of data.creditNotes) {
+    const invoice = data.invoices.find((inv) => inv.id === creditNote.linkedInvoiceId);
+    const month = monthKey(creditNote.creditNoteDate);
+    if (!invoice || !month) continue;
+    const creditAmount = convertInvoiceAmountToCurrency(creditNote.amount, invoice, baseCurrency);
+    revenueMap.set(month, (revenueMap.get(month) || 0) - creditAmount);
   }
   
   // Sort revenue by month
@@ -819,9 +887,9 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     .reverse();
   
   return {
-    unpaidTotal,
+    unpaidTotal: Math.round((unpaidTotal + Number.EPSILON) * 100) / 100,
     overdueCount,
-    overdueTotal,
+    overdueTotal: Math.round((overdueTotal + Number.EPSILON) * 100) / 100,
     paidThisPeriod: 0, // Would need period filter
     revenueByMonth,
     invoiceCount: data.invoices.length,
