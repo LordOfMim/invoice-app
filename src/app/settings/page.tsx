@@ -1,12 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Surface, PageHeader, Section, Stack, Grid } from "@/components/ui/Surface";
-import type { InvoiceTemplateId, Language } from "@/lib/domain";
+import type { AppBackgroundChoice, InvoiceTemplateId, Language } from "@/lib/domain";
 import { createDefaultTextsDe } from "@/lib/defaults";
 import { t } from "@/lib/i18n";
 import { usePersistedData } from "@/lib/storage/useStore";
@@ -51,6 +52,29 @@ export default function SettingsPage() {
                   <option value="de">Deutsch</option>
                   <option value="en">English</option>
                 </Select>
+              </div>
+            </Surface>
+          </Section>
+
+          <Section title="Appearance">
+            <Surface variant="solid" padding="lg">
+              <div className="max-w-xs">
+                <Field label="Background">
+                  <Select
+                    value={settings.backgroundChoice ?? "auto"}
+                    onChange={(e) => {
+                      const backgroundChoice = e.target.value as AppBackgroundChoice;
+                      updateSettings(adapter, (prev) => ({ ...prev, backgroundChoice }));
+                    }}
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="off">Off (low memory)</option>
+                    <option value="threads">Threads</option>
+                    <option value="light-rays">Light Rays</option>
+                    <option value="shape-grid">Shape Grid</option>
+                    <option value="beams">Beams</option>
+                  </Select>
+                </Field>
               </div>
             </Surface>
           </Section>
@@ -289,9 +313,12 @@ export default function SettingsPage() {
                 />
                 {settings.defaultLogoDataUrl && (
                   <div className="flex items-center gap-4">
-                    <img 
-                      src={settings.defaultLogoDataUrl} 
-                      alt="Logo preview" 
+                    <Image
+                      src={settings.defaultLogoDataUrl}
+                      alt="Logo preview"
+                      width={128}
+                      height={64}
+                      unoptimized
                       className="h-16 w-auto rounded-lg border border-[var(--glass-border)]"
                     />
                     <Button

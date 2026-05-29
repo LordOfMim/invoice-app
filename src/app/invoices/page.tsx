@@ -34,26 +34,30 @@ export default function InvoicesPage() {
   const invoices = useMemo(() => {
     const all = data?.invoices ?? [];
     const creditNotes = data?.creditNotes ?? [];
+    const creditNotesByInvoiceId = new Map<string, typeof creditNotes>();
+
+    for (const creditNote of creditNotes) {
+      const linked = creditNotesByInvoiceId.get(creditNote.linkedInvoiceId);
+      if (linked) linked.push(creditNote);
+      else creditNotesByInvoiceId.set(creditNote.linkedInvoiceId, [creditNote]);
+    }
+
+    const rows = all.map((invoice) => ({
+      invoice,
+      balance: computeInvoiceBalance(invoice, creditNotesByInvoiceId.get(invoice.id) ?? []),
+    }));
 
     const filtered =
       filterKey === "all"
-        ? all
-        : all.filter((inv) => {
-            const balance = computeInvoiceBalance(
-              inv,
-              creditNotes.filter((cn) => cn.linkedInvoiceId === inv.id)
-            );
-            return filterKey === "paid" ? balance.isFullyPaid : !balance.isFullyPaid;
-          });
+        ? rows
+        : rows.filter(({ balance }) => (filterKey === "paid" ? balance.isFullyPaid : !balance.isFullyPaid));
 
-    const sorted = [...filtered].sort((a, b) => {
-      if (sortKey === "number") return (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "");
-      if (sortKey === "total") {
-        const aBalance = computeInvoiceBalance(a, creditNotes.filter((cn) => cn.linkedInvoiceId === a.id));
-        const bBalance = computeInvoiceBalance(b, creditNotes.filter((cn) => cn.linkedInvoiceId === b.id));
-        return bBalance.effectiveTotal - aBalance.effectiveTotal;
+    const sorted = filtered.sort((a, b) => {
+      if (sortKey === "number") {
+        return (a.invoice.invoiceNumber || "").localeCompare(b.invoice.invoiceNumber || "");
       }
-      return (b.invoiceDate || "").localeCompare(a.invoiceDate || "");
+      if (sortKey === "total") return b.balance.effectiveTotal - a.balance.effectiveTotal;
+      return (b.invoice.invoiceDate || "").localeCompare(a.invoice.invoiceDate || "");
     });
 
     return sorted;
@@ -125,11 +129,7 @@ export default function InvoicesPage() {
               </Surface>
             ) : null}
 
-            {invoices.map((inv) => {
-              const balance = computeInvoiceBalance(
-                inv,
-                (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === inv.id)
-              );
+            {invoices.map(({ invoice: inv, balance }) => {
               const isDefault = (data?.settings.defaultInvoiceId ?? null) === inv.id;
               
               return (

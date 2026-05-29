@@ -97,6 +97,7 @@ export function createDefaultSettings(): AppSettings {
     defaultTexts: createDefaultTextsDe(),
     backupEnabled: false,
     dashboardPeriod: "month",
+    backgroundChoice: "auto",
   };
 }
 

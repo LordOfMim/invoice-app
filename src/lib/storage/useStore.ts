@@ -173,8 +173,23 @@ function createHybridAdapter(): StorageAdapter | null {
   };
 }
 
+function subscribeClientReady(listener: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const timeoutId = window.setTimeout(listener, 0);
+  return () => window.clearTimeout(timeoutId);
+}
+
+function useClientReady() {
+  return useSyncExternalStore(
+    subscribeClientReady,
+    () => typeof window !== "undefined",
+    () => false
+  );
+}
+
 export function useStorageAdapter() {
-  return useMemo(() => createHybridAdapter(), []);
+  const clientReady = useClientReady();
+  return useMemo(() => (clientReady ? createHybridAdapter() : null), [clientReady]);
 }
 
 export function usePersistedData() {

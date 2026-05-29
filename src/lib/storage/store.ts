@@ -131,6 +131,7 @@ function migrateSettings(settings: AppSettings): AppSettings {
     ...settings,
     backupEnabled: settings.backupEnabled ?? false,
     dashboardPeriod: settings.dashboardPeriod ?? "month",
+    backgroundChoice: settings.backgroundChoice ?? "auto",
     defaultInvoiceId: settings.defaultInvoiceId ?? undefined,
     defaultLayout: {
       ...settings.defaultLayout,
@@ -849,9 +850,16 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   let overdueTotal = 0;
   
   const revenueMap = new Map<string, number>();
+  const creditNotesByInvoiceId = new Map<string, CreditNote[]>();
+
+  for (const creditNote of data.creditNotes) {
+    const linked = creditNotesByInvoiceId.get(creditNote.linkedInvoiceId);
+    if (linked) linked.push(creditNote);
+    else creditNotesByInvoiceId.set(creditNote.linkedInvoiceId, [creditNote]);
+  }
   
   for (const inv of data.invoices) {
-    const linkedCreditNotes = data.creditNotes.filter((cn) => cn.linkedInvoiceId === inv.id);
+    const linkedCreditNotes = creditNotesByInvoiceId.get(inv.id) ?? [];
     const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
     const remaining = convertInvoiceAmountToCurrency(balance.remainingAmount, inv, baseCurrency);
     

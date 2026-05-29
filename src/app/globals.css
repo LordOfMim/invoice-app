@@ -91,7 +91,6 @@ body {
   background:
     radial-gradient(900px 520px at 22% 12%, rgba(59, 130, 246, 0.06), transparent 62%),
     linear-gradient(180deg, var(--color-sand-50) 0%, var(--color-sand-100) 75%, var(--color-sand-200) 120%);
-  background-attachment: fixed;
   color: var(--color-ink);
   min-height: 100dvh;
 }
@@ -106,6 +105,40 @@ body::before {
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
   mix-blend-mode: multiply;
+}
+
+:root[data-background="off"] body::before {
+  display: none;
+}
+
+.shape-grid-bg {
+  position: relative;
+  background-image:
+    linear-gradient(var(--shape-grid-border), var(--shape-grid-border)),
+    linear-gradient(90deg, var(--shape-grid-border), var(--shape-grid-border));
+  background-size: var(--shape-grid-size) var(--shape-grid-size);
+  background-position: 0 0;
+  opacity: 0.75;
+  transform: rotate(var(--shape-grid-angle)) scale(1.35);
+  animation: shape-grid-shift var(--shape-grid-speed) linear infinite;
+}
+
+.shape-grid-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 34% 18%, var(--shape-grid-hover), transparent 34%),
+    radial-gradient(circle at 72% 64%, rgba(99, 102, 241, 0.055), transparent 36%);
+}
+
+@keyframes shape-grid-shift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: var(--shape-grid-size) var(--shape-grid-size);
+  }
 }
 
 /* Typography refinements */
@@ -220,6 +253,10 @@ textarea,
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+
+  body::before {
+    display: none;
+  }
 }
 
 /* Badge styles */
@@ -254,6 +291,10 @@ textarea,
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
     animation-duration: 0.001ms !important;
+  }
+
+  body::before {
+    display: none;
   }
 }
 

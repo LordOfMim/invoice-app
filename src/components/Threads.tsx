@@ -10,6 +10,7 @@ interface ThreadsProps {
   fps?: number;
   pixelRatioCap?: number;
   pauseWhenHidden?: boolean;
+  onRenderError?: () => void;
 }
 
 const vertexShader = `
@@ -142,6 +143,7 @@ const Threads: React.FC<ThreadsProps> = ({
   fps = 30,
   pixelRatioCap = 1.25,
   pauseWhenHidden = true,
+  onRenderError,
   ...rest
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,10 +153,16 @@ const Threads: React.FC<ThreadsProps> = ({
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    const renderer = new Renderer({
-      alpha: true,
-      dpr: Math.min(window.devicePixelRatio || 1, Math.max(1, pixelRatioCap)),
-    });
+    let renderer: Renderer;
+    try {
+      renderer = new Renderer({
+        alpha: true,
+        dpr: Math.min(window.devicePixelRatio || 1, Math.max(1, pixelRatioCap)),
+      });
+    } catch {
+      onRenderError?.();
+      return;
+    }
     const gl = renderer.gl;
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
@@ -213,17 +221,10 @@ const Threads: React.FC<ThreadsProps> = ({
       container.addEventListener('mouseleave', handleMouseLeave);
     }
 
-    const frameInterval = 1000 / Math.max(1, fps);
-    let lastFrameTime = 0;
+    const frameInterval = Math.max(16, 1000 / Math.max(1, fps));
+    let frameTimeoutId: number | null = null;
 
     function update(t: number) {
-      animationFrameId.current = requestAnimationFrame(update);
-
-      if (frameInterval > 0 && t - lastFrameTime < frameInterval) {
-        return;
-      }
-      lastFrameTime = t;
-
       if (enableMouseInteraction) {
         const smoothing = 0.05;
         currentMouse[0] += smoothing * (targetMouse[0] - currentMouse[0]);
@@ -237,18 +238,25 @@ const Threads: React.FC<ThreadsProps> = ({
       program.uniforms.iTime.value = t * 0.001;
 
       renderer.render({ scene: mesh });
+      frameTimeoutId = window.setTimeout(() => {
+        animationFrameId.current = requestAnimationFrame(update);
+      }, frameInterval);
     }
 
     const startLoop = () => {
       if (animationFrameId.current !== null) return;
-      lastFrameTime = 0;
       animationFrameId.current = requestAnimationFrame(update);
     };
 
     const stopLoop = () => {
-      if (animationFrameId.current === null) return;
-      cancelAnimationFrame(animationFrameId.current);
+      if (animationFrameId.current !== null) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+      if (frameTimeoutId !== null) {
+        window.clearTimeout(frameTimeoutId);
+      }
       animationFrameId.current = null;
+      frameTimeoutId = null;
     };
 
     const handleVisibilityChange = () => {
@@ -301,7 +309,7 @@ const Threads: React.FC<ThreadsProps> = ({
       if (container.contains(gl.canvas)) container.removeChild(gl.canvas);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
-  }, [color, amplitude, distance, enableMouseInteraction, lineCount, fps, pixelRatioCap, pauseWhenHidden]);
+  }, [color, amplitude, distance, enableMouseInteraction, lineCount, fps, onRenderError, pixelRatioCap, pauseWhenHidden]);
 
   return <div ref={containerRef} className="w-full h-full relative" {...rest} />;
 };

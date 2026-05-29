@@ -2,6 +2,8 @@ export type Language = "de" | "en";
 
 export type InvoiceTemplateId = "classic" | "modern" | "minimal";
 
+export type AppBackgroundChoice = "auto" | "off" | "threads" | "light-rays" | "shape-grid" | "beams";
+
 export type LogoPosition = "left" | "center" | "right";
 
 export type LogoSize = "small" | "medium" | "large";
@@ -324,6 +326,9 @@ export type AppSettings = {
 
   // Dashboard preferences
   dashboardPeriod: "month" | "quarter" | "year";
+
+  // Appearance preferences
+  backgroundChoice?: AppBackgroundChoice;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

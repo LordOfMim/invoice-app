@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { InvoicePreview } from "@/components/templates/InvoicePreview";
 import { PrintStyles } from "@/components/PrintStyles";
-import type { Invoice, InvoiceTexts, InvoiceTemplateId, LayoutPreferences, LogoPosition, Payment, Attachment, LineItemType } from "@/lib/domain";
+import type { Invoice, InvoiceLineItem, InvoiceTexts, InvoiceTemplateId, LayoutPreferences, LogoPosition, Payment, Attachment, LineItemType } from "@/lib/domain";
 import { createDefaultLineItem, createLineItemFromProduct } from "@/lib/defaults";
 import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
@@ -27,9 +27,6 @@ import {
   addPaymentToInvoice,
   removePaymentFromInvoice,
   removeAttachmentFromInvoice,
-  listCustomers,
-  listProducts,
-  listTags,
   createCreditNote,
 } from "@/lib/storage/store";
 
@@ -68,6 +65,117 @@ function parseNumber(input: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+type LineItemRowProps = {
+  item: InvoiceLineItem;
+  index: number;
+  texts: InvoiceTexts;
+  onUpdate: (id: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => void;
+  onRemove: (id: string) => void;
+};
+
+const LineItemRow = memo(function LineItemRow({
+  item,
+  index,
+  texts,
+  onUpdate,
+  onRemove,
+}: LineItemRowProps) {
+  const itemType = item.type ?? "item";
+  const isHeader = itemType === "header";
+  const isSubheader = itemType === "subheader";
+  const isItem = itemType === "item";
+
+  return (
+    <div
+      className={`rounded-xl p-4 ring-1 ${
+        isHeader ? "bg-zinc-100 ring-zinc-300" : isSubheader ? "bg-zinc-50/50 ring-zinc-200" : "bg-zinc-50 ring-zinc-200"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-zinc-600">#{index + 1}</div>
+          <Select
+            value={itemType}
+            onChange={(e) => {
+              const newType = e.target.value as LineItemType;
+              onUpdate(item.id, (prev) => ({
+                ...prev,
+                type: newType,
+                quantity: newType === "item" ? (prev.quantity || 1) : 0,
+                unitPrice: newType === "item" ? prev.unitPrice : 0,
+                taxRate: newType === "item" ? prev.taxRate : undefined,
+              }));
+            }}
+            className="w-auto text-xs"
+          >
+            <option value="header">Überschrift</option>
+            <option value="subheader">Unter-Überschrift</option>
+            <option value="item">Position</option>
+          </Select>
+        </div>
+        <Button variant="danger" onClick={() => onRemove(item.id)}>
+          Entfernen
+        </Button>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        <div className="grid gap-3 grid-cols-[80px_1fr]">
+          <Field label="Pos.-Nr.">
+            <Input
+              value={item.positionNumber || ""}
+              placeholder={isHeader ? "01" : isSubheader ? "01.001" : ""}
+              onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, positionNumber: e.target.value }))}
+            />
+          </Field>
+          <Field label={isHeader ? "Überschrift" : isSubheader ? "Unter-Überschrift" : texts.itemsDescriptionLabel}>
+            <Textarea
+              rows={Math.max(isItem ? 3 : 1, Math.ceil((item.description?.length || 0) / 80))}
+              value={item.description}
+              placeholder={isHeader ? "z.B. Rückbau Klima" : isSubheader ? "z.B. Raum Düsseldorf" : "Beschreibung der Position"}
+              className="min-h-[60px] resize-y"
+              onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, description: e.target.value }))}
+            />
+          </Field>
+        </div>
+
+        {isItem && (
+          <div className="grid gap-3 grid-cols-4">
+            <Field label={texts.itemsQuantityLabel}>
+              <Input
+                inputMode="decimal"
+                value={String(item.quantity)}
+                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, quantity: parseNumber(e.target.value) }))}
+              />
+            </Field>
+            <Field label="Einheit">
+              <Input
+                value={item.unit || ""}
+                placeholder="z.B. Stunde"
+                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, unit: e.target.value }))}
+              />
+            </Field>
+            <Field label={texts.itemsUnitPriceLabel}>
+              <Input
+                inputMode="decimal"
+                value={String(item.unitPrice)}
+                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, unitPrice: parseNumber(e.target.value) }))}
+              />
+            </Field>
+            <Field label={`${texts.itemsTaxRateLabel} (%)`}>
+              <Input
+                inputMode="decimal"
+                placeholder="19"
+                value={formatTaxPercent(item.taxRate)}
+                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, taxRate: parseTaxPercentInput(e.target.value) }))}
+              />
+            </Field>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function InvoiceEditorClient({ id }: { id: string }) {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
@@ -87,9 +195,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const settings = data?.settings;
   
   // Get related data
-  const customers = adapter ? listCustomers(adapter) : [];
-  const products = adapter ? listProducts(adapter) : [];
-  const tags = adapter ? listTags(adapter) : [];
+  const customers = data?.customers ?? [];
+  const products = data?.products ?? [];
+  const tags = data?.tags ?? [];
   const templateVariants = data?.templateVariants ?? [];
 
   const creditNotes = useMemo(() => {
@@ -113,6 +221,39 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const isDefaultInvoice = (settings?.defaultInvoiceId ?? null) === invoice?.id;
 
+  const save = useCallback(
+    (next: Invoice | ((prev: Invoice) => Invoice)) => {
+      if (!adapter) return;
+
+      if (typeof next === "function") {
+        updateInvoice(adapter, id, next);
+      } else {
+        upsertInvoice(adapter, next);
+      }
+    },
+    [adapter, id]
+  );
+
+  const updateLineItem = useCallback(
+    (lineItemId: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => {
+      save((prev) => ({
+        ...prev,
+        lineItems: prev.lineItems.map((item) => (item.id === lineItemId ? updater(item) : item)),
+      }));
+    },
+    [save]
+  );
+
+  const removeLineItem = useCallback(
+    (lineItemId: string) => {
+      save((prev) => ({
+        ...prev,
+        lineItems: prev.lineItems.filter((item) => item.id !== lineItemId),
+      }));
+    },
+    [save]
+  );
+
   if (!adapter) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-10">
@@ -133,14 +274,6 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       </main>
     );
   }
-
-  const save = (next: Invoice | ((prev: Invoice) => Invoice)) => {
-    if (typeof next === "function") {
-      updateInvoice(adapter, invoice.id, next);
-    } else {
-      upsertInvoice(adapter, next);
-    }
-  };
 
   const onPrint = async () => {
     const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
@@ -510,148 +643,16 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               </div>
             </div>
             <div className="mt-4 space-y-3">
-              {invoice.lineItems.map((li, idx) => {
-                const itemType = li.type ?? "item";
-                const isHeader = itemType === "header";
-                const isSubheader = itemType === "subheader";
-                const isItem = itemType === "item";
-                
-                return (
-                <div key={li.id} className={`rounded-xl p-4 ring-1 ${isHeader ? "bg-zinc-100 ring-zinc-300" : isSubheader ? "bg-zinc-50/50 ring-zinc-200" : "bg-zinc-50 ring-zinc-200"}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs font-medium text-zinc-600">#{idx + 1}</div>
-                      <Select
-                        value={itemType}
-                        onChange={(e) => {
-                          const newType = e.target.value as LineItemType;
-                          const next = {
-                            ...invoice,
-                            lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { 
-                              ...x, 
-                              type: newType,
-                              // Reset quantity/price for headers/subheaders
-                              quantity: newType === "item" ? (x.quantity || 1) : 0,
-                              unitPrice: newType === "item" ? x.unitPrice : 0,
-                              taxRate: newType === "item" ? x.taxRate : undefined,
-                            } : x)),
-                          };
-                          save(next);
-                        }}
-                        className="w-auto text-xs"
-                      >
-                        <option value="header">Überschrift</option>
-                        <option value="subheader">Unter-Überschrift</option>
-                        <option value="item">Position</option>
-                      </Select>
-                    </div>
-                    <Button
-                      variant="danger"
-                      onClick={() => {
-                        const next = {
-                          ...invoice,
-                          lineItems: invoice.lineItems.filter((x) => x.id !== li.id),
-                        };
-                        save(next);
-                      }}
-                    >
-                      Entfernen
-                    </Button>
-                  </div>
-
-                  <div className="mt-3 space-y-3">
-                    <div className="grid gap-3 grid-cols-[80px_1fr]">
-                      <Field label="Pos.-Nr.">
-                        <Input
-                          value={li.positionNumber || ""}
-                          placeholder={isHeader ? "01" : isSubheader ? "01.001" : ""}
-                          onChange={(e) => {
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, positionNumber: e.target.value } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                      <Field label={isHeader ? "Überschrift" : isSubheader ? "Unter-Überschrift" : invoice.texts.itemsDescriptionLabel}>
-                        <Textarea
-                          rows={Math.max(isItem ? 3 : 1, Math.ceil((li.description?.length || 0) / 80))}
-                          value={li.description}
-                          placeholder={isHeader ? "z.B. Rückbau Klima" : isSubheader ? "z.B. Raum Düsseldorf" : "Beschreibung der Position"}
-                          className="min-h-[60px] resize-y"
-                          onChange={(e) => {
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, description: e.target.value } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                    </div>
-                    {isItem && (
-                    <div className="grid gap-3 grid-cols-4">
-                      <Field label={invoice.texts.itemsQuantityLabel}>
-                        <Input
-                          inputMode="decimal"
-                          value={String(li.quantity)}
-                          onChange={(e) => {
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, quantity: parseNumber(e.target.value) } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                      <Field label="Einheit">
-                        <Input
-                          value={li.unit || ""}
-                          placeholder="z.B. Stunde"
-                          onChange={(e) => {
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, unit: e.target.value } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                      <Field label={invoice.texts.itemsUnitPriceLabel}>
-                        <Input
-                          inputMode="decimal"
-                          value={String(li.unitPrice)}
-                          onChange={(e) => {
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, unitPrice: parseNumber(e.target.value) } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                      <Field label={`${invoice.texts.itemsTaxRateLabel} (%)`}>
-                        <Input
-                          inputMode="decimal"
-                          placeholder="19"
-                          value={formatTaxPercent(li.taxRate)}
-                          onChange={(e) => {
-                            const nextRate = parseTaxPercentInput(e.target.value);
-                            const next = {
-                              ...invoice,
-                              lineItems: invoice.lineItems.map((x) => (x.id === li.id ? { ...x, taxRate: nextRate } : x)),
-                            };
-                            save(next);
-                          }}
-                        />
-                      </Field>
-                    </div>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
+              {invoice.lineItems.map((lineItem, idx) => (
+                <LineItemRow
+                  key={lineItem.id}
+                  item={lineItem}
+                  index={idx}
+                  texts={invoice.texts}
+                  onUpdate={updateLineItem}
+                  onRemove={removeLineItem}
+                />
+              ))}
 
               <div className="flex gap-2">
                 <Button
