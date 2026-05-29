@@ -123,7 +123,10 @@ function migrateLayout(value: unknown, fallback = createInvoiceFromDefaults(crea
   return {
     ...fallback,
     ...source,
-    templateId: source.templateId === "modern" || source.templateId === "minimal" ? source.templateId : fallback.templateId,
+    templateId:
+      source.templateId === "classic" || source.templateId === "modern" || source.templateId === "minimal"
+        ? source.templateId
+        : fallback.templateId,
     showLogo: typeof source.showLogo === "boolean" ? source.showLogo : fallback.showLogo,
     showFooter: typeof source.showFooter === "boolean" ? source.showFooter : fallback.showFooter,
     logoMaxHeight: asNumber(source.logoMaxHeight, fallback.logoMaxHeight ?? 80),
@@ -154,6 +157,7 @@ function migrateSettings(settings: unknown): AppSettings {
     dashboardPeriod:
       settings.dashboardPeriod === "quarter" || settings.dashboardPeriod === "year" ? settings.dashboardPeriod : "month",
     backgroundChoice:
+      settings.backgroundChoice === "auto" ||
       settings.backgroundChoice === "off" ||
       settings.backgroundChoice === "threads" ||
       settings.backgroundChoice === "light-rays" ||
@@ -162,6 +166,12 @@ function migrateSettings(settings: unknown): AppSettings {
         ? settings.backgroundChoice
         : defaults.backgroundChoice,
     defaultInvoiceId: typeof settings.defaultInvoiceId === "string" ? settings.defaultInvoiceId : undefined,
+    defaultTemplateId:
+      settings.defaultTemplateId === "classic" ||
+      settings.defaultTemplateId === "modern" ||
+      settings.defaultTemplateId === "minimal"
+        ? settings.defaultTemplateId
+        : defaults.defaultTemplateId,
     defaultLayout: {
       ...defaults.defaultLayout,
       ...defaultLayout,
