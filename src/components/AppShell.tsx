@@ -200,19 +200,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
-            <NavSection title="Overview">
+            <NavSection title={t(language, "nav.overview")}>
               {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </NavSection>
 
-            <NavSection title="Management">
+            <NavSection title={t(language, "nav.management")}>
               {managementNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
             </NavSection>
 
-            <NavSection title="System">
+            <NavSection title={t(language, "nav.system")}>
               {systemNavItems.map((item) => (
                 <NavLink key={item.href} item={item} />
               ))}
@@ -223,7 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="border-t border-[var(--glass-border)] p-4">
             <div className="rounded-xl bg-[var(--color-sand-100)] p-3">
               <p className="text-xs text-[var(--color-ink-subtle)]">
-                Local-first • Offline-ready
+                {t(language, "common.localFirst")}
               </p>
             </div>
           </div>
@@ -284,19 +284,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
-            <NavSection title="Overview">
+            <NavSection title={t(language, "nav.overview")}>
               {mainNavItems.map((item) => (
                 <NavLink key={item.href} item={item} onClick={() => setMobileMenuOpen(false)} />
               ))}
             </NavSection>
 
-            <NavSection title="Management">
+            <NavSection title={t(language, "nav.management")}>
               {managementNavItems.map((item) => (
                 <NavLink key={item.href} item={item} onClick={() => setMobileMenuOpen(false)} />
               ))}
             </NavSection>
 
-            <NavSection title="System">
+            <NavSection title={t(language, "nav.system")}>
               {systemNavItems.map((item) => (
                 <NavLink key={item.href} item={item} onClick={() => setMobileMenuOpen(false)} />
               ))}

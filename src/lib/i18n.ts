@@ -1,193 +1,6 @@
 import type { Language } from "@/lib/domain";
 
-export type TranslationKey =
-  // Navigation
-  | "nav.invoices"
-  | "nav.settings"
-  | "nav.dashboard"
-  | "nav.customers"
-  | "nav.products"
-  | "nav.recurring"
-  | "nav.creditNotes"
-  | "nav.tags"
-  | "nav.templates"
-  | "nav.backup"
-  // Actions
-  | "actions.newInvoice"
-  | "actions.edit"
-  | "actions.delete"
-  | "actions.duplicate"
-  | "actions.markPaid"
-  | "actions.markUnpaid"
-  | "actions.addPayment"
-  | "actions.createCreditNote"
-  | "actions.createStorno"
-  | "actions.export"
-  | "actions.import"
-  | "actions.backup"
-  | "actions.restore"
-  | "actions.generatePdf"
-  | "actions.email"
-  | "actions.search"
-  | "actions.addTag"
-  | "actions.addAttachment"
-  | "actions.selectCustomer"
-  | "actions.selectProduct"
-  | "actions.generate"
-  | "actions.setDefaultInvoice"
-  // Filters
-  | "filters.paid"
-  | "filters.unpaid"
-  | "filters.overdue"
-  | "filters.all"
-  // Sort
-  | "sort.date"
-  | "sort.number"
-  | "sort.total"
-  // Settings
-  | "settings.title"
-  | "settings.language"
-  | "settings.currency"
-  | "settings.defaultTaxRate"
-  | "settings.defaultTemplate"
-  | "settings.defaultSender"
-  | "settings.defaultFooter"
-  | "settings.defaultLogo"
-  | "settings.pdfFilenamePattern"
-  | "settings.backupSettings"
-  | "settings.autoBackup"
-  | "settings.backupPath"
-  // Invoices
-  | "invoices.title"
-  | "invoices.empty"
-  | "invoices.currency"
-  | "invoices.multiCurrencyNote"
-  | "invoices.exchangeRate"
-  | "invoices.exchangeRateNote"
-  | "invoices.payments"
-  | "invoices.fullyPaid"
-  | "invoices.partiallyPaid"
-  | "invoices.unpaid"
-  | "invoices.invoiceTotal"
-  | "invoices.paidAmount"
-  | "invoices.remainingBalance"
-  | "invoices.paymentHistory"
-  | "invoices.addPayment"
-  | "invoices.paymentAmount"
-  | "invoices.paymentDate"
-  | "invoices.paymentMethod"
-  | "invoices.paymentReference"
-  | "invoices.bankTransfer"
-  | "invoices.cash"
-  | "invoices.card"
-  | "invoices.recordPayment"
-  | "invoices.attachments"
-  | "invoices.attachmentsNote"
-  | "invoice.editorTitle"
-  | "invoice.previewTitle"
-  | "invoice.paid"
-  | "invoice.default"
-  | "invoice.partiallyPaid"
-  | "invoice.unpaid"
-  | "invoice.overdue"
-  | "invoice.payments"
-  | "invoice.remaining"
-  | "invoice.attachments"
-  | "invoice.tags"
-  | "invoice.currency"
-  | "invoice.exchangeRate"
-  // Customers
-  | "customers.title"
-  | "customers.empty"
-  | "customers.name"
-  | "customers.address"
-  | "customers.contact"
-  | "customers.email"
-  | "customers.phone"
-  | "customers.taxId"
-  | "customers.notes"
-  | "customers.new"
-  // Products
-  | "products.title"
-  | "products.empty"
-  | "products.name"
-  | "products.description"
-  | "products.unit"
-  | "products.unitPrice"
-  | "products.taxRate"
-  | "products.category"
-  | "products.new"
-  // Tags
-  | "tags.title"
-  | "tags.empty"
-  | "tags.name"
-  | "tags.color"
-  | "tags.new"
-  | "tags.assignToInvoice"
-  | "tags.addTag"
-  // Recurring
-  | "recurring.title"
-  | "recurring.empty"
-  | "recurring.name"
-  | "recurring.frequency"
-  | "recurring.nextRun"
-  | "recurring.lastRun"
-  | "recurring.monthly"
-  | "recurring.quarterly"
-  | "recurring.yearly"
-  | "recurring.active"
-  | "recurring.reminder"
-  | "recurring.autoGenerate"
-  | "recurring.new"
-  | "recurring.dueToday"
-  // Credit Notes
-  | "creditNotes.title"
-  | "creditNotes.empty"
-  | "creditNotes.storno"
-  | "creditNotes.gutschrift"
-  | "creditNotes.linkedInvoice"
-  | "creditNotes.reason"
-  | "creditNotes.amount"
-  // Dashboard
-  | "dashboard.title"
-  | "dashboard.unpaidTotal"
-  | "dashboard.overdueCount"
-  | "dashboard.overdueTotal"
-  | "dashboard.revenueByMonth"
-  | "dashboard.invoiceCount"
-  | "dashboard.customerCount"
-  | "dashboard.recentInvoices"
-  | "dashboard.upcomingReminders"
-  // Templates
-  | "templates.title"
-  | "templates.empty"
-  | "templates.new"
-  | "templates.baseTemplate"
-  | "templates.fontSizeScale"
-  | "templates.lineSpacing"
-  | "templates.tablePadding"
-  | "templates.headerStyle"
-  | "templates.footerColumns"
-  | "templates.accentColor"
-  // Backup
-  | "backup.title"
-  | "backup.export"
-  | "backup.import"
-  | "backup.lastBackup"
-  | "backup.schemaVersion"
-  | "backup.dataInfo"
-  // Common
-  | "common.save"
-  | "common.cancel"
-  | "common.confirm"
-  | "common.loading"
-  | "common.noResults"
-  | "common.name"
-  | "common.date"
-  | "common.amount"
-  | "common.other";
-
-const de: Record<TranslationKey, string> = {
+const de = {
   // Navigation
   "nav.invoices": "Rechnungen",
   "nav.settings": "Einstellungen",
@@ -199,6 +12,9 @@ const de: Record<TranslationKey, string> = {
   "nav.tags": "Tags",
   "nav.templates": "Vorlagen",
   "nav.backup": "Backup",
+  "nav.overview": "Übersicht",
+  "nav.management": "Verwaltung",
+  "nav.system": "System",
   // Actions
   "actions.newInvoice": "Neue Rechnung",
   "actions.edit": "Bearbeiten",
@@ -222,6 +38,13 @@ const de: Record<TranslationKey, string> = {
   "actions.selectProduct": "Produkt auswählen",
   "actions.generate": "Generieren",
   "actions.setDefaultInvoice": "Als Standard setzen",
+  "actions.add": "Hinzufügen",
+  "actions.remove": "Entfernen",
+  "actions.view": "Ansehen",
+  "actions.viewAll": "Alle anzeigen",
+  "actions.viewInvoice": "Rechnung ansehen",
+  "actions.viewOriginalInvoice": "Originalrechnung ansehen",
+  "actions.createVariant": "Variante erstellen",
   // Filters
   "filters.paid": "Bezahlt",
   "filters.unpaid": "Unbezahlt",
@@ -244,6 +67,35 @@ const de: Record<TranslationKey, string> = {
   "settings.backupSettings": "Backup-Einstellungen",
   "settings.autoBackup": "Automatisches Backup",
   "settings.backupPath": "Backup-Pfad",
+  "settings.description": "Standardwerte werden beim Erstellen einer neuen Rechnung angewendet.",
+  "settings.appearance": "Darstellung",
+  "settings.background": "Hintergrund",
+  "settings.backgroundAuto": "Auto",
+  "settings.backgroundOff": "Aus (wenig Speicher)",
+  "settings.backgroundThreads": "Linien",
+  "settings.backgroundLightRays": "Lichtstrahlen",
+  "settings.backgroundShapeGrid": "Formraster",
+  "settings.backgroundBeams": "Strahlen",
+  "settings.defaults": "Standardwerte",
+  "settings.logoPosition": "Logo-Position",
+  "settings.logoSize": "Logo-Größe",
+  "settings.showLogo": "Logo anzeigen",
+  "settings.showFooter": "Fußzeile anzeigen",
+  "settings.senderPosition": "Absender-Position",
+  "settings.recipientPosition": "Empfänger-Position",
+  "settings.topLeft": "Oben links",
+  "settings.topCenter": "Oben mittig",
+  "settings.topRight": "Oben rechts",
+  "settings.left": "Links",
+  "settings.right": "Rechts",
+  "settings.small": "Klein",
+  "settings.medium": "Mittel",
+  "settings.large": "Groß",
+  "settings.logoPreview": "Logo-Vorschau",
+  "settings.removeLogo": "Logo entfernen",
+  "settings.invoiceTextDefaults": "Standard-Rechnungstexte",
+  "settings.invoiceTextDefaultsDescription": "Diese Standardwerte werden in jede neue Rechnung kopiert und können dort angepasst werden.",
+  "settings.resetGermanDefaults": "Auf deutsche Standardwerte zurücksetzen",
   // Invoices
   "invoices.title": "Rechnungen",
   "invoices.empty": "Noch keine Rechnungen.",
@@ -283,6 +135,11 @@ const de: Record<TranslationKey, string> = {
   "invoice.tags": "Tags",
   "invoice.currency": "Währung",
   "invoice.exchangeRate": "Wechselkurs",
+  "invoice.notFound": "Rechnung nicht gefunden.",
+  "invoice.printPdf": "Drucken / PDF",
+  "invoice.linkedCreditNotes": "Verknüpfte Gutschriften",
+  "invoice.deleteTitle": "Rechnung löschen",
+  "invoice.deleteDescription": "Möchtest du diese Rechnung wirklich löschen?",
   // Customers
   "customers.title": "Kundenverwaltung",
   "customers.empty": "Noch keine Kunden.",
@@ -294,6 +151,15 @@ const de: Record<TranslationKey, string> = {
   "customers.taxId": "Steuernummer",
   "customers.notes": "Notizen",
   "customers.new": "Neuer Kunde",
+  "customers.description": "Empfänger speichern und beim Erstellen von Rechnungen auswählen.",
+  "customers.deleteTitle": "Kunde löschen",
+  "customers.deleteDescription": "Möchtest du diesen Kunden wirklich löschen?",
+  "customers.deleteDescriptionLong": "Möchtest du diesen Kunden wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "customers.notFound": "Kunde nicht gefunden.",
+  "customers.back": "Zurück zu Kunden",
+  "customers.basicInfo": "Grundinformationen",
+  "customers.addressContact": "Adresse & Kontakt",
+  "customers.salutation": "Anrede",
   // Products
   "products.title": "Produkte & Leistungen",
   "products.empty": "Noch keine Produkte.",
@@ -304,6 +170,17 @@ const de: Record<TranslationKey, string> = {
   "products.taxRate": "MwSt.",
   "products.category": "Kategorie",
   "products.new": "Neues Produkt",
+  "products.descriptionText": "Wiederverwendbare Positionen für schnellere Rechnungserfassung.",
+  "products.deleteTitle": "Produkt löschen",
+  "products.deleteDescription": "Möchtest du dieses Produkt wirklich löschen?",
+  "products.deleteDescriptionLong": "Möchtest du dieses Produkt wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "products.notFound": "Produkt nicht gefunden.",
+  "products.back": "Zurück zu Produkten",
+  "products.basicInfo": "Grundinformationen",
+  "products.pricing": "Preise",
+  "products.per": "pro",
+  "products.tax": "MwSt.",
+  "products.noTax": "keine MwSt.",
   // Tags
   "tags.title": "Tags & Projekte",
   "tags.empty": "Noch keine Tags.",
@@ -312,6 +189,11 @@ const de: Record<TranslationKey, string> = {
   "tags.new": "Neuer Tag",
   "tags.assignToInvoice": "Tags dieser Rechnung zuweisen.",
   "tags.addTag": "Tag hinzufügen",
+  "tags.description": "Rechnungen nach Kunde, Projekt oder Zeitraum kennzeichnen.",
+  "tags.namePlaceholder": "Tag-Name",
+  "tags.quickOverview": "Schnellübersicht",
+  "tags.deleteTitle": "Tag löschen",
+  "tags.deleteDescription": "Möchtest du diesen Tag wirklich löschen?",
   // Recurring
   "recurring.title": "Wiederkehrende Rechnungen",
   "recurring.empty": "Noch keine wiederkehrenden Rechnungen.",
@@ -327,6 +209,18 @@ const de: Record<TranslationKey, string> = {
   "recurring.autoGenerate": "Automatisch generieren",
   "recurring.new": "Neue wiederkehrende Rechnung",
   "recurring.dueToday": "Heute fällig",
+  "recurring.description": "Monatliche, vierteljährliche oder jährliche Erstellung mit Erinnerungen.",
+  "recurring.deleteTitle": "Wiederkehrende Rechnung löschen",
+  "recurring.deleteDescription": "Möchtest du diese wiederkehrende Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "recurring.notFound": "Wiederkehrende Rechnung nicht gefunden.",
+  "recurring.back": "Zurück zu wiederkehrenden Rechnungen",
+  "recurring.paused": "Pausiert",
+  "recurring.due": "Fällig",
+  "recurring.upcoming": "Anstehend",
+  "recurring.noRecipient": "Kein Empfänger",
+  "recurring.items": "Position(en)",
+  "recurring.settings": "Einstellungen",
+  "recurring.daysBeforeNextRun": "Tage vor nächster Ausführung",
   // Credit Notes
   "creditNotes.title": "Gutschriften & Stornos",
   "creditNotes.empty": "Noch keine Gutschriften.",
@@ -335,6 +229,15 @@ const de: Record<TranslationKey, string> = {
   "creditNotes.linkedInvoice": "Zu Rechnung",
   "creditNotes.reason": "Grund",
   "creditNotes.amount": "Betrag",
+  "creditNotes.description": "Stornos und Gutschriften, die mit Rechnungen verknüpft sind.",
+  "creditNotes.createFromInvoiceEditor": "Aus dem Rechnungseditor erstellen →",
+  "creditNotes.createdFromInvoiceEditor": "Gutschriften werden aus dem Rechnungseditor erstellt.",
+  "creditNotes.deleteTitle": "Gutschrift löschen",
+  "creditNotes.deleteDescription": "Möchtest du diese Gutschrift wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "creditNotes.notFound": "Gutschrift nicht gefunden.",
+  "creditNotes.back": "Zurück zu Gutschriften",
+  "creditNotes.details": "Gutschrift-Details",
+  "creditNotes.recipientFromInvoice": "Empfänger (aus Rechnung)",
   // Dashboard
   "dashboard.title": "Dashboard",
   "dashboard.unpaidTotal": "Offene Beträge",
@@ -345,6 +248,8 @@ const de: Record<TranslationKey, string> = {
   "dashboard.customerCount": "Kunden",
   "dashboard.recentInvoices": "Letzte Rechnungen",
   "dashboard.upcomingReminders": "Anstehende Erinnerungen",
+  "dashboard.description": "Überblick über deine Rechnungsaktivität",
+  "dashboard.revenueEmpty": "Umsatzdaten erscheinen hier, sobald du Rechnungen erstellst.",
   // Templates
   "templates.title": "Vorlagen-Editor",
   "templates.empty": "Noch keine benutzerdefinierten Vorlagen.",
@@ -356,6 +261,28 @@ const de: Record<TranslationKey, string> = {
   "templates.headerStyle": "Kopfstil",
   "templates.footerColumns": "Fußzeilen-Spalten",
   "templates.accentColor": "Akzentfarbe",
+  "templates.description": "Abstände, Schriften und Stile ohne Code anpassen.",
+  "templates.baseTemplates": "Basis-Vorlagen",
+  "templates.customVariants": "Deine eigenen Varianten",
+  "templates.createDescription": "Eigene Varianten aus den Basis-Vorlagen oben erstellen",
+  "templates.deleteTitle": "Vorlagenvariante löschen",
+  "templates.deleteDescription": "Möchtest du diese Vorlagenvariante wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "templates.notFound": "Vorlagenvariante nicht gefunden.",
+  "templates.back": "Zurück zu Vorlagen",
+  "templates.basicSettings": "Grundeinstellungen",
+  "templates.variantName": "Variantenname",
+  "templates.typography": "Typografie",
+  "templates.tableSettings": "Tabellen-Einstellungen",
+  "templates.compact": "Kompakt",
+  "templates.normal": "Normal",
+  "templates.spacious": "Großzügig",
+  "templates.showQuantityColumn": "Mengenspalte anzeigen",
+  "templates.showUnitPriceColumn": "Einzelpreisspalte anzeigen",
+  "templates.showTaxColumn": "Steuerspalte anzeigen",
+  "templates.simple": "Einfach",
+  "templates.boxed": "Eingerahmt",
+  "templates.underlined": "Unterstrichen",
+  "templates.preview": "Vorschau",
   // Backup
   "backup.title": "Backup & Daten",
   "backup.export": "Daten exportieren",
@@ -363,6 +290,22 @@ const de: Record<TranslationKey, string> = {
   "backup.lastBackup": "Letztes Backup",
   "backup.schemaVersion": "Schema-Version",
   "backup.dataInfo": "Datenübersicht",
+  "backup.description": "Exportiere deine Daten als Backup-Datei oder importiere eine frühere Sicherung.",
+  "backup.downloadDescription": "Lade alle deine Daten als JSON-Datei herunter. Bewahre diese Datei sicher als Backup auf.",
+  "backup.restoreDescription": "Stelle deine Daten aus einer zuvor exportierten Backup-Datei wieder her.",
+  "backup.replaceWarning": "Warnung: Dadurch werden alle aktuellen Daten ersetzt!",
+  "backup.importSuccess": "Import erfolgreich. Seite wird neu geladen...",
+  "backup.importError": "Import fehlgeschlagen. Bitte Dateiformat prüfen und erneut versuchen.",
+  "backup.autoBackupElectron": "Auto-Backup (Electron)",
+  "backup.autoBackupDescription": "In der Desktop-App über Electron kannst du automatische Backups in einen Ordner deiner Wahl aktivieren. Diese Funktion ist in der Browser-Version nicht verfügbar.",
+  "backup.status": "Status",
+  "backup.electronMode": "Electron-Modus",
+  "backup.browserMode": "Browser-Modus",
+  "backup.tips": "Tipps",
+  "backup.tipExportRegularly": "Exportiere deine Daten regelmäßig, um Datenverlust zu vermeiden.",
+  "backup.tipMultipleLocations": "Speichere Backups an mehreren Orten (Cloud-Speicher, externe Festplatte).",
+  "backup.tipIncludesData": "Das Backup enthält alle Rechnungen, Kunden, Produkte, Tags und Einstellungen.",
+  "backup.tipAttachments": "Anhänge werden als Base64-Daten in der JSON-Datei gespeichert.",
   // Common
   "common.save": "Speichern",
   "common.cancel": "Abbrechen",
@@ -373,7 +316,30 @@ const de: Record<TranslationKey, string> = {
   "common.date": "Datum",
   "common.amount": "Betrag",
   "common.other": "Sonstige",
-};
+  "common.yes": "Ja",
+  "common.no": "Nein",
+  "common.unnamed": "(Unbenannt)",
+  "common.noNumber": "(ohne Nummer)",
+  "common.unknown": "(unbekannt)",
+  "common.tryDifferentSearch": "Versuche einen anderen Suchbegriff.",
+  "common.createFirstInvoice": "Erstelle deine erste Rechnung, um loszulegen.",
+  "common.addFirstCustomer": "Füge deinen ersten Kunden hinzu, um loszulegen.",
+  "common.addFirstProduct": "Füge dein erstes Produkt hinzu, um loszulegen.",
+  "common.createTags": "Erstelle Tags, um deine Rechnungen zu organisieren.",
+  "common.localFirst": "Lokal gespeichert. Offline nutzbar.",
+  "common.localFirstOffline": "Lokal gespeichert und offline nutzbar",
+  "common.localDataNote": "Alle Daten werden lokal in deinem Browser gespeichert. Kein Server, kein Konto nötig.",
+  "common.cannotUndo": "Diese Aktion kann nicht rückgängig gemacht werden.",
+  "common.created": "Erstellt",
+  "common.updated": "Aktualisiert",
+  "common.daysOverdue": "Tage überfällig",
+  "common.next": "Nächste",
+  "common.remaining": "offen",
+  "common.from": "Von",
+  "common.to": "An",
+} as const;
+
+export type TranslationKey = keyof typeof de;
 
 const en: Record<TranslationKey, string> = {
   // Navigation
@@ -387,6 +353,9 @@ const en: Record<TranslationKey, string> = {
   "nav.tags": "Tags",
   "nav.templates": "Templates",
   "nav.backup": "Backup",
+  "nav.overview": "Overview",
+  "nav.management": "Management",
+  "nav.system": "System",
   // Actions
   "actions.newInvoice": "New invoice",
   "actions.edit": "Edit",
@@ -410,6 +379,13 @@ const en: Record<TranslationKey, string> = {
   "actions.selectProduct": "Select product",
   "actions.generate": "Generate",
   "actions.setDefaultInvoice": "Set as default",
+  "actions.add": "Add",
+  "actions.remove": "Remove",
+  "actions.view": "View",
+  "actions.viewAll": "View all",
+  "actions.viewInvoice": "View invoice",
+  "actions.viewOriginalInvoice": "View original invoice",
+  "actions.createVariant": "Create variant",
   // Filters
   "filters.paid": "Paid",
   "filters.unpaid": "Unpaid",
@@ -432,6 +408,35 @@ const en: Record<TranslationKey, string> = {
   "settings.backupSettings": "Backup settings",
   "settings.autoBackup": "Auto backup",
   "settings.backupPath": "Backup path",
+  "settings.description": "Defaults are applied when you create a new invoice.",
+  "settings.appearance": "Appearance",
+  "settings.background": "Background",
+  "settings.backgroundAuto": "Auto",
+  "settings.backgroundOff": "Off (low memory)",
+  "settings.backgroundThreads": "Threads",
+  "settings.backgroundLightRays": "Light Rays",
+  "settings.backgroundShapeGrid": "Shape Grid",
+  "settings.backgroundBeams": "Beams",
+  "settings.defaults": "Defaults",
+  "settings.logoPosition": "Logo position",
+  "settings.logoSize": "Logo size",
+  "settings.showLogo": "Show logo",
+  "settings.showFooter": "Show footer",
+  "settings.senderPosition": "Sender position",
+  "settings.recipientPosition": "Recipient position",
+  "settings.topLeft": "Top-left",
+  "settings.topCenter": "Top-center",
+  "settings.topRight": "Top-right",
+  "settings.left": "Left",
+  "settings.right": "Right",
+  "settings.small": "Small",
+  "settings.medium": "Medium",
+  "settings.large": "Large",
+  "settings.logoPreview": "Logo preview",
+  "settings.removeLogo": "Remove logo",
+  "settings.invoiceTextDefaults": "Invoice text defaults",
+  "settings.invoiceTextDefaultsDescription": "These defaults are copied into every new invoice and can be edited there.",
+  "settings.resetGermanDefaults": "Reset to German defaults",
   // Invoices
   "invoices.title": "Invoices",
   "invoices.empty": "No invoices yet.",
@@ -471,6 +476,11 @@ const en: Record<TranslationKey, string> = {
   "invoice.tags": "Tags",
   "invoice.currency": "Currency",
   "invoice.exchangeRate": "Exchange rate",
+  "invoice.notFound": "Invoice not found.",
+  "invoice.printPdf": "Print / PDF",
+  "invoice.linkedCreditNotes": "Linked credit notes",
+  "invoice.deleteTitle": "Delete invoice",
+  "invoice.deleteDescription": "Are you sure you want to delete this invoice?",
   // Customers
   "customers.title": "Customer Directory",
   "customers.empty": "No customers yet.",
@@ -482,6 +492,15 @@ const en: Record<TranslationKey, string> = {
   "customers.taxId": "Tax ID",
   "customers.notes": "Notes",
   "customers.new": "New customer",
+  "customers.description": "Save recipients and pick them when creating invoices.",
+  "customers.deleteTitle": "Delete customer",
+  "customers.deleteDescription": "Are you sure you want to delete this customer?",
+  "customers.deleteDescriptionLong": "Are you sure you want to delete this customer? This action cannot be undone.",
+  "customers.notFound": "Customer not found.",
+  "customers.back": "Back to customers",
+  "customers.basicInfo": "Basic information",
+  "customers.addressContact": "Address & contact",
+  "customers.salutation": "Salutation",
   // Products
   "products.title": "Products & Services",
   "products.empty": "No products yet.",
@@ -492,6 +511,17 @@ const en: Record<TranslationKey, string> = {
   "products.taxRate": "Tax rate",
   "products.category": "Category",
   "products.new": "New product",
+  "products.descriptionText": "Reusable line items to speed up invoice entry.",
+  "products.deleteTitle": "Delete product",
+  "products.deleteDescription": "Are you sure you want to delete this product?",
+  "products.deleteDescriptionLong": "Are you sure you want to delete this product? This action cannot be undone.",
+  "products.notFound": "Product not found.",
+  "products.back": "Back to products",
+  "products.basicInfo": "Basic information",
+  "products.pricing": "Pricing",
+  "products.per": "per",
+  "products.tax": "tax",
+  "products.noTax": "no tax",
   // Tags
   "tags.title": "Tags & Projects",
   "tags.empty": "No tags yet.",
@@ -500,6 +530,11 @@ const en: Record<TranslationKey, string> = {
   "tags.new": "New tag",
   "tags.assignToInvoice": "Assign tags to this invoice.",
   "tags.addTag": "Add tag",
+  "tags.description": "Label invoices by client, project, or time period.",
+  "tags.namePlaceholder": "Tag name",
+  "tags.quickOverview": "Quick overview",
+  "tags.deleteTitle": "Delete tag",
+  "tags.deleteDescription": "Are you sure you want to delete this tag?",
   // Recurring
   "recurring.title": "Recurring Invoices",
   "recurring.empty": "No recurring invoices yet.",
@@ -515,6 +550,18 @@ const en: Record<TranslationKey, string> = {
   "recurring.autoGenerate": "Auto generate",
   "recurring.new": "New recurring invoice",
   "recurring.dueToday": "Due today",
+  "recurring.description": "Monthly, quarterly, or yearly generation with next-run reminders.",
+  "recurring.deleteTitle": "Delete recurring invoice",
+  "recurring.deleteDescription": "Are you sure you want to delete this recurring invoice? This action cannot be undone.",
+  "recurring.notFound": "Recurring invoice not found.",
+  "recurring.back": "Back to recurring invoices",
+  "recurring.paused": "Paused",
+  "recurring.due": "Due",
+  "recurring.upcoming": "Upcoming",
+  "recurring.noRecipient": "No recipient",
+  "recurring.items": "item(s)",
+  "recurring.settings": "Settings",
+  "recurring.daysBeforeNextRun": "Days before next run",
   // Credit Notes
   "creditNotes.title": "Credit Notes & Cancellations",
   "creditNotes.empty": "No credit notes yet.",
@@ -523,6 +570,15 @@ const en: Record<TranslationKey, string> = {
   "creditNotes.linkedInvoice": "For invoice",
   "creditNotes.reason": "Reason",
   "creditNotes.amount": "Amount",
+  "creditNotes.description": "Cancellations and credit notes linked to invoices.",
+  "creditNotes.createFromInvoiceEditor": "Create from invoice editor →",
+  "creditNotes.createdFromInvoiceEditor": "Credit notes are created from the invoice editor.",
+  "creditNotes.deleteTitle": "Delete credit note",
+  "creditNotes.deleteDescription": "Are you sure you want to delete this credit note? This action cannot be undone.",
+  "creditNotes.notFound": "Credit note not found.",
+  "creditNotes.back": "Back to credit notes",
+  "creditNotes.details": "Credit note details",
+  "creditNotes.recipientFromInvoice": "Recipient (from invoice)",
   // Dashboard
   "dashboard.title": "Dashboard",
   "dashboard.unpaidTotal": "Outstanding",
@@ -533,6 +589,8 @@ const en: Record<TranslationKey, string> = {
   "dashboard.customerCount": "Customers",
   "dashboard.recentInvoices": "Recent invoices",
   "dashboard.upcomingReminders": "Upcoming reminders",
+  "dashboard.description": "Overview of your invoicing activity",
+  "dashboard.revenueEmpty": "Revenue data will appear here once you create invoices.",
   // Templates
   "templates.title": "Template Editor",
   "templates.empty": "No custom templates yet.",
@@ -544,6 +602,28 @@ const en: Record<TranslationKey, string> = {
   "templates.headerStyle": "Header style",
   "templates.footerColumns": "Footer columns",
   "templates.accentColor": "Accent color",
+  "templates.description": "Customize spacing, fonts, and styling without coding.",
+  "templates.baseTemplates": "Base templates",
+  "templates.customVariants": "Your custom variants",
+  "templates.createDescription": "Create custom variants from the base templates above",
+  "templates.deleteTitle": "Delete template variant",
+  "templates.deleteDescription": "Are you sure you want to delete this template variant? This action cannot be undone.",
+  "templates.notFound": "Template variant not found.",
+  "templates.back": "Back to templates",
+  "templates.basicSettings": "Basic settings",
+  "templates.variantName": "Variant name",
+  "templates.typography": "Typography",
+  "templates.tableSettings": "Table settings",
+  "templates.compact": "Compact",
+  "templates.normal": "Normal",
+  "templates.spacious": "Spacious",
+  "templates.showQuantityColumn": "Show quantity column",
+  "templates.showUnitPriceColumn": "Show unit price column",
+  "templates.showTaxColumn": "Show tax column",
+  "templates.simple": "Simple",
+  "templates.boxed": "Boxed",
+  "templates.underlined": "Underlined",
+  "templates.preview": "Preview",
   // Backup
   "backup.title": "Backup & Data",
   "backup.export": "Export data",
@@ -551,6 +631,22 @@ const en: Record<TranslationKey, string> = {
   "backup.lastBackup": "Last backup",
   "backup.schemaVersion": "Schema version",
   "backup.dataInfo": "Data overview",
+  "backup.description": "Export your data as a backup file or import from a previous backup.",
+  "backup.downloadDescription": "Download all your data as a JSON file. Keep this file safe for backup purposes.",
+  "backup.restoreDescription": "Restore your data from a previously exported backup file.",
+  "backup.replaceWarning": "Warning: This will replace all current data!",
+  "backup.importSuccess": "Import successful. Refreshing page...",
+  "backup.importError": "Import failed. Please check the file format and try again.",
+  "backup.autoBackupElectron": "Auto-backup (Electron)",
+  "backup.autoBackupDescription": "When running as a desktop app via Electron, you can enable automatic backups to a folder of your choice. This feature is not available in the browser version.",
+  "backup.status": "Status",
+  "backup.electronMode": "Electron mode",
+  "backup.browserMode": "Browser mode",
+  "backup.tips": "Tips",
+  "backup.tipExportRegularly": "Export your data regularly to prevent data loss.",
+  "backup.tipMultipleLocations": "Store backups in multiple locations (cloud storage, external drive).",
+  "backup.tipIncludesData": "The backup includes all invoices, customers, products, tags, and settings.",
+  "backup.tipAttachments": "Attachments are stored as base64 data within the JSON file.",
   // Common
   "common.save": "Save",
   "common.cancel": "Cancel",
@@ -561,6 +657,27 @@ const en: Record<TranslationKey, string> = {
   "common.date": "Date",
   "common.amount": "Amount",
   "common.other": "Other",
+  "common.yes": "Yes",
+  "common.no": "No",
+  "common.unnamed": "(Unnamed)",
+  "common.noNumber": "(no number)",
+  "common.unknown": "(unknown)",
+  "common.tryDifferentSearch": "Try a different search term.",
+  "common.createFirstInvoice": "Create your first invoice to get started.",
+  "common.addFirstCustomer": "Add your first customer to get started.",
+  "common.addFirstProduct": "Add your first product to get started.",
+  "common.createTags": "Create tags to organize your invoices.",
+  "common.localFirst": "Local-first. Offline-ready.",
+  "common.localFirstOffline": "Local-first, offline-ready invoice management",
+  "common.localDataNote": "All your data is stored locally in your browser. No server, no account needed.",
+  "common.cannotUndo": "This action cannot be undone.",
+  "common.created": "Created",
+  "common.updated": "Updated",
+  "common.daysOverdue": "days overdue",
+  "common.next": "Next",
+  "common.remaining": "remaining",
+  "common.from": "From",
+  "common.to": "To",
 };
 
 export function t(language: Language, key: TranslationKey): string {

@@ -40,9 +40,9 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">Template variant not found.</p>
+            <p className="text-sm text-(--color-ink-muted)">{t(language, "templates.notFound")}</p>
             <Link href="/templates" className="text-sm text-(--color-accent) hover:underline">
-              ← Back to templates
+              ← {t(language, "templates.back")}
             </Link>
           </Stack>
         </div>
@@ -88,13 +88,13 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
           <Stack gap="md">
             <Surface>
               <Stack gap="md" className="p-5">
-                <Section title="Basic Settings">
+                <Section title={t(language, "templates.basicSettings")}>
                   <Grid cols={1} gap="md">
-                    <Field label="Variant Name">
+                    <Field label={t(language, "templates.variantName")}>
                       <Input
                         value={variant.name}
                         onChange={(e) => save({ ...variant, name: e.target.value })}
-                        placeholder="e.g., Modern with Logo Left"
+                        placeholder={language === "de" ? "z.B. Modern mit Logo links" : "e.g., Modern with logo left"}
                       />
                     </Field>
 
@@ -115,7 +115,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
             <Surface>
               <Stack gap="md" className="p-5">
-                <Section title="Typography">
+                <Section title={t(language, "templates.typography")}>
                   <Grid cols={1} gap="md">
                     <Field label={t(language, "templates.fontSizeScale")}>
                       <div className="flex items-center gap-3">
@@ -157,16 +157,16 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
             <Surface>
               <Stack gap="md" className="p-5">
-                <Section title="Table Settings">
+                <Section title={t(language, "templates.tableSettings")}>
                   <Grid cols={1} gap="md">
                     <Field label={t(language, "templates.tablePadding")}>
                       <Select
                         value={variant.customization.tablePadding}
                         onChange={(e) => updateCustomization({ tablePadding: e.target.value as "compact" | "normal" | "spacious" })}
                       >
-                        <option value="compact">Compact</option>
-                        <option value="normal">Normal</option>
-                        <option value="spacious">Spacious</option>
+                        <option value="compact">{t(language, "templates.compact")}</option>
+                        <option value="normal">{t(language, "templates.normal")}</option>
+                        <option value="spacious">{t(language, "templates.spacious")}</option>
                       </Select>
                     </Field>
 
@@ -178,7 +178,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                           onChange={(e) => updateCustomization({ showQuantityColumn: e.target.checked })}
                           className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
                         />
-                        Show Quantity Column
+                        {t(language, "templates.showQuantityColumn")}
                       </label>
                       <label className="flex items-center gap-2.5 text-sm text-(--color-ink-muted) cursor-pointer">
                         <input
@@ -187,7 +187,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                           onChange={(e) => updateCustomization({ showUnitPriceColumn: e.target.checked })}
                           className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
                         />
-                        Show Unit Price Column
+                        {t(language, "templates.showUnitPriceColumn")}
                       </label>
                       <label className="flex items-center gap-2.5 text-sm text-(--color-ink-muted) cursor-pointer">
                         <input
@@ -196,7 +196,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                           onChange={(e) => updateCustomization({ showTaxColumn: e.target.checked })}
                           className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
                         />
-                        Show Tax Column
+                        {t(language, "templates.showTaxColumn")}
                       </label>
                     </div>
                   </Grid>
@@ -206,16 +206,16 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
             <Surface>
               <Stack gap="md" className="p-5">
-                <Section title="Header Style">
+                <Section title={t(language, "templates.headerStyle")}>
                   <Grid cols={1} gap="md">
                     <Field label={t(language, "templates.headerStyle")}>
                       <Select
                         value={variant.customization.headerStyle}
                         onChange={(e) => updateCustomization({ headerStyle: e.target.value as "simple" | "boxed" | "underlined" })}
                       >
-                        <option value="simple">Simple</option>
-                        <option value="boxed">Boxed</option>
-                        <option value="underlined">Underlined</option>
+                        <option value="simple">{t(language, "templates.simple")}</option>
+                        <option value="boxed">{t(language, "templates.boxed")}</option>
+                        <option value="underlined">{t(language, "templates.underlined")}</option>
                       </Select>
                     </Field>
                   </Grid>
@@ -224,15 +224,15 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
             </Surface>
 
             <div className="text-xs text-(--color-ink-subtle)">
-              Created: {new Date(variant.createdAt).toLocaleString()}
+              {t(language, "common.created")}: {new Date(variant.createdAt).toLocaleString()}
               {" · "}
-              Updated: {new Date(variant.updatedAt).toLocaleString()}
+              {t(language, "common.updated")}: {new Date(variant.updatedAt).toLocaleString()}
             </div>
           </Stack>
 
           {/* Preview */}
           <div className="sticky top-6">
-            <Section title="Preview">
+            <Section title={t(language, "templates.preview")}>
               <Surface 
                 variant="solid"
                 className="p-6"
@@ -249,21 +249,21 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                   style={{ borderColor: variant.customization.accentColor }}
                 >
                   <div className="text-lg font-bold" style={{ color: variant.customization.accentColor }}>
-                    Invoice #2024-001
+                    {language === "de" ? "Rechnung" : "Invoice"} #2024-001
                   </div>
                   <div className="text-sm text-(--color-ink-muted)">December 30, 2024</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
-                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">From</div>
-                    <div className="text-sm text-(--color-ink)">Your Company</div>
-                    <div className="text-sm text-(--color-ink-muted)">123 Street, City</div>
+                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">{t(language, "common.from")}</div>
+                    <div className="text-sm text-(--color-ink)">{language === "de" ? "Deine Firma" : "Your Company"}</div>
+                    <div className="text-sm text-(--color-ink-muted)">{language === "de" ? "Musterstraße 123, Stadt" : "123 Street, City"}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">To</div>
-                    <div className="text-sm text-(--color-ink)">Customer Name</div>
-                    <div className="text-sm text-(--color-ink-muted)">456 Avenue, Town</div>
+                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">{t(language, "common.to")}</div>
+                    <div className="text-sm text-(--color-ink)">{language === "de" ? "Kundenname" : "Customer Name"}</div>
+                    <div className="text-sm text-(--color-ink-muted)">{language === "de" ? "Beispielweg 456, Ort" : "456 Avenue, Town"}</div>
                   </div>
                 </div>
 
@@ -278,11 +278,11 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                       <th className={`text-left ${
                         variant.customization.tablePadding === "compact" ? "py-1" :
                         variant.customization.tablePadding === "spacious" ? "py-3" : "py-2"
-                      }`}>Description</th>
-                      {variant.customization.showQuantityColumn && <th className="text-right">Qty</th>}
-                      {variant.customization.showUnitPriceColumn && <th className="text-right">Price</th>}
-                      {variant.customization.showTaxColumn && <th className="text-right">Tax</th>}
-                      <th className="text-right">Total</th>
+                      }`}>{language === "de" ? "Beschreibung" : "Description"}</th>
+                      {variant.customization.showQuantityColumn && <th className="text-right">{language === "de" ? "Menge" : "Qty"}</th>}
+                      {variant.customization.showUnitPriceColumn && <th className="text-right">{language === "de" ? "Preis" : "Price"}</th>}
+                      {variant.customization.showTaxColumn && <th className="text-right">{language === "de" ? "MwSt." : "Tax"}</th>}
+                      <th className="text-right">{language === "de" ? "Gesamt" : "Total"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -290,7 +290,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                       <td className={`${
                         variant.customization.tablePadding === "compact" ? "py-1" :
                         variant.customization.tablePadding === "spacious" ? "py-3" : "py-2"
-                      }`}>Consulting Services</td>
+                      }`}>{language === "de" ? "Beratungsleistungen" : "Consulting services"}</td>
                       {variant.customization.showQuantityColumn && <td className="text-right">10</td>}
                       {variant.customization.showUnitPriceColumn && <td className="text-right">€100</td>}
                       {variant.customization.showTaxColumn && <td className="text-right">19%</td>}
@@ -301,7 +301,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
                 <div className="mt-4 text-right">
                   <div className="text-lg font-bold" style={{ color: variant.customization.accentColor }}>
-                    Total: €1,190.00
+                    {language === "de" ? "Gesamt" : "Total"}: €1,190.00
                   </div>
                 </div>
 
@@ -312,9 +312,9 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                     "grid grid-cols-3 gap-4"
                   }`}
                 >
-                  <div>Payment terms: 14 days</div>
-                  {variant.customization.footerColumns >= 2 && <div>Bank: DE123456789</div>}
-                  {variant.customization.footerColumns >= 3 && <div>VAT: DE987654321</div>}
+                  <div>{language === "de" ? "Zahlungsziel: 14 Tage" : "Payment terms: 14 days"}</div>
+                  {variant.customization.footerColumns >= 2 && <div>{language === "de" ? "Bank" : "Bank"}: DE123456789</div>}
+                  {variant.customization.footerColumns >= 3 && <div>{language === "de" ? "USt-IdNr." : "VAT"}: DE987654321</div>}
                 </div>
               </Surface>
             </Section>
@@ -326,9 +326,11 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Template Variant"
-        description="Are you sure you want to delete this template variant? This action cannot be undone."
+        title={t(language, "templates.deleteTitle")}
+        description={t(language, "templates.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

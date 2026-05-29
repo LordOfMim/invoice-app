@@ -23,7 +23,7 @@ export default function SettingsPage() {
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Surface variant="solid" padding="lg">
-            <div className="text-sm text-[var(--color-ink-subtle)]">Loading…</div>
+            <div className="text-sm text-[var(--color-ink-subtle)]">{t(language, "common.loading")}</div>
           </Surface>
         </div>
       </main>
@@ -36,7 +36,7 @@ export default function SettingsPage() {
         <Stack gap="xl">
           <PageHeader
             title={t(language, "settings.title")}
-            description="Defaults are applied when you create a new invoice."
+            description={t(language, "settings.description")}
           />
 
           <Section title={t(language, "settings.language")}>
@@ -56,10 +56,10 @@ export default function SettingsPage() {
             </Surface>
           </Section>
 
-          <Section title="Appearance">
+          <Section title={t(language, "settings.appearance")}>
             <Surface variant="solid" padding="lg">
               <div className="max-w-xs">
-                <Field label="Background">
+                <Field label={t(language, "settings.background")}>
                   <Select
                     value={settings.backgroundChoice ?? "auto"}
                     onChange={(e) => {
@@ -67,19 +67,19 @@ export default function SettingsPage() {
                       updateSettings(adapter, (prev) => ({ ...prev, backgroundChoice }));
                     }}
                   >
-                    <option value="auto">Auto</option>
-                    <option value="off">Off (low memory)</option>
-                    <option value="threads">Threads</option>
-                    <option value="light-rays">Light Rays</option>
-                    <option value="shape-grid">Shape Grid</option>
-                    <option value="beams">Beams</option>
+                    <option value="auto">{t(language, "settings.backgroundAuto")}</option>
+                    <option value="off">{t(language, "settings.backgroundOff")}</option>
+                    <option value="threads">{t(language, "settings.backgroundThreads")}</option>
+                    <option value="light-rays">{t(language, "settings.backgroundLightRays")}</option>
+                    <option value="shape-grid">{t(language, "settings.backgroundShapeGrid")}</option>
+                    <option value="beams">{t(language, "settings.backgroundBeams")}</option>
                   </Select>
                 </Field>
               </div>
             </Surface>
           </Section>
 
-          <Section title="Defaults">
+          <Section title={t(language, "settings.defaults")}>
             <Surface variant="solid" padding="lg">
               <Stack gap="lg">
                 <Grid cols={2} gap="md">
@@ -127,7 +127,7 @@ export default function SettingsPage() {
                     </Select>
                   </Field>
 
-                  <Field label="Logo Position">
+                  <Field label={t(language, "settings.logoPosition")}>
                     <Select
                       value={settings.defaultLayout.logoPosition}
                       onChange={(e) => {
@@ -138,13 +138,13 @@ export default function SettingsPage() {
                         }));
                       }}
                     >
-                      <option value="left">Top-Left</option>
-                      <option value="center">Top-Center</option>
-                      <option value="right">Top-Right</option>
+                      <option value="left">{t(language, "settings.topLeft")}</option>
+                      <option value="center">{t(language, "settings.topCenter")}</option>
+                      <option value="right">{t(language, "settings.topRight")}</option>
                     </Select>
                   </Field>
 
-                  <Field label="Logo Größe">
+                  <Field label={t(language, "settings.logoSize")}>
                     <Select
                       value={settings.defaultLayout.logoSize ?? "medium"}
                       onChange={(e) => {
@@ -155,9 +155,9 @@ export default function SettingsPage() {
                         }));
                       }}
                     >
-                      <option value="small">Klein</option>
-                      <option value="medium">Mittel</option>
-                      <option value="large">Groß</option>
+                      <option value="small">{t(language, "settings.small")}</option>
+                      <option value="medium">{t(language, "settings.medium")}</option>
+                      <option value="large">{t(language, "settings.large")}</option>
                     </Select>
                   </Field>
                 </Grid>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                       }
                       className="h-4 w-4 rounded border-[var(--glass-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
                     />
-                    Show Logo
+                    {t(language, "settings.showLogo")}
                   </label>
 
                   <label className="flex items-center gap-2.5 text-sm text-[var(--color-ink-muted)] cursor-pointer">
@@ -190,12 +190,12 @@ export default function SettingsPage() {
                       }
                       className="h-4 w-4 rounded border-[var(--glass-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
                     />
-                    Show Footer
+                    {t(language, "settings.showFooter")}
                   </label>
                 </div>
 
                 <Grid cols={2} gap="md">
-                  <Field label="Sender Position">
+                  <Field label={t(language, "settings.senderPosition")}>
                     <Select
                       value={settings.defaultLayout.senderPosition}
                       onChange={(e) => {
@@ -206,12 +206,12 @@ export default function SettingsPage() {
                         }));
                       }}
                     >
-                      <option value="left">Left</option>
-                      <option value="right">Right</option>
+                      <option value="left">{t(language, "settings.left")}</option>
+                      <option value="right">{t(language, "settings.right")}</option>
                     </Select>
                   </Field>
 
-                  <Field label="Recipient Position">
+                  <Field label={t(language, "settings.recipientPosition")}>
                     <Select
                       value={settings.defaultLayout.recipientPosition}
                       onChange={(e) => {
@@ -222,8 +222,8 @@ export default function SettingsPage() {
                         }));
                       }}
                     >
-                      <option value="left">Left</option>
-                      <option value="right">Right</option>
+                      <option value="left">{t(language, "settings.left")}</option>
+                      <option value="right">{t(language, "settings.right")}</option>
                     </Select>
                   </Field>
 
@@ -242,7 +242,7 @@ export default function SettingsPage() {
             <Section title={t(language, "settings.defaultSender")}>
               <Surface variant="solid" padding="lg">
                 <Stack gap="md">
-                  <Field label="Name">
+                  <Field label={t(language, "common.name")}>
                     <Input
                       value={settings.defaultSender.name}
                       onChange={(e) =>
@@ -253,7 +253,7 @@ export default function SettingsPage() {
                       }
                     />
                   </Field>
-                  <Field label="Address">
+                  <Field label={t(language, "customers.address")}>
                     <Textarea
                       rows={3}
                       value={settings.defaultSender.address}
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                       }
                     />
                   </Field>
-                  <Field label="Contact">
+                  <Field label={t(language, "customers.contact")}>
                     <Textarea
                       rows={2}
                       value={settings.defaultSender.contact}
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-4">
                     <Image
                       src={settings.defaultLogoDataUrl}
-                      alt="Logo preview"
+                      alt={t(language, "settings.logoPreview")}
                       width={128}
                       height={64}
                       unoptimized
@@ -326,7 +326,7 @@ export default function SettingsPage() {
                       size="sm"
                       onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoDataUrl: undefined }))}
                     >
-                      Remove logo
+                      {t(language, "settings.removeLogo")}
                     </Button>
                   </div>
                 )}
@@ -335,15 +335,15 @@ export default function SettingsPage() {
           </Section>
 
           <Section 
-            title="Invoice Text Defaults"
-            description="These defaults are copied into every new invoice (editable per invoice)."
+            title={t(language, "settings.invoiceTextDefaults")}
+            description={t(language, "settings.invoiceTextDefaultsDescription")}
           >
             <Surface variant="soft" padding="md">
               <Button 
                 variant="secondary"
                 onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultTexts: createDefaultTextsDe() }))}
               >
-                Reset to German defaults
+                {t(language, "settings.resetGermanDefaults")}
               </Button>
             </Surface>
           </Section>

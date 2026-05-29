@@ -32,16 +32,16 @@ import {
 
 // Common currencies with metadata
 const CURRENCIES = [
-  { code: "EUR", symbol: "€", name: "Euro" },
-  { code: "USD", symbol: "$", name: "US Dollar" },
-  { code: "GBP", symbol: "£", name: "British Pound" },
-  { code: "CHF", symbol: "CHF", name: "Swiss Franc" },
-  { code: "JPY", symbol: "¥", name: "Japanese Yen" },
-  { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
-  { code: "AUD", symbol: "A$", name: "Australian Dollar" },
-  { code: "CNY", symbol: "¥", name: "Chinese Yuan" },
-  { code: "INR", symbol: "₹", name: "Indian Rupee" },
-  { code: "BRL", symbol: "R$", name: "Brazilian Real" },
+  { code: "EUR", symbol: "€", en: "Euro", de: "Euro" },
+  { code: "USD", symbol: "$", en: "US Dollar", de: "US-Dollar" },
+  { code: "GBP", symbol: "£", en: "British Pound", de: "Britisches Pfund" },
+  { code: "CHF", symbol: "CHF", en: "Swiss Franc", de: "Schweizer Franken" },
+  { code: "JPY", symbol: "¥", en: "Japanese Yen", de: "Japanischer Yen" },
+  { code: "CAD", symbol: "C$", en: "Canadian Dollar", de: "Kanadischer Dollar" },
+  { code: "AUD", symbol: "A$", en: "Australian Dollar", de: "Australischer Dollar" },
+  { code: "CNY", symbol: "¥", en: "Chinese Yuan", de: "Chinesischer Yuan" },
+  { code: "INR", symbol: "₹", en: "Indian Rupee", de: "Indische Rupie" },
+  { code: "BRL", symbol: "R$", en: "Brazilian Real", de: "Brasilianischer Real" },
 ];
 
 function setInvoiceField<K extends keyof Invoice>(invoice: Invoice, key: K, value: Invoice[K]): Invoice {
@@ -257,7 +257,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   if (!adapter) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="rounded-xl bg-white p-6 text-sm text-zinc-500 ring-1 ring-zinc-200">Loading…</div>
+        <div className="rounded-xl bg-white p-6 text-sm text-zinc-500 ring-1 ring-zinc-200">{t(language, "common.loading")}</div>
       </main>
     );
   }
@@ -266,9 +266,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-10">
         <div className="space-y-3">
-          <div className="text-sm text-zinc-500">Invoice not found.</div>
+          <div className="text-sm text-zinc-500">{t(language, "invoice.notFound")}</div>
           <Link href="/invoices" className="text-sm text-blue-600 hover:underline">
-            Back
+            ← {t(language, "nav.invoices")}
           </Link>
         </div>
       </main>
@@ -442,7 +442,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
           >
             {t(language, "actions.duplicate")}
           </Button>
-          <Button onClick={onPrint}>Print / PDF</Button>
+          <Button onClick={onPrint}>{t(language, "invoice.printPdf")}</Button>
           <Button onClick={handleEmailInvoice}>
             {t(language, "actions.email")}
           </Button>
@@ -505,11 +505,11 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 onChange={(e) => setNewPaymentDate(e.target.value)}
               />
             </Field>
-            <Field label="Method">
+            <Field label={t(language, "invoices.paymentMethod")}>
               <Input
                 value={newPaymentMethod}
                 onChange={(e) => setNewPaymentMethod(e.target.value)}
-                placeholder="e.g., Bank Transfer"
+                placeholder={language === "de" ? "z.B. Überweisung" : "e.g., bank transfer"}
               />
             </Field>
             <div className="flex items-end">
@@ -528,7 +528,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 setNewPaymentAmount("");
                 setNewPaymentMethod("");
               }}>
-                Add
+                {t(language, "actions.add")}
               </Button>
             </div>
           </div>
@@ -539,7 +539,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       {creditNotes.length > 0 && (
         <div className="no-print mb-6 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
           <h3 className="text-sm font-semibold text-amber-800">
-            Linked Credit Notes ({creditNotes.length})
+            {t(language, "invoice.linkedCreditNotes")} ({creditNotes.length})
           </h3>
           <div className="mt-2 space-y-1">
             {creditNotes.map((cn) => (
@@ -775,7 +775,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 </Field>
               )}
 
-              <Field label="Logo Position">
+              <Field label={t(language, "settings.logoPosition")}>
                 <Select
                   value={invoice.layout.logoPosition}
                   onChange={(e) => {
@@ -783,9 +783,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     save(setLayout(invoice, { ...invoice.layout, logoPosition: pos }));
                   }}
                 >
-                  <option value="left">Top-Left</option>
-                  <option value="center">Top-Center</option>
-                  <option value="right">Top-Right</option>
+                  <option value="left">{t(language, "settings.topLeft")}</option>
+                  <option value="center">{t(language, "settings.topCenter")}</option>
+                  <option value="right">{t(language, "settings.topRight")}</option>
                 </Select>
               </Field>
 
@@ -797,7 +797,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     onChange={(e) => save(setLayout(invoice, { ...invoice.layout, showLogo: e.target.checked }))} 
                     className="w-4 h-4 accent-zinc-800"
                   />
-                  <span className="text-sm">{invoice.layout.showLogo ? "Ja" : "Nein"}</span>
+                  <span className="text-sm">{invoice.layout.showLogo ? t(language, "common.yes") : t(language, "common.no")}</span>
                 </label>
               </Field>
 
@@ -810,9 +810,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                       save(setLayout(invoice, { ...invoice.layout, logoSize }));
                     }}
                   >
-                    <option value="small">Klein</option>
-                    <option value="medium">Mittel</option>
-                    <option value="large">Groß</option>
+                    <option value="small">{t(language, "settings.small")}</option>
+                    <option value="medium">{t(language, "settings.medium")}</option>
+                    <option value="large">{t(language, "settings.large")}</option>
                   </Select>
                 </Field>
               )}
@@ -825,7 +825,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     onChange={(e) => save(setLayout(invoice, { ...invoice.layout, showFooter: e.target.checked }))} 
                     className="w-4 h-4 accent-zinc-800"
                   />
-                  <span className="text-sm">{invoice.layout.showFooter ? "Ja" : "Nein"}</span>
+                  <span className="text-sm">{invoice.layout.showFooter ? t(language, "common.yes") : t(language, "common.no")}</span>
                 </label>
               </Field>
 
@@ -837,8 +837,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     save(setLayout(invoice, { ...invoice.layout, senderPosition }));
                   }}
                 >
-                  <option value="left">Links</option>
-                  <option value="right">Rechts</option>
+                  <option value="left">{t(language, "settings.left")}</option>
+                  <option value="right">{t(language, "settings.right")}</option>
                 </Select>
               </Field>
 
@@ -850,8 +850,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     save(setLayout(invoice, { ...invoice.layout, recipientPosition }));
                   }}
                 >
-                  <option value="left">Links</option>
-                  <option value="right">Rechts</option>
+                  <option value="left">{t(language, "settings.left")}</option>
+                  <option value="right">{t(language, "settings.right")}</option>
                 </Select>
               </Field>
 
@@ -990,7 +990,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 >
                   {CURRENCIES.map((cur) => (
                     <option key={cur.code} value={cur.code}>
-                      {cur.code} ({cur.symbol}) - {cur.name}
+                      {cur.code} ({cur.symbol}) - {language === "de" ? cur.de : cur.en}
                     </option>
                   ))}
                 </Select>

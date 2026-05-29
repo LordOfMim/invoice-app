@@ -17,10 +17,11 @@ const PRESET_COLORS = [
   "#a855f7", "#d946ef", "#ec4899", "#f43f5e",
 ];
 
-function TagEditor({ tag, onSave, onDelete }: { 
+function TagEditor({ tag, onSave, onDelete, namePlaceholder }: { 
   tag: Tag; 
   onSave: (tag: Tag) => void;
   onDelete: () => void;
+  namePlaceholder: string;
 }) {
   return (
     <Surface variant="solid" padding="md" className="flex flex-wrap items-center gap-3">
@@ -32,7 +33,7 @@ function TagEditor({ tag, onSave, onDelete }: {
       <Input
         value={tag.name}
         onChange={(e) => onSave({ ...tag, name: e.target.value })}
-        placeholder="Tag name"
+        placeholder={namePlaceholder}
         className="flex-1 min-w-[150px]"
       />
       
@@ -103,7 +104,7 @@ export default function TagsPage() {
         <Stack gap="lg">
           <PageHeader
             title={t(language, "tags.title")}
-            description="Label invoices by client, project, or time period."
+            description={t(language, "tags.description")}
             actions={
               <Button variant="primary" onClick={handleCreate}>
                 {t(language, "tags.new")}
@@ -126,7 +127,7 @@ export default function TagsPage() {
               <Surface variant="solid" padding="lg">
                 <EmptyState
                   title={search ? t(language, "common.noResults") : t(language, "tags.empty")}
-                  description={search ? "Try a different search term" : "Create tags to organize your invoices"}
+                  description={search ? t(language, "common.tryDifferentSearch") : t(language, "common.createTags")}
                   icon={
                     <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
@@ -150,6 +151,7 @@ export default function TagsPage() {
                   tag={tag}
                   onSave={handleSave}
                   onDelete={() => handleDelete(tag.id)}
+                  namePlaceholder={t(language, "tags.namePlaceholder")}
                 />
                 {tagCounts.get(tag.id) ? (
                   <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-ink)] px-1.5 text-xs text-white">
@@ -162,7 +164,7 @@ export default function TagsPage() {
 
           {/* Tag Usage Summary */}
           {tags.length > 0 && (
-            <Section title="Quick overview">
+            <Section title={t(language, "tags.quickOverview")}>
               <Surface variant="soft" padding="md">
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => (
@@ -171,7 +173,7 @@ export default function TagsPage() {
                       className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-white shadow-sm"
                       style={{ backgroundColor: tag.color }}
                     >
-                      {tag.name || "Unnamed"}
+                      {tag.name || t(language, "common.unnamed")}
                       <span className="rounded-full bg-white/20 px-1.5 text-xs">
                         {tagCounts.get(tag.id) || 0}
                       </span>
@@ -192,14 +194,17 @@ export default function TagsPage() {
             deleteTag(adapter, deleteConfirm.id);
           }
         }}
-        title="Delete Tag"
+        title={t(language, "tags.deleteTitle")}
         description={
           deleteConfirm?.count && deleteConfirm.count > 0
-            ? `This tag is used by ${deleteConfirm.count} invoice(s). Are you sure you want to delete it?`
-            : "Are you sure you want to delete this tag?"
+            ? language === "de"
+              ? `Dieser Tag wird von ${deleteConfirm.count} Rechnung(en) verwendet. Möchtest du ihn wirklich löschen?`
+              : `This tag is used by ${deleteConfirm.count} invoice(s). Are you sure you want to delete it?`
+            : t(language, "tags.deleteDescription")
         }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

@@ -47,9 +47,9 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">Product not found.</p>
+            <p className="text-sm text-(--color-ink-muted)">{t(language, "products.notFound")}</p>
             <Link href="/products" className="text-sm text-(--color-accent) hover:underline">
-              ← Back to products
+              ← {t(language, "products.back")}
             </Link>
           </Stack>
         </div>
@@ -85,13 +85,13 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
 
         <Surface className="mt-6">
           <Stack gap="lg" className="p-6">
-            <Section title="Basic Information">
+            <Section title={t(language, "products.basicInfo")}>
               <Grid cols={2} gap="md">
                 <Field label={t(language, "products.name")}>
                   <Input
                     value={product.name}
                     onChange={(e) => save({ ...product, name: e.target.value })}
-                    placeholder="Product or Service Name"
+                    placeholder={language === "de" ? "Produkt- oder Leistungsname" : "Product or service name"}
                   />
                 </Field>
 
@@ -99,7 +99,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
                   <Input
                     value={product.category || ""}
                     onChange={(e) => save({ ...product, category: e.target.value })}
-                    placeholder="e.g., Consulting, Development"
+                    placeholder={language === "de" ? "z.B. Beratung, Entwicklung" : "e.g., Consulting, Development"}
                   />
                 </Field>
               </Grid>
@@ -109,18 +109,18 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
                   rows={3}
                   value={product.description}
                   onChange={(e) => save({ ...product, description: e.target.value })}
-                  placeholder="Description that will appear on the invoice..."
+                placeholder={language === "de" ? "Beschreibung, die auf der Rechnung erscheint..." : "Description that will appear on the invoice..."}
                 />
               </Field>
             </Section>
 
-            <Section title="Pricing">
+            <Section title={t(language, "products.pricing")}>
               <Grid cols={3} gap="md">
                 <Field label={t(language, "products.unit")}>
                   <Input
                     value={product.unit || ""}
                     onChange={(e) => save({ ...product, unit: e.target.value })}
-                    placeholder="e.g., Stunde, Stück, Pauschal"
+                    placeholder={language === "de" ? "z.B. Stunde, Stück, Pauschal" : "e.g., hour, unit, flat rate"}
                   />
                 </Field>
 
@@ -133,7 +133,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
                   />
                 </Field>
 
-                <Field label={t(language, "products.taxRate")} hint="e.g., 19 for 19%">
+                <Field label={t(language, "products.taxRate")} hint={language === "de" ? "z.B. 19 für 19%" : "e.g., 19 for 19%"}>
                   <Input
                     inputMode="decimal"
                     value={formatTaxPercent(product.taxRate)}
@@ -148,9 +148,9 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
             </Section>
 
             <div className="text-xs text-(--color-ink-subtle) pt-2 border-t border-(--glass-border)">
-              Created: {new Date(product.createdAt).toLocaleString()}
+              {t(language, "common.created")}: {new Date(product.createdAt).toLocaleString()}
               {" · "}
-              Updated: {new Date(product.updatedAt).toLocaleString()}
+              {t(language, "common.updated")}: {new Date(product.updatedAt).toLocaleString()}
             </div>
           </Stack>
         </Surface>
@@ -160,9 +160,11 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Product"
-        description="Are you sure you want to delete this product? This action cannot be undone."
+        title={t(language, "products.deleteTitle")}
+        description={t(language, "products.deleteDescriptionLong")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

@@ -44,10 +44,10 @@ export default function CreditNotesPage() {
       <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "creditNotes.title")}
-          subtitle="Stornos and credit notes linked to invoices"
+          subtitle={t(language, "creditNotes.description")}
           actions={
             <span className="text-sm text-(--color-ink-subtle)">
-              Create from invoice editor →
+              {t(language, "creditNotes.createFromInvoiceEditor")}
             </span>
           }
         />
@@ -67,7 +67,7 @@ export default function CreditNotesPage() {
             {creditNotes.length === 0 ? (
               <EmptyState
                 title={search ? t(language, "common.noResults") : t(language, "creditNotes.empty")}
-                description="Credit notes are created from the invoice editor"
+                description={t(language, "creditNotes.createdFromInvoiceEditor")}
               />
             ) : (
               creditNotes.map((cn) => (
@@ -79,7 +79,7 @@ export default function CreditNotesPage() {
                           href={`/credit-notes/${cn.id}`}
                           className="font-medium text-(--color-ink) hover:text-(--color-accent) transition-colors"
                         >
-                          {cn.creditNoteNumber || "(No number)"}
+                          {cn.creditNoteNumber || t(language, "common.noNumber")}
                         </Link>
                         <Badge variant={cn.type === "storno" ? "danger" : "info"}>
                           {cn.type === "storno" ? t(language, "creditNotes.storno") : t(language, "creditNotes.gutschrift")}
@@ -89,7 +89,7 @@ export default function CreditNotesPage() {
                         {cn.recipient.name}
                       </div>
                       <div className="mt-1 text-xs text-(--color-ink-subtle)">
-                        {t(language, "creditNotes.linkedInvoice")}: {cn.linkedInvoiceNumber || "(unknown)"}
+                        {t(language, "creditNotes.linkedInvoice")}: {cn.linkedInvoiceNumber || t(language, "common.unknown")}
                       </div>
                       {cn.reason && (
                         <div className="mt-1 text-xs text-(--color-ink-muted) line-clamp-1">
@@ -112,7 +112,7 @@ export default function CreditNotesPage() {
                         <Button variant="secondary">{t(language, "actions.edit")}</Button>
                       </Link>
                       <Link href={`/invoices/${cn.linkedInvoiceId}`}>
-                        <Button variant="secondary">View Invoice</Button>
+                        <Button variant="secondary">{t(language, "actions.viewInvoice")}</Button>
                       </Link>
                       <Button variant="danger" onClick={() => setDeleteId(cn.id)}>
                         {t(language, "actions.delete")}
@@ -130,9 +130,11 @@ export default function CreditNotesPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Delete Credit Note"
-        description="Are you sure you want to delete this credit note? This action cannot be undone."
+        title={t(language, "creditNotes.deleteTitle")}
+        description={t(language, "creditNotes.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

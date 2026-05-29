@@ -44,7 +44,7 @@ export default function ProductsPage() {
         <Stack gap="lg">
           <PageHeader
             title={t(language, "products.title")}
-            description="Reusable line items to speed up invoice entry."
+            description={t(language, "products.descriptionText")}
             actions={
               <Button variant="primary" onClick={handleCreate}>
                 {t(language, "products.new")}
@@ -67,7 +67,7 @@ export default function ProductsPage() {
               <Surface variant="solid" padding="lg">
                 <EmptyState
                   title={search ? t(language, "common.noResults") : t(language, "products.empty")}
-                  description={search ? "Try a different search term" : "Add your first product to get started"}
+                  description={search ? t(language, "common.tryDifferentSearch") : t(language, "common.addFirstProduct")}
                   icon={
                     <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
@@ -93,7 +93,7 @@ export default function ProductsPage() {
               >
                 <div className="min-w-50 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-[var(--color-ink)]">{product.name || "(Unnamed)"}</span>
+                    <span className="font-medium text-[var(--color-ink)]">{product.name || t(language, "common.unnamed")}</span>
                     {product.category && (
                       <Badge>{product.category}</Badge>
                     )}
@@ -111,8 +111,10 @@ export default function ProductsPage() {
                       {formatMoney(product.unitPrice, currency, locale)}
                     </div>
                     <div className="text-xs text-[var(--color-ink-subtle)]">
-                      {product.unit && `per ${product.unit} · `}
-                      {product.taxRate !== undefined ? `${(product.taxRate * 100).toFixed(0)}% tax` : "no tax"}
+                      {product.unit && `${t(language, "products.per")} ${product.unit} · `}
+                      {product.taxRate !== undefined
+                        ? `${(product.taxRate * 100).toFixed(0)}% ${t(language, "products.tax")}`
+                        : t(language, "products.noTax")}
                     </div>
                   </div>
 
@@ -139,10 +141,11 @@ export default function ProductsPage() {
             deleteProduct(adapter, deleteConfirm);
           }
         }}
-        title="Delete Product"
-        description="Are you sure you want to delete this product?"
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t(language, "products.deleteTitle")}
+        description={t(language, "products.deleteDescription")}
+        confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

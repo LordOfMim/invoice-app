@@ -40,9 +40,9 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">Customer not found.</p>
+            <p className="text-sm text-(--color-ink-muted)">{t(language, "customers.notFound")}</p>
             <Link href="/customers" className="text-sm text-(--color-accent) hover:underline">
-              ← Back to customers
+              ← {t(language, "customers.back")}
             </Link>
           </Stack>
         </div>
@@ -78,9 +78,9 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
 
         <Surface className="mt-6">
           <Stack gap="lg" className="p-6">
-            <Section title="Basic Information">
+            <Section title={t(language, "customers.basicInfo")}>
               <Grid cols={2} gap="md">
-                <Field label="Anrede">
+                <Field label={t(language, "customers.salutation")}>
                   <Input
                     value={customer.salutation || ""}
                     onChange={(e) => save({ ...customer, salutation: e.target.value })}
@@ -92,7 +92,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
                   <Input
                     value={customer.name}
                     onChange={(e) => save({ ...customer, name: e.target.value })}
-                    placeholder="Company or Person Name"
+                    placeholder={language === "de" ? "Firma oder Personenname" : "Company or person name"}
                   />
                 </Field>
 
@@ -124,14 +124,14 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
               </Grid>
             </Section>
 
-            <Section title="Address & Contact">
+            <Section title={t(language, "customers.addressContact")}>
               <Grid cols={1} gap="md">
                 <Field label={t(language, "customers.address")}>
                   <Textarea
                     rows={3}
                     value={customer.address}
                     onChange={(e) => save({ ...customer, address: e.target.value })}
-                    placeholder="Street, City, Country"
+                    placeholder={language === "de" ? "Straße, Ort, Land" : "Street, city, country"}
                   />
                 </Field>
 
@@ -140,27 +140,27 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
                     rows={2}
                     value={customer.contact}
                     onChange={(e) => save({ ...customer, contact: e.target.value })}
-                    placeholder="Contact person, department, etc."
+                    placeholder={language === "de" ? "Ansprechpartner, Abteilung usw." : "Contact person, department, etc."}
                   />
                 </Field>
               </Grid>
             </Section>
 
-            <Section title="Notes">
+            <Section title={t(language, "customers.notes")}>
               <Field label={t(language, "customers.notes")}>
                 <Textarea
                   rows={3}
                   value={customer.notes || ""}
                   onChange={(e) => save({ ...customer, notes: e.target.value })}
-                  placeholder="Internal notes about this customer..."
+                  placeholder={language === "de" ? "Interne Notizen zu diesem Kunden..." : "Internal notes about this customer..."}
                 />
               </Field>
             </Section>
 
             <div className="text-xs text-(--color-ink-subtle) pt-2 border-t border-(--glass-border)">
-              Created: {new Date(customer.createdAt).toLocaleString()}
+              {t(language, "common.created")}: {new Date(customer.createdAt).toLocaleString()}
               {" · "}
-              Updated: {new Date(customer.updatedAt).toLocaleString()}
+              {t(language, "common.updated")}: {new Date(customer.updatedAt).toLocaleString()}
             </div>
           </Stack>
         </Surface>
@@ -170,9 +170,11 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Customer"
-        description="Are you sure you want to delete this customer? This action cannot be undone."
+        title={t(language, "customers.deleteTitle")}
+        description={t(language, "customers.deleteDescriptionLong")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

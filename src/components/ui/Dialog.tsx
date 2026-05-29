@@ -101,6 +101,7 @@ type ConfirmDialogProps = {
   description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  warningLabel?: string;
   variant?: "default" | "danger";
 };
 
@@ -112,13 +113,14 @@ export function ConfirmDialog({
   description,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
+  warningLabel,
   variant = "default",
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onClose={onClose}>
       <DialogHeader title={title} description={description} />
       <DialogBody>
-        {variant === "danger" && (
+        {variant === "danger" && warningLabel && (
           <div className="flex items-center gap-3 rounded-xl bg-[var(--color-danger)]/10 p-3">
             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-danger)]/10">
               <svg className="h-5 w-5 text-[var(--color-danger)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -126,7 +128,7 @@ export function ConfirmDialog({
               </svg>
             </div>
             <p className="text-sm text-[var(--color-danger)]">
-              This action cannot be undone.
+              {warningLabel}
             </p>
           </div>
         )}

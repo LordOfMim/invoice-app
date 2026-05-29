@@ -47,9 +47,9 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">Credit note not found.</p>
+            <p className="text-sm text-(--color-ink-muted)">{t(language, "creditNotes.notFound")}</p>
             <Link href="/credit-notes" className="text-sm text-(--color-accent) hover:underline">
-              ← Back to credit notes
+              ← {t(language, "creditNotes.back")}
             </Link>
           </Stack>
         </div>
@@ -79,7 +79,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
           actions={
             <div className="flex items-center gap-2">
               <Link href={`/invoices/${creditNote.linkedInvoiceId}`}>
-                <Button variant="secondary">View Original Invoice</Button>
+                <Button variant="secondary">{t(language, "actions.viewOriginalInvoice")}</Button>
               </Link>
               <Button variant="danger" onClick={() => setShowDelete(true)}>
                 {t(language, "actions.delete")}
@@ -98,12 +98,12 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
                 <span className="text-sm text-(--color-ink-subtle)">
                   {t(language, "creditNotes.linkedInvoice")}: {" "}
                   <Link href={`/invoices/${creditNote.linkedInvoiceId}`} className="text-(--color-accent) hover:underline">
-                    {creditNote.linkedInvoiceNumber || "(unknown)"}
+                    {creditNote.linkedInvoiceNumber || t(language, "common.unknown")}
                   </Link>
                 </span>
               </div>
 
-              <Section title="Credit Note Details">
+              <Section title={t(language, "creditNotes.details")}>
                 <Grid cols={2} gap="md">
                   <Field label={creditNote.texts.creditNoteNumberLabel}>
                     <Input
@@ -136,7 +136,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
                     rows={3}
                     value={creditNote.reason}
                     onChange={(e) => save({ ...creditNote, reason: e.target.value })}
-                    placeholder="Reason for this credit note / cancellation..."
+                    placeholder={language === "de" ? "Grund für diese Gutschrift / diesen Storno..." : "Reason for this credit note / cancellation..."}
                   />
                 </Field>
               </Section>
@@ -146,7 +146,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
           {/* Recipient (read-only reference) */}
           <Surface variant="soft">
             <Stack gap="sm" className="p-5">
-              <h2 className="text-sm font-semibold text-(--color-ink-muted)">Recipient (from invoice)</h2>
+              <h2 className="text-sm font-semibold text-(--color-ink-muted)">{t(language, "creditNotes.recipientFromInvoice")}</h2>
               <div className="text-sm">
                 <div className="font-medium text-(--color-ink)">{creditNote.recipient.name}</div>
                 <div className="whitespace-pre-line text-(--color-ink-muted)">{creditNote.recipient.address}</div>
@@ -169,9 +169,9 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
           </Surface>
 
           <div className="text-xs text-(--color-ink-subtle)">
-            Created: {new Date(creditNote.createdAt).toLocaleString()}
+            {t(language, "common.created")}: {new Date(creditNote.createdAt).toLocaleString()}
             {" · "}
-            Updated: {new Date(creditNote.updatedAt).toLocaleString()}
+            {t(language, "common.updated")}: {new Date(creditNote.updatedAt).toLocaleString()}
           </div>
         </Stack>
       </div>
@@ -180,9 +180,11 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Credit Note"
-        description="Are you sure you want to delete this credit note? This action cannot be undone."
+        title={t(language, "creditNotes.deleteTitle")}
+        description={t(language, "creditNotes.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

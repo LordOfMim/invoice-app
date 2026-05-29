@@ -16,7 +16,8 @@ import {
   computeInvoiceTotals,
   convertInvoiceAmountToCurrency,
 } from "@/lib/calc";
-import { addMonthsClamped, monthKey, todayLocalISO } from "@/lib/date";
+import { addMonthsClamped, dateToLocalISO, daysBetweenDateOnly, monthKey, todayLocalISO } from "@/lib/date";
+import { roundMoney } from "@/lib/money";
 import { 
   createDefaultSettings, 
   createInvoiceFromDefaults, 
@@ -1160,6 +1161,30 @@ export type DashboardStats = {
   overdueCount: number;
   overdueTotal: number;
   paidThisPeriod: number;
+  issuedThisMonthCount: number;
+  issuedThisMonthTotal: number;
+  dueSoonCount: number;
+  dueSoonTotal: number;
+  collectionRate: number;
+  averageDaysToPay: number | null;
+  statusCounts: {
+    paid: number;
+    partial: number;
+    overdue: number;
+    unpaid: number;
+  };
+  agingBuckets: {
+    bucket: "current" | "1-30" | "31-60" | "61+";
+    count: number;
+    total: number;
+  }[];
+  topCustomers: {
+    key: string;
+    name: string;
+    invoiceCount: number;
+    totalBilled: number;
+    outstanding: number;
+  }[];
   revenueByMonth: { month: string; revenue: number }[];
   invoiceCount: number;
   customerCount: number;
@@ -1169,13 +1194,39 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   const data = loadData(adapter);
   const today = todayLocalISO();
   const baseCurrency = data.settings.currency || "EUR";
+  const currentMonth = monthKey(today);
+  const dueSoonDate = new Date(`${today}T00:00:00`);
+  dueSoonDate.setDate(dueSoonDate.getDate() + 7);
+  const dueSoonLimit = dateToLocalISO(dueSoonDate);
   
   let unpaidTotal = 0;
   let overdueCount = 0;
   let overdueTotal = 0;
+  let paidThisPeriod = 0;
+  let issuedThisMonthCount = 0;
+  let issuedThisMonthTotal = 0;
+  let dueSoonCount = 0;
+  let dueSoonTotal = 0;
+  let totalBilled = 0;
+  let totalPaid = 0;
+  let totalDaysToPay = 0;
+  let paidInvoiceSampleSize = 0;
   
   const revenueMap = new Map<string, number>();
   const creditNotesByInvoiceId = new Map<string, CreditNote[]>();
+  const statusCounts: DashboardStats["statusCounts"] = {
+    paid: 0,
+    partial: 0,
+    overdue: 0,
+    unpaid: 0,
+  };
+  const agingTotals = new Map<DashboardStats["agingBuckets"][number]["bucket"], { count: number; total: number }>([
+    ["current", { count: 0, total: 0 }],
+    ["1-30", { count: 0, total: 0 }],
+    ["31-60", { count: 0, total: 0 }],
+    ["61+", { count: 0, total: 0 }],
+  ]);
+  const customers = new Map<string, DashboardStats["topCustomers"][number]>();
 
   for (const creditNote of data.creditNotes) {
     const linked = creditNotesByInvoiceId.get(creditNote.linkedInvoiceId);
@@ -1187,6 +1238,23 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     const linkedCreditNotes = creditNotesByInvoiceId.get(inv.id) ?? [];
     const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
     const remaining = convertInvoiceAmountToCurrency(balance.remainingAmount, inv, baseCurrency);
+    const effectiveTotal = convertInvoiceAmountToCurrency(balance.effectiveTotal, inv, baseCurrency);
+    const paidAmount = convertInvoiceAmountToCurrency(balance.paidAmount, inv, baseCurrency);
+    const invoiceMonth = monthKey(inv.invoiceDate);
+
+    totalBilled += effectiveTotal;
+    totalPaid += Math.min(paidAmount, effectiveTotal);
+    statusCounts[balance.status]++;
+
+    if (invoiceMonth === currentMonth) {
+      issuedThisMonthCount++;
+      issuedThisMonthTotal += effectiveTotal;
+    }
+
+    if (!balance.isFullyPaid && inv.dueDate >= today && inv.dueDate <= dueSoonLimit) {
+      dueSoonCount++;
+      dueSoonTotal += remaining;
+    }
     
     if (remaining > 0) {
       unpaidTotal += remaining;
@@ -1194,12 +1262,52 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
         overdueCount++;
         overdueTotal += remaining;
       }
+
+      const daysOverdue = Math.max(0, daysBetweenDateOnly(inv.dueDate, today));
+      const agingBucket: DashboardStats["agingBuckets"][number]["bucket"] =
+        daysOverdue === 0 ? "current" : daysOverdue <= 30 ? "1-30" : daysOverdue <= 60 ? "31-60" : "61+";
+      const aging = agingTotals.get(agingBucket);
+      if (aging) {
+        aging.count++;
+        aging.total += remaining;
+      }
+    }
+
+    if (balance.isFullyPaid && (inv.payments ?? []).length > 0) {
+      const lastPaymentDate = (inv.payments ?? [])
+        .map((payment) => payment.date)
+        .filter(Boolean)
+        .sort()
+        .at(-1);
+
+      if (lastPaymentDate) {
+        totalDaysToPay += Math.max(0, daysBetweenDateOnly(inv.invoiceDate, lastPaymentDate));
+        paidInvoiceSampleSize++;
+      }
+    }
+
+    const customerKey = inv.customerId || inv.recipient.name.trim().toLowerCase() || inv.recipient.name || inv.id;
+    const customerName = inv.recipient.name.trim() || "Unnamed customer";
+    const existingCustomer = customers.get(customerKey);
+    if (existingCustomer) {
+      existingCustomer.invoiceCount++;
+      existingCustomer.totalBilled += effectiveTotal;
+      existingCustomer.outstanding += remaining;
+    } else {
+      customers.set(customerKey, {
+        key: customerKey,
+        name: customerName,
+        invoiceCount: 1,
+        totalBilled: effectiveTotal,
+        outstanding: remaining,
+      });
     }
     
     for (const payment of inv.payments ?? []) {
       const month = monthKey(payment.date);
       if (!month) continue;
       const paymentAmount = convertInvoiceAmountToCurrency(payment.amount, inv, baseCurrency);
+      if (month === currentMonth) paidThisPeriod += paymentAmount;
       revenueMap.set(month, (revenueMap.get(month) || 0) + paymentAmount);
     }
   }
@@ -1220,10 +1328,30 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     .reverse();
   
   return {
-    unpaidTotal: Math.round((unpaidTotal + Number.EPSILON) * 100) / 100,
+    unpaidTotal: roundMoney(unpaidTotal),
     overdueCount,
-    overdueTotal: Math.round((overdueTotal + Number.EPSILON) * 100) / 100,
-    paidThisPeriod: 0, // Would need period filter
+    overdueTotal: roundMoney(overdueTotal),
+    paidThisPeriod: roundMoney(paidThisPeriod),
+    issuedThisMonthCount,
+    issuedThisMonthTotal: roundMoney(issuedThisMonthTotal),
+    dueSoonCount,
+    dueSoonTotal: roundMoney(dueSoonTotal),
+    collectionRate: totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0,
+    averageDaysToPay: paidInvoiceSampleSize > 0 ? Math.round(totalDaysToPay / paidInvoiceSampleSize) : null,
+    statusCounts,
+    agingBuckets: Array.from(agingTotals.entries()).map(([bucket, value]) => ({
+      bucket,
+      count: value.count,
+      total: roundMoney(value.total),
+    })),
+    topCustomers: Array.from(customers.values())
+      .sort((a, b) => b.totalBilled - a.totalBilled)
+      .slice(0, 5)
+      .map((customer) => ({
+        ...customer,
+        totalBilled: roundMoney(customer.totalBilled),
+        outstanding: roundMoney(customer.outstanding),
+      })),
     revenueByMonth,
     invoiceCount: data.invoices.length,
     customerCount: data.customers.length,

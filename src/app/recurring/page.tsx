@@ -70,7 +70,7 @@ export default function RecurringPage() {
       <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "recurring.title")}
-          subtitle="Monthly/quarterly generation with next-run reminders"
+          subtitle={t(language, "recurring.description")}
           actions={
             <Button variant="primary" onClick={handleCreate}>
               {t(language, "recurring.new")}
@@ -93,7 +93,7 @@ export default function RecurringPage() {
             {recurringInvoices.length === 0 ? (
               <EmptyState
                 title={search ? t(language, "common.noResults") : t(language, "recurring.empty")}
-                description="Create recurring invoices to automate your billing"
+                description={t(language, "recurring.description")}
                 action={
                   !search && (
                     <Button variant="primary" onClick={handleCreate}>
@@ -121,17 +121,17 @@ export default function RecurringPage() {
                             href={`/recurring/${ri.id}`}
                             className="font-medium text-(--color-ink) hover:text-(--color-accent) transition-colors"
                           >
-                            {ri.name || "(Unnamed)"}
+                            {ri.name || t(language, "common.unnamed")}
                           </Link>
-                          {!ri.active && <Badge variant="default">Paused</Badge>}
-                          {isDue && <Badge variant="warning">Due</Badge>}
-                          {isUpcoming && !isDue && <Badge variant="info">Upcoming</Badge>}
+                          {!ri.active && <Badge variant="default">{t(language, "recurring.paused")}</Badge>}
+                          {isDue && <Badge variant="warning">{t(language, "recurring.due")}</Badge>}
+                          {isUpcoming && !isDue && <Badge variant="info">{t(language, "recurring.upcoming")}</Badge>}
                         </div>
                         <div className="mt-1 text-sm text-(--color-ink-muted)">
-                          {ri.recipient.name || "No recipient"}
+                          {ri.recipient.name || t(language, "recurring.noRecipient")}
                         </div>
                         <div className="mt-1 text-xs text-(--color-ink-subtle)">
-                          {frequencyLabel(ri.frequency)} · {ri.lineItems.length} item(s)
+                          {frequencyLabel(ri.frequency)} · {ri.lineItems.length} {t(language, "recurring.items")}
                         </div>
                       </div>
 
@@ -175,9 +175,11 @@ export default function RecurringPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Delete Recurring Invoice"
-        description="Are you sure you want to delete this recurring invoice? This action cannot be undone."
+        title={t(language, "recurring.deleteTitle")}
+        description={t(language, "recurring.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

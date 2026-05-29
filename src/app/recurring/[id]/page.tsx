@@ -56,9 +56,9 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
       <main className="p-6 lg:p-8">
         <div className="mx-auto max-w-(--content-max-width)">
           <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">Recurring invoice not found.</p>
+            <p className="text-sm text-(--color-ink-muted)">{t(language, "recurring.notFound")}</p>
             <Link href="/recurring" className="text-sm text-(--color-accent) hover:underline">
-              ← Back to recurring invoices
+              ← {t(language, "recurring.back")}
             </Link>
           </Stack>
         </div>
@@ -109,7 +109,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
           actions={
             <div className="flex items-center gap-2">
               <Button variant="primary" onClick={handleGenerate}>
-                {t(language, "actions.generate")} Invoice
+                {t(language, "actions.generate")} {language === "de" ? "Rechnung" : "invoice"}
               </Button>
               <Button variant="danger" onClick={() => setShowDelete(true)}>
                 {t(language, "actions.delete")}
@@ -122,13 +122,13 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
           {/* Basic Settings */}
           <Surface>
             <Stack gap="md" className="p-5">
-              <Section title="Settings">
+              <Section title={t(language, "recurring.settings")}>
                 <Grid cols={2} gap="md">
                   <Field label={t(language, "recurring.name")}>
                     <Input
                       value={recurring.name}
                       onChange={(e) => save({ ...recurring, name: e.target.value })}
-                      placeholder="e.g., Monthly Retainer - Client A"
+                    placeholder={language === "de" ? "z.B. Monatliche Pauschale - Kunde A" : "e.g., Monthly retainer - Client A"}
                     />
                   </Field>
 
@@ -151,7 +151,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                     />
                   </Field>
 
-                  <Field label={t(language, "recurring.reminder")} hint="Days before next run">
+                  <Field label={t(language, "recurring.reminder")} hint={t(language, "recurring.daysBeforeNextRun")}>
                     <Input
                       type="number"
                       min="0"
@@ -205,20 +205,20 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                 )}
               </div>
               <Grid cols={1} gap="md">
-                <Field label="Name">
+                <Field label={t(language, "common.name")}>
                   <Input
                     value={recurring.recipient.name}
                     onChange={(e) => save({ ...recurring, recipient: { ...recurring.recipient, name: e.target.value } })}
                   />
                 </Field>
-                <Field label="Address">
+                <Field label={t(language, "customers.address")}>
                   <Textarea
                     rows={3}
                     value={recurring.recipient.address}
                     onChange={(e) => save({ ...recurring, recipient: { ...recurring.recipient, address: e.target.value } })}
                   />
                 </Field>
-                <Field label="Contact">
+                <Field label={t(language, "customers.contact")}>
                   <Textarea
                     rows={2}
                     value={recurring.recipient.contact}
@@ -232,7 +232,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
           {/* Line Items */}
           <Surface>
             <Stack gap="md" className="p-5">
-              <Section title="Line Items">
+              <Section title={language === "de" ? "Positionen" : "Line items"}>
                 <Stack gap="sm">
                   {recurring.lineItems.map((li, idx) => (
                     <Surface key={li.id} variant="soft" padding="sm" radius="md">
@@ -247,12 +247,12 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                             });
                           }}
                         >
-                          Remove
+                          {t(language, "actions.remove")}
                         </Button>
                       </div>
 
                       <Grid cols={2} gap="sm">
-                        <Field label="Description">
+                        <Field label={language === "de" ? "Beschreibung" : "Description"}>
                           <Textarea
                             rows={2}
                             value={li.description}
@@ -267,7 +267,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                           />
                         </Field>
                         <Grid cols={2} gap="sm">
-                          <Field label="Quantity">
+                          <Field label={language === "de" ? "Menge" : "Quantity"}>
                             <Input
                               inputMode="decimal"
                               value={String(li.quantity)}
@@ -281,7 +281,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                               }}
                             />
                           </Field>
-                          <Field label="Unit Price">
+                          <Field label={language === "de" ? "Einzelpreis" : "Unit price"}>
                             <Input
                               inputMode="decimal"
                               value={String(li.unitPrice)}
@@ -295,7 +295,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                               }}
                             />
                           </Field>
-                          <Field label="Tax Rate" hint="e.g., 19 for 19%">
+                          <Field label={language === "de" ? "MwSt." : "Tax rate"} hint={language === "de" ? "z.B. 19 für 19%" : "e.g., 19 for 19%"}>
                             <Input
                               inputMode="decimal"
                               placeholder="19"
@@ -325,7 +325,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                       });
                     }}
                   >
-                    + Add Item
+                    + {t(language, "actions.add")}
                   </Button>
                 </Stack>
               </Section>
@@ -346,9 +346,9 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
           </Surface>
 
           <div className="text-xs text-(--color-ink-subtle)">
-            Created: {new Date(recurring.createdAt).toLocaleString()}
+            {t(language, "common.created")}: {new Date(recurring.createdAt).toLocaleString()}
             {" · "}
-            Updated: {new Date(recurring.updatedAt).toLocaleString()}
+            {t(language, "common.updated")}: {new Date(recurring.updatedAt).toLocaleString()}
           </div>
         </Stack>
       </div>
@@ -357,9 +357,11 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Recurring Invoice"
-        description="Are you sure you want to delete this recurring invoice? This action cannot be undone."
+        title={t(language, "recurring.deleteTitle")}
+        description={t(language, "recurring.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

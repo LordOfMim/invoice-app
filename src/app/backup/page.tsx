@@ -76,14 +76,17 @@ export default function BackupPage() {
     recurringInvoices: data?.recurringInvoices.length ?? 0,
   };
 
-  const status = typeof window !== "undefined" && isElectron() ? "Electron Mode" : "Browser Mode";
+  const status =
+    typeof window !== "undefined" && isElectron()
+      ? t(language, "backup.electronMode")
+      : t(language, "backup.browserMode");
   return (
     <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-(--content-max-width)">
         <Stack gap="lg">
           <PageHeader
             title={t(language, "backup.title")}
-            description="Export your data as a backup file or import from a previous backup."
+            description={t(language, "backup.description")}
           />
 
           {/* Data Overview */}
@@ -105,7 +108,7 @@ export default function BackupPage() {
           <Section title={t(language, "backup.export")}> 
             <Surface variant="solid" padding="lg">
               <p className="text-sm text-[var(--color-ink-muted)]">
-                Download all your data as a JSON file. Keep this file safe for backup purposes.
+                {t(language, "backup.downloadDescription")}
               </p>
               <Button className="mt-4" variant="primary" onClick={handleExport}>
                 {t(language, "actions.export")} (.json)
@@ -119,10 +122,10 @@ export default function BackupPage() {
               <Stack gap="md">
                 <div>
                   <p className="text-sm text-[var(--color-ink-muted)]">
-                    Restore your data from a previously exported backup file.
+                    {t(language, "backup.restoreDescription")}
                   </p>
                   <p className="mt-1 text-sm font-medium text-[var(--color-warning)]">
-                    Warning: This will replace all current data!
+                    {t(language, "backup.replaceWarning")}
                   </p>
                 </div>
                 
@@ -141,24 +144,23 @@ export default function BackupPage() {
                 />
 
                 {importStatus === "success" && (
-                  <Alert variant="success">Import successful! Refreshing page...</Alert>
+                  <Alert variant="success">{t(language, "backup.importSuccess")}</Alert>
                 )}
                 {importStatus === "error" && (
-                  <Alert variant="danger">Import failed. Please check the file format and try again.</Alert>
+                  <Alert variant="danger">{t(language, "backup.importError")}</Alert>
                 )}
               </Stack>
             </Surface>
           </Section>
 
           {/* Auto Backup Info */}
-          <Section title="Auto-Backup (Electron)">
+          <Section title={t(language, "backup.autoBackupElectron")}>
             <Surface variant="soft" padding="lg">
               <p className="text-sm text-[var(--color-ink-muted)]">
-                When running as a desktop app via Electron, you can enable automatic backups 
-                to a folder of your choice. This feature is not available in the browser version.
+                {t(language, "backup.autoBackupDescription")}
               </p>
               <div className="mt-4 flex items-center gap-2 text-sm text-[var(--color-ink-subtle)]">
-                <span>Status:</span>
+                <span>{t(language, "backup.status")}:</span>
                 <span className="rounded-full bg-[var(--color-sand-200)] px-2.5 py-0.5 text-xs font-medium">
                   {status}
                 </span>
@@ -167,12 +169,12 @@ export default function BackupPage() {
           </Section>
 
           {/* Tips */}
-          <Alert variant="info" title="Tips">
+          <Alert variant="info" title={t(language, "backup.tips")}>
             <ul className="mt-2 space-y-1.5 text-sm">
-              <li>• Export your data regularly to prevent data loss</li>
-              <li>• Store backups in multiple locations (cloud storage, external drive)</li>
-              <li>• The backup includes all invoices, customers, products, tags, and settings</li>
-              <li>• Attachments are stored as base64 data within the JSON file</li>
+              <li>• {t(language, "backup.tipExportRegularly")}</li>
+              <li>• {t(language, "backup.tipMultipleLocations")}</li>
+              <li>• {t(language, "backup.tipIncludesData")}</li>
+              <li>• {t(language, "backup.tipAttachments")}</li>
             </ul>
           </Alert>
         </Stack>

@@ -69,7 +69,7 @@ export default function InvoicesPage() {
         <Stack gap="lg">
           <PageHeader
             title={t(language, "invoices.title")}
-            subtitle="Local-first. Offline-ready."
+            subtitle={t(language, "common.localFirst")}
             actions={
               <Button
                 variant="primary"
@@ -95,7 +95,7 @@ export default function InvoicesPage() {
 
             <div className="w-48">
               <Select value={filterKey} onChange={(e) => setFilterKey(e.target.value as FilterKey)}>
-                <option value="all">All</option>
+                <option value="all">{t(language, "filters.all")}</option>
                 <option value="paid">{t(language, "filters.paid")}</option>
                 <option value="unpaid">{t(language, "filters.unpaid")}</option>
               </Select>
@@ -107,7 +107,7 @@ export default function InvoicesPage() {
               <Surface variant="solid" padding="lg">
                 <EmptyState
                   title={t(language, "invoices.empty")}
-                  description="Create your first invoice to get started"
+                  description={t(language, "common.createFirstInvoice")}
                   icon={
                     <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -147,11 +147,11 @@ export default function InvoicesPage() {
                       >
                         {inv.invoiceNumber || "(ohne Nummer)"}
                       </Link>
-                      {isDefault && <Badge>Default</Badge>}
+                      {isDefault && <Badge>{t(language, "invoice.default")}</Badge>}
                       {balance.isFullyPaid ? (
                         <Badge variant="success">{t(language, "invoice.paid")}</Badge>
                       ) : balance.isPartiallyPaid ? (
-                        <Badge variant="warning">Partial</Badge>
+                        <Badge variant="warning">{t(language, "invoice.partiallyPaid")}</Badge>
                       ) : null}
                     </div>
                     <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-ink-subtle)]">
@@ -214,10 +214,11 @@ export default function InvoicesPage() {
             deleteInvoice(adapter, deleteConfirm);
           }
         }}
-        title="Delete Invoice"
-        description="Are you sure you want to delete this invoice?"
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t(language, "invoice.deleteTitle")}
+        description={t(language, "invoice.deleteDescription")}
+        confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>

@@ -37,9 +37,21 @@ export default function TemplatesPage() {
   };
 
   const baseTemplates = [
-    { id: "classic", name: "Classic", description: "Traditional invoice layout" },
-    { id: "modern", name: "Modern", description: "Clean, contemporary design" },
-    { id: "minimal", name: "Minimal", description: "Simple and minimal" },
+    {
+      id: "classic",
+      name: "Classic",
+      description: language === "de" ? "Klassisches Rechnungslayout" : "Traditional invoice layout",
+    },
+    {
+      id: "modern",
+      name: "Modern",
+      description: language === "de" ? "Sauberes, zeitgemäßes Design" : "Clean, contemporary design",
+    },
+    {
+      id: "minimal",
+      name: "Minimal",
+      description: language === "de" ? "Schlicht und minimal" : "Simple and minimal",
+    },
   ];
 
   return (
@@ -47,7 +59,7 @@ export default function TemplatesPage() {
       <div className="mx-auto max-w-(--content-max-width)">
         <PageHeader
           title={t(language, "templates.title")}
-          subtitle="Customize spacing, fonts, and styling without coding"
+          subtitle={t(language, "templates.description")}
           actions={
             <Button variant="primary" onClick={() => handleCreate()}>
               {t(language, "templates.new")}
@@ -56,7 +68,7 @@ export default function TemplatesPage() {
         />
 
         {/* Base Templates */}
-        <Section title="Base Templates" className="mt-6">
+        <Section title={t(language, "templates.baseTemplates")} className="mt-6">
           <Grid cols={3} gap="md">
             {baseTemplates.map((tmpl) => (
               <Surface key={tmpl.id} className="p-4">
@@ -72,7 +84,7 @@ export default function TemplatesPage() {
                   className="mt-4 w-full"
                   onClick={() => handleCreate(tmpl.id)}
                 >
-                  Create Variant
+                  {t(language, "actions.createVariant")}
                 </Button>
               </Surface>
             ))}
@@ -80,7 +92,7 @@ export default function TemplatesPage() {
         </Section>
 
         {/* Custom Variants */}
-        <Section title="Your Custom Variants" className="mt-8">
+        <Section title={t(language, "templates.customVariants")} className="mt-8">
           <Surface>
             <div className="p-4 border-b border-(--glass-border)">
               <Input
@@ -96,7 +108,7 @@ export default function TemplatesPage() {
               {templates.length === 0 ? (
                 <EmptyState
                   title={search ? t(language, "common.noResults") : t(language, "templates.empty")}
-                  description="Create custom variants from the base templates above"
+                  description={t(language, "templates.createDescription")}
                   action={
                     !search && (
                       <Button variant="primary" onClick={() => handleCreate()}>
@@ -115,14 +127,14 @@ export default function TemplatesPage() {
                             href={`/templates/${variant.id}`}
                             className="font-medium text-(--color-ink) hover:text-(--color-accent) transition-colors"
                           >
-                            {variant.name || "(Unnamed)"}
+                            {variant.name || t(language, "common.unnamed")}
                           </Link>
                           <Badge variant="default">{variant.baseTemplateId}</Badge>
                         </div>
                         <div className="mt-1.5 text-xs text-(--color-ink-subtle)">
-                          Font: {(variant.customization.fontSizeScale * 100).toFixed(0)}% · 
-                          Spacing: {variant.customization.lineSpacing} · 
-                          Padding: {variant.customization.tablePadding}
+                          {t(language, "templates.fontSizeScale")}: {(variant.customization.fontSizeScale * 100).toFixed(0)}% ·{" "}
+                          {t(language, "templates.lineSpacing")}: {variant.customization.lineSpacing} ·{" "}
+                          {t(language, "templates.tablePadding")}: {variant.customization.tablePadding}
                         </div>
                       </div>
 
@@ -147,9 +159,11 @@ export default function TemplatesPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Delete Template Variant"
-        description="Are you sure you want to delete this template variant? This action cannot be undone."
+        title={t(language, "templates.deleteTitle")}
+        description={t(language, "templates.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
     </main>
