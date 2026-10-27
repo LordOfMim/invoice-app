@@ -86,3 +86,16 @@ test('legacy invoices retain IDs, money, payments, logo, attachments and layout 
   assert.deepEqual(actual.futureOptionalData, { preserved: true });
   assert.deepEqual(roundTrip.futureCollection, ['keep']);
 });
+
+test('duplicating an invoice remaps custom E-invoice units to the new line IDs', () => {
+  const defaults = load('src/lib/defaults.ts');
+  const original = defaults.createInvoiceFromDefaults(defaults.createDefaultSettings());
+  original.lineItems[0].unit = 'm²';
+  original.einvoice = { seller: { taxId: 'legacy-tax' }, unitCodes: { [original.lineItems[0].id]: 'MTK' } };
+  const copy = defaults.duplicateInvoice(original);
+  assert.notEqual(copy.lineItems[0].id, original.lineItems[0].id);
+  assert.equal(copy.einvoice.unitCodes[copy.lineItems[0].id], 'MTK');
+  assert.equal(copy.einvoice.unitCodes[original.lineItems[0].id], undefined);
+  copy.einvoice.seller.taxId = 'changed';
+  assert.equal(original.einvoice.seller.taxId, 'legacy-tax');
+});

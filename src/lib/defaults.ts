@@ -200,6 +200,14 @@ export function createInvoiceFromCustomer(settings: AppSettings, customer: Custo
 
 export function duplicateInvoice(invoice: Invoice): Invoice {
   const nowIso = new Date().toISOString();
+  const lineItems = invoice.lineItems.map((line) => ({ ...line, id: newId() }));
+  const einvoice = invoice.einvoice ? structuredClone(invoice.einvoice) : undefined;
+  if (einvoice?.unitCodes) {
+    einvoice.unitCodes = Object.fromEntries(invoice.lineItems.flatMap((line, index) => {
+      const code = invoice.einvoice?.unitCodes?.[line.id];
+      return code ? [[lineItems[index].id, code]] : [];
+    }));
+  }
   return {
     ...invoice,
     id: newId(),
@@ -210,7 +218,8 @@ export function duplicateInvoice(invoice: Invoice): Invoice {
     creditNoteIds: [],
     createdAt: nowIso,
     updatedAt: nowIso,
-    lineItems: invoice.lineItems.map((li) => ({ ...li, id: newId() })),
+    lineItems,
+    einvoice,
   };
 }
 
