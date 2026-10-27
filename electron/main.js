@@ -125,7 +125,9 @@ function backupStoreBeforeUpgrade() {
   const temporary = `${backupPath}.${require('crypto').randomUUID()}.tmp`;
   try {
     fs.copyFileSync(storePath, temporary, fs.constants.COPYFILE_EXCL);
-    const descriptor = fs.openSync(temporary, 'r');
+    fs.chmodSync(temporary, 0o600);
+    // Windows FlushFileBuffers requires a handle with write access.
+    const descriptor = fs.openSync(temporary, 'r+');
     try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     try {
       fs.linkSync(temporary, backupPath);
