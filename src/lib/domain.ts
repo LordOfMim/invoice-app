@@ -239,7 +239,38 @@ export type LayoutPreferences = {
   customization?: TemplateCustomization;
 };
 
+/** Structured fields are optional so historical invoices remain readable/printable. */
+export type EInvoiceParty = {
+  street?: string;
+  postalCode?: string;
+  city?: string;
+  countryCode?: string; // ISO 3166-1 alpha-2
+  email?: string;
+  electronicAddress?: string;
+  electronicAddressScheme?: string; // e.g. EM for email
+  vatId?: string;
+  taxId?: string;
+  contactName?: string;
+  contactPhone?: string;
+};
+
+export type EInvoiceDetails = {
+  seller?: EInvoiceParty;
+  buyer?: EInvoiceParty;
+  buyerReference?: string; // Leitweg-ID for public recipients
+  paymentMeansCode?: "58" | "30" | "10"; // SEPA, credit transfer, cash
+  iban?: string;
+  bic?: string;
+  accountName?: string;
+  paymentTerms?: string;
+  serviceDate?: string; // ISO date
+  taxExemptionReason?: string;
+  taxCategory?: "S" | "Z" | "E" | "AE" | "K" | "G" | "O";
+  unitCodes?: Record<string, string>; // item id -> UNECE Rec20 code, e.g. C62/HUR
+};
+
 export type Invoice = {
+  einvoice?: EInvoiceDetails;
   schemaVersion: 1;
   id: string;
 
