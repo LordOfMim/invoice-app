@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { InvoicePreview } from "@/components/templates/InvoicePreview";
+import { EInvoicePanel } from "@/components/EInvoicePanel";
+import { ConfirmDialog } from "@/components/ui/Dialog";
 import { PrintStyles } from "@/components/PrintStyles";
 import type { Invoice, InvoiceLineItem, InvoiceTexts, InvoiceTemplateId, LayoutPreferences, LogoPosition, Payment, Attachment, LineItemType } from "@/lib/domain";
 import { createDefaultLineItem, createLineItemFromProduct } from "@/lib/defaults";
@@ -15,7 +18,7 @@ import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
 import { todayLocalISO } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
-import { computeInvoiceBalance, formatTaxPercent, parseTaxPercentInput } from "@/lib/calc";
+import { computeInvoiceBalance } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { 
   deleteInvoice, 
@@ -59,6 +62,42 @@ function setLayout(invoice: Invoice, next: LayoutPreferences): Invoice {
   return { ...invoice, layout: next };
 }
 
+const card = "rounded-xl border border-zinc-200 bg-white p-5";
+const chip = "rounded-full border px-2.5 py-0.5 text-sm font-medium";
+const menuItem = "w-full justify-start hover:bg-zinc-100!";
+
+// Native disclosure used as a small menu: Escape returns focus to the trigger,
+// and choosing an action or moving focus elsewhere closes it.
+function ActionMenu({ label, children }: { label: string; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const close = (focusTrigger: boolean) => {
+    const details = menu.current;
+    if (!details?.open) return;
+    details.open = false;
+    if (focusTrigger) details.querySelector("summary")?.focus();
+  };
+  return (
+    <details
+      ref={menu}
+      className="disclosure relative"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        close(true);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(false);
+      }}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) close(false);
+      }}
+    >
+      <summary id="invoice-actions-trigger" className="rounded-lg border border-zinc-300 bg-white px-4 text-base font-medium hover:bg-zinc-50">{label}</summary>
+      <div className="absolute right-0 z-20 mt-2 flex w-72 flex-col gap-1 rounded-xl border border-zinc-200 bg-white p-2">{children}</div>
+    </details>
+  );
+}
+
 function parseNumber(input: string): number {
   const normalized = input.replace(",", ".");
   const n = Number(normalized);
@@ -87,14 +126,15 @@ const LineItemRow = memo(function LineItemRow({
 
   return (
     <div
-      className={`rounded-xl p-4 ring-1 ${
-        isHeader ? "bg-zinc-100 ring-zinc-300" : isSubheader ? "bg-zinc-50/50 ring-zinc-200" : "bg-zinc-50 ring-zinc-200"
+      className={`@container rounded-lg border p-4 ${
+        isHeader ? "border-zinc-300 bg-zinc-100" : isSubheader ? "border-zinc-200 bg-zinc-50" : "border-zinc-200 bg-white"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="text-xs font-medium text-zinc-600">#{index + 1}</div>
+          <div className="text-sm font-medium text-zinc-700">{index + 1}.</div>
           <Select
+            aria-label={`Art der Zeile ${index + 1}`}
             value={itemType}
             onChange={(e) => {
               const newType = e.target.value as LineItemType;
@@ -106,20 +146,20 @@ const LineItemRow = memo(function LineItemRow({
                 taxRate: newType === "item" ? prev.taxRate : undefined,
               }));
             }}
-            className="w-auto text-xs"
+            className="w-auto"
           >
             <option value="header">Überschrift</option>
             <option value="subheader">Unter-Überschrift</option>
             <option value="item">Position</option>
           </Select>
         </div>
-        <Button variant="danger" onClick={() => onRemove(item.id)}>
+        <Button size="sm" variant="danger" aria-label={`Zeile ${index + 1} entfernen`} onClick={() => onRemove(item.id)}>
           Entfernen
         </Button>
       </div>
 
       <div className="mt-3 space-y-3">
-        <div className="grid gap-3 grid-cols-[80px_1fr]">
+        <div className="grid grid-cols-[88px_1fr] gap-3">
           <Field label="Pos.-Nr.">
             <Input
               value={item.positionNumber || ""}
@@ -129,7 +169,7 @@ const LineItemRow = memo(function LineItemRow({
           </Field>
           <Field label={isHeader ? "Überschrift" : isSubheader ? "Unter-Überschrift" : texts.itemsDescriptionLabel}>
             <Textarea
-              rows={Math.max(isItem ? 3 : 1, Math.ceil((item.description?.length || 0) / 80))}
+              rows={Math.min(8, Math.max(isItem ? 3 : 1, Math.ceil((item.description?.length || 0) / 80)))}
               value={item.description}
               placeholder={isHeader ? "z.B. Rückbau Klima" : isSubheader ? "z.B. Raum Düsseldorf" : "Beschreibung der Position"}
               className="min-h-[60px] resize-y"
@@ -139,13 +179,10 @@ const LineItemRow = memo(function LineItemRow({
         </div>
 
         {isItem && (
-          <div className="grid gap-3 grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
             <Field label={texts.itemsQuantityLabel}>
-              <Input
-                inputMode="decimal"
-                value={String(item.quantity)}
-                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, quantity: parseNumber(e.target.value) }))}
-              />
+              <DecimalInput value={item.quantity}
+                onValueChange={(quantity) => onUpdate(item.id, (prev) => ({ ...prev, quantity: quantity ?? 0 }))} />
             </Field>
             <Field label="Einheit">
               <Input
@@ -155,19 +192,12 @@ const LineItemRow = memo(function LineItemRow({
               />
             </Field>
             <Field label={texts.itemsUnitPriceLabel}>
-              <Input
-                inputMode="decimal"
-                value={String(item.unitPrice)}
-                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, unitPrice: parseNumber(e.target.value) }))}
-              />
+              <DecimalInput value={item.unitPrice}
+                onValueChange={(unitPrice) => onUpdate(item.id, (prev) => ({ ...prev, unitPrice: unitPrice ?? 0 }))} />
             </Field>
             <Field label={`${texts.itemsTaxRateLabel} (%)`}>
-              <Input
-                inputMode="decimal"
-                placeholder="19"
-                value={formatTaxPercent(item.taxRate)}
-                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, taxRate: parseTaxPercentInput(e.target.value) }))}
-              />
+              <DecimalInput allowEmpty value={item.taxRate === undefined ? undefined : item.taxRate * 100}
+                onValueChange={(percent) => onUpdate(item.id, (prev) => ({ ...prev, taxRate: percent === undefined ? undefined : percent / 100 }))} />
             </Field>
           </div>
         )}
@@ -182,16 +212,33 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const locale = language === "de" ? "de-DE" : "en-US";
   const defaultCurrency = data?.settings.currency ?? "EUR";
 
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfMessage, setPdfMessage] = useState("");
+  const [pdfError, setPdfError] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [previewImmediate, setPreviewImmediate] = useState(false);
+  const previewFrame = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
   const [newPaymentDate, setNewPaymentDate] = useState(todayLocalISO());
-  const [newPaymentMethod, setNewPaymentMethod] = useState("");
+  const [newPaymentMethod, setNewPaymentMethod] = useState("bank_transfer");
   const [newPaymentReference, setNewPaymentReference] = useState("");
 
   const invoice = useMemo(() => {
     return data?.invoices.find((inv) => inv.id === id) ?? null;
   }, [data?.invoices, id]);
 
+  const deferredInvoice = useDeferredValue(invoice);
+  useEffect(() => {
+    const frame = previewFrame.current;
+    if (!frame) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setPreviewScale(Math.min(1, Math.max(0.3, (entry.contentRect.width - 24) / (210 * 96 / 25.4))));
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [invoice?.id]);
   const settings = data?.settings;
   
   // Get related data
@@ -257,7 +304,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   if (!adapter) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="rounded-xl bg-white p-6 text-sm text-zinc-500 ring-1 ring-zinc-200">{t(language, "common.loading")}</div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 text-base text-zinc-600">{t(language, "common.loading")}</div>
       </main>
     );
   }
@@ -266,8 +313,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-10">
         <div className="space-y-3">
-          <div className="text-sm text-zinc-500">{t(language, "invoice.notFound")}</div>
-          <Link href="/invoices" className="text-sm text-blue-600 hover:underline">
+          <p className="text-base text-zinc-700">{t(language, "invoice.notFound")}</p>
+          <Link href="/invoices" className="inline-flex min-h-11 items-center text-base text-blue-700 hover:underline">
             ← {t(language, "nav.invoices")}
           </Link>
         </div>
@@ -276,54 +323,58 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   }
 
   const onPrint = async () => {
-    const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
-    const filename = buildPdfFilename(pattern, invoice);
-    
-    // Check if running in Electron with PDF generation support
-    const electronAPI = (window as { electronAPI?: { printToPDF?: (opts: Record<string, unknown>) => Promise<ArrayBuffer | null>; saveFile?: (filename: string, data: ArrayBuffer) => Promise<boolean> } }).electronAPI;
-    
-    if (electronAPI?.printToPDF) {
-      // Use Electron's native PDF generation
-      try {
-        const pdfData = await electronAPI.printToPDF({ 
-          printBackground: true,
-          pageSize: 'A4',
-          margins: { marginType: 'default' }
-        });
-        if (pdfData) {
-          // Create download link
-          const blob = new Blob([pdfData], { type: 'application/pdf' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          a.click();
-          URL.revokeObjectURL(url);
+    setPdfBusy(true);
+    setPdfMessage("");
+    setPdfError(false);
+    setPreviewImmediate(true);
+    const filename = buildPdfFilename(settings?.pdfFilenamePattern ?? "Rechnung-{invoiceNumber}.pdf", invoice);
+    const api = window.electronAPI as typeof window.electronAPI & {
+      saveDocument?: (payload: { filename: string; bytes: Uint8Array }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+    };
+    try {
+      // Let the latest invoice reach the single preview before printing it.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await document.fonts.ready;
+      if (api?.printToPDF) {
+        const bytes = await api.printToPDF({ printBackground: true, preferCSSPageSize: true });
+        if (!bytes) throw new Error("Die PDF konnte nicht erstellt werden.");
+        if (api.saveDocument) {
+          const result = await api.saveDocument({ filename, bytes: new Uint8Array(bytes) });
+          if (!result.ok && !result.canceled) throw new Error(result.error || "Speichern fehlgeschlagen.");
+          if (result.ok) setPdfMessage("PDF gespeichert.");
+        } else {
+          const copy = new Uint8Array(bytes);
+          const url = URL.createObjectURL(new Blob([copy.buffer], { type: "application/pdf" }));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
-      } catch (err) {
-        console.error('PDF generation failed:', err);
-        // Fallback to window.print
+      } else {
         const original = document.title;
         document.title = filename.replace(/\.pdf$/i, "");
-        window.print();
-        document.title = original;
+        try { window.print(); } finally { document.title = original; }
       }
-    } else {
-      // Browser: use window.print()
-      const original = document.title;
-      document.title = filename.replace(/\.pdf$/i, "");
-      window.print();
-      document.title = original;
+    } catch (error) {
+      setPdfError(true);
+      setPdfMessage(error instanceof Error ? error.message : "PDF-Erstellung fehlgeschlagen.");
+    } finally {
+      setPdfBusy(false);
+      setPreviewImmediate(false);
     }
   };
 
   const handleSelectCustomer = (customerId: string) => {
     if (!adapter || !invoice) return;
+    if (!customerId) { save({ ...invoice, customerId: undefined }); return; }
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
     save({
       ...invoice,
       customerId,
+      // Structured recipient details must not follow a different customer.
+      einvoice: invoice.einvoice ? { ...invoice.einvoice, buyer: undefined, buyerReference: undefined } : undefined,
       recipient: {
         salutation: customer.salutation,
         name: customer.name,
@@ -369,6 +420,10 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
     const filename = buildPdfFilename(pattern, invoice);
 
+    setPreviewImmediate(true);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await document.fonts.ready;
+
     // Electron: generate PDF + open email compose with attachment
     if (window.electronAPI?.emailInvoiceWithPdf) {
       const result = await window.electronAPI.emailInvoiceWithPdf({
@@ -395,99 +450,100 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     <main className="mx-auto max-w-7xl px-6 py-8">
       <PrintStyles />
 
-      <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="/invoices" className="text-sm text-zinc-600 hover:text-zinc-900">
-            ← {t(language, "nav.invoices")}
-          </Link>
-          <div className="text-sm font-medium">{invoice.invoiceNumber || "(ohne Nummer)"}</div>
-          {isDefaultInvoice ? (
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
-              {t(language, "invoice.default")}
-            </span>
-          ) : null}
-          {isFullyPaid ? (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-              {t(language, "invoice.paid")}
-            </span>
-          ) : isPartiallyPaid ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-              {t(language, "invoice.partiallyPaid")}
-            </span>
-          ) : balance?.isOverdue ? (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
-              {t(language, "invoice.overdue")}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (!adapter) return;
-              updateSettings(adapter, (prev) => ({ ...prev, defaultInvoiceId: invoice.id }));
-            }}
-          >
-            {t(language, "actions.setDefaultInvoice")}
-          </Button>
-          <Button onClick={() => setShowPaymentForm(!showPaymentForm)}>
-            {t(language, "actions.addPayment")}
-          </Button>
-          <Button
-            onClick={() => {
-              const dup = duplicateInvoiceById(adapter, invoice.id);
-              if (dup) window.location.assign(`/invoices/${dup.id}`);
-            }}
-          >
-            {t(language, "actions.duplicate")}
-          </Button>
-          <Button onClick={onPrint}>{t(language, "invoice.printPdf")}</Button>
-          <Button onClick={handleEmailInvoice}>
-            {t(language, "actions.email")}
-          </Button>
-          
-          {/* Credit Note Dropdown */}
-          <div className="relative group">
-            <Button variant="secondary">
-              {t(language, "actions.createCreditNote")} ▾
-            </Button>
-            <div className="absolute right-0 top-full mt-1 hidden w-40 rounded-lg bg-white py-1 shadow-lg ring-1 ring-zinc-200 group-hover:block z-10">
-              <button
-                onClick={() => handleCreateCreditNote("storno")}
-                className="block w-full px-4 py-2 text-left text-sm text-zinc-600 hover:bg-zinc-50"
-              >
-                {t(language, "creditNotes.storno")}
-              </button>
-              <button
-                onClick={() => handleCreateCreditNote("gutschrift")}
-                className="block w-full px-4 py-2 text-left text-sm text-zinc-600 hover:bg-zinc-50"
-              >
-                {t(language, "creditNotes.gutschrift")}
-              </button>
-            </div>
+      <div className="no-print mb-6 space-y-3">
+        <Link href="/invoices" className="inline-flex min-h-11 items-center text-base text-zinc-600 hover:text-zinc-900">
+          ← {language === "de" ? "Alle Rechnungen" : "All invoices"}
+        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold">
+              {invoice.texts.documentTitle || (language === "de" ? "Rechnung" : "Invoice")} {invoice.invoiceNumber || (language === "de" ? "ohne Nummer" : "without number")}
+            </h1>
+            {!invoice.invoiceNumber && invoiceTotal === 0 ? (
+              <span className={`${chip} border-zinc-300 bg-zinc-50 text-zinc-700`}>{language === "de" ? "Entwurf" : "Draft"}</span>
+            ) : isFullyPaid ? (
+              <span className={`${chip} border-emerald-200 bg-emerald-50 text-emerald-800`}>
+                {t(language, "invoice.paid")}
+              </span>
+            ) : isPartiallyPaid ? (
+              <span className={`${chip} border-amber-200 bg-amber-50 text-amber-900`}>
+                {t(language, "invoice.partiallyPaid")}
+              </span>
+            ) : balance?.isOverdue ? (
+              <span className={`${chip} border-red-200 bg-red-50 text-red-800`}>
+                {t(language, "invoice.overdue")}
+              </span>
+            ) : null}
+            {isDefaultInvoice ? (
+              <span className={`${chip} border-zinc-200 bg-white text-zinc-700`}>
+                {t(language, "invoice.default")}
+              </span>
+            ) : null}
           </div>
-          
-          <Button
-            variant="danger"
-            onClick={() => {
-              const ok = window.confirm("Wirklich löschen?");
-              if (!ok) return;
-              deleteInvoice(adapter, invoice.id);
-              window.location.assign("/invoices");
-            }}
-          >
-            {t(language, "actions.delete")}
-          </Button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" disabled={pdfBusy} onClick={onPrint}>{pdfBusy ? "PDF wird erstellt …" : "PDF speichern"}</Button>
+            <ActionMenu label={language === "de" ? "Weitere Aktionen" : "More actions"}>
+              <Button variant="ghost" className={menuItem} onClick={handleEmailInvoice}>
+                {t(language, "actions.email")}
+              </Button>
+              <Button variant="ghost" className={menuItem} onClick={() => setShowPaymentForm(!showPaymentForm)}>
+                {t(language, "actions.addPayment")}
+              </Button>
+              <Button
+                variant="ghost"
+                className={menuItem}
+                onClick={() => {
+                  const dup = duplicateInvoiceById(adapter, invoice.id);
+                  if (dup) window.location.assign(`/invoices/${dup.id}`);
+                }}
+              >
+                {t(language, "actions.duplicate")}
+              </Button>
+              <Button
+                variant="ghost"
+                className={menuItem}
+                onClick={() => {
+                  if (!adapter) return;
+                  updateSettings(adapter, (prev) => ({ ...prev, defaultInvoiceId: invoice.id }));
+                }}
+              >
+                {t(language, "actions.setDefaultInvoice")}
+              </Button>
+              <div role="group" aria-labelledby="credit-note-actions" className="mt-1 border-t border-zinc-200 pt-2">
+                <p id="credit-note-actions" className="px-4 pb-1 text-sm font-medium text-zinc-600">
+                  {language === "de" ? "Korrektur erstellen" : "Create correction"}
+                </p>
+                <Button variant="ghost" className={menuItem} onClick={() => handleCreateCreditNote("storno")}>{t(language, "creditNotes.storno")}</Button>
+                <Button variant="ghost" className={menuItem} onClick={() => handleCreateCreditNote("gutschrift")}>{t(language, "creditNotes.gutschrift")}</Button>
+              </div>
+              <div className="mt-1 border-t border-zinc-200 pt-2">
+                <Button variant="ghost" className={`${menuItem} text-red-700!`} onClick={() => setConfirmDelete(true)}>
+                  {language === "de" ? "Rechnung löschen …" : "Delete invoice …"}
+                </Button>
+              </div>
+            </ActionMenu>
+          </div>
         </div>
       </div>
 
+      {pdfMessage && (
+        <p
+          role={pdfError ? "alert" : "status"}
+          className={`no-print mb-5 rounded-lg border p-3 text-base ${pdfError ? "border-red-200 bg-red-50 text-red-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
+        >
+          {pdfMessage}
+        </p>
+      )}
+
       {/* Payment Form */}
       {showPaymentForm && (
-        <div className="no-print mb-6 rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-emerald-800">{t(language, "actions.addPayment")}</h3>
-            <button onClick={() => setShowPaymentForm(false)} className="text-emerald-600 hover:text-emerald-800">×</button>
+        <section aria-labelledby="quick-payment-title" className={`no-print mb-6 ${card}`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 id="quick-payment-title" className="text-lg font-semibold">{t(language, "actions.addPayment")}</h2>
+            <Button size="sm" variant="ghost" className="hover:bg-zinc-100!" onClick={() => setShowPaymentForm(false)}>
+              {language === "de" ? "Schließen" : "Close"}
+            </Button>
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
             <Field label={t(language, "common.amount")}>
@@ -506,11 +562,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               />
             </Field>
             <Field label={t(language, "invoices.paymentMethod")}>
-              <Input
-                value={newPaymentMethod}
-                onChange={(e) => setNewPaymentMethod(e.target.value)}
-                placeholder={language === "de" ? "z.B. Überweisung" : "e.g., bank transfer"}
-              />
+              <Select value={newPaymentMethod} onChange={(event) => setNewPaymentMethod(event.target.value)}>
+                <option value="bank_transfer">Überweisung</option><option value="cash">Barzahlung</option><option value="card">Karte</option><option value="paypal">PayPal</option><option value="other">Sonstiges</option>
+              </Select>
             </Field>
             <div className="flex items-end">
               <Button variant="primary" onClick={() => {
@@ -526,39 +580,39 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 save(addPaymentToInvoice(invoice, payment));
                 setShowPaymentForm(false);
                 setNewPaymentAmount("");
-                setNewPaymentMethod("");
+                setNewPaymentMethod("bank_transfer");
               }}>
                 {t(language, "actions.add")}
               </Button>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Credit Notes Warning */}
       {creditNotes.length > 0 && (
-        <div className="no-print mb-6 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
-          <h3 className="text-sm font-semibold text-amber-800">
+        <div className="no-print mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="text-base font-semibold text-amber-900">
             {t(language, "invoice.linkedCreditNotes")} ({creditNotes.length})
-          </h3>
+          </h2>
           <div className="mt-2 space-y-1">
             {creditNotes.map((cn) => (
               <Link
                 key={cn.id}
                 href={`/credit-notes/${cn.id}`}
-                className="block text-sm text-amber-700 hover:underline"
+                className="block py-1 text-base text-amber-900 underline-offset-4 hover:underline"
               >
-                {cn.creditNoteNumber || cn.id} - {cn.type} - {formatMoney(cn.amount, currency, locale)}
+                {cn.creditNoteNumber || cn.id} · {t(language, `creditNotes.${cn.type}`)} · {formatMoney(cn.amount, currency, locale)}
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="no-print space-y-6">
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{t(language, "invoice.editorTitle")}</div>
+          <div className={card}>
+            <h2 className="text-lg font-semibold">{t(language, "invoice.editorTitle")}</h2>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label={invoice.texts.invoiceNumberLabel}>
@@ -573,8 +627,13 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{invoice.texts.senderHeading}</div>
+          <details className={`disclosure ${card}`}>
+            <summary className="flex-wrap">
+              <h2 className="text-lg font-semibold">{invoice.texts.senderHeading}</h2>
+              <span className={invoice.sender.name ? "text-base text-zinc-600" : "text-base font-medium text-amber-800"}>
+                {invoice.sender.name || (language === "de" ? "Bitte ergänzen" : "Please complete")}
+              </span>
+            </summary>
             <div className="mt-4 grid gap-4">
               <Field label="Name">
                 <Input value={invoice.sender.name} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } })} />
@@ -586,25 +645,24 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 <Textarea rows={2} value={invoice.sender.contact} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, contact: e.target.value } })} />
               </Field>
             </div>
-          </div>
+          </details>
 
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">{invoice.texts.recipientHeading}</div>
-              {customers.length > 0 && (
-                <Select
-                  value={invoice.customerId || ""}
-                  onChange={(e) => handleSelectCustomer(e.target.value)}
-                  className="max-w-48 text-sm"
-                >
-                  <option value="">{t(language, "actions.selectCustomer")}...</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-              )}
-            </div>
+          <div className={card}>
+            <h2 className="text-lg font-semibold">{invoice.texts.recipientHeading}</h2>
             <div className="mt-4 grid gap-4">
+              {customers.length > 0 && (
+                <Field
+                  label={language === "de" ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
+                  hint={language === "de" ? "Ersetzt Anrede, Name, Adresse und Kontakt durch die gespeicherten Kundendaten." : "Replaces salutation, name, address and contact with the saved customer details."}
+                >
+                  <Select value={invoice.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
+                    <option value="">{t(language, "actions.selectCustomer")} …</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <Field label="Anrede">
                 <Input 
                   value={invoice.recipient.salutation || ""} 
@@ -630,6 +688,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               <div className="flex items-center gap-2">
                 {products.length > 0 && (
                   <Select
+                    aria-label="Produkt oder Leistung hinzufügen"
                     value=""
                     onChange={(e) => handleAddProduct(e.target.value)}
                     className="w-auto text-sm"
@@ -697,6 +756,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             <p className="mt-1 text-xs text-zinc-500">Wird unter der Zusammenfassung angezeigt.</p>
             <div className="mt-4">
               <Textarea 
+                aria-label={invoice.texts.notesHeading || "Hinweise"}
                 rows={3} 
                 value={invoice.notesText || ""} 
                 placeholder="z.B. Zahlungsbedingungen, Hinweise, etc."
@@ -705,6 +765,12 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             </div>
           </div>
 
+          <EInvoicePanel invoice={{ ...invoice, logoDataUrl }} onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
+            onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))} />
+
+          <details className="rounded-xl border border-zinc-200 bg-white p-5">
+            <summary className="cursor-pointer text-base font-semibold">Layout, Fußzeile und weitere Einstellungen</summary>
+            <div className="mt-5 space-y-6">
           {/* Footer Section - small with left/right */}
           <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
             <div className="text-sm font-semibold">Fußzeile</div>
@@ -999,14 +1065,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               {invoice.currency && invoice.currency !== "EUR" && (
                 <>
                   <Field label={t(language, "invoices.exchangeRate")}>
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      value={invoice.exchangeRate ?? 1}
-                      onChange={(e) => {
-                        save({ ...invoice, exchangeRate: parseFloat(e.target.value) || 1 });
-                      }}
-                    />
+                    <DecimalInput value={invoice.exchangeRate ?? 1}
+                      onValueChange={(exchangeRate) => save({ ...invoice, exchangeRate: exchangeRate ?? 1 })} />
                   </Field>
 
                   <div className="sm:col-span-2">
@@ -1251,26 +1311,36 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               />
             </div>
           </div>
+            </div>
+          </details>
         </section>
 
-        <section className="space-y-3 lg:sticky lg:top-6 lg:self-start">
+        <section className="min-w-0 space-y-3 xl:sticky xl:top-6 xl:self-start">
           <div className="no-print text-sm font-semibold">{t(language, "invoice.previewTitle")}</div>
 
-          <div className="no-print rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200 overflow-auto lg:max-h-[calc(100vh-10rem)] w-max">
-            <div>
-              <div className="invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm] ring-1 ring-zinc-200">
-                <InvoicePreview invoice={invoice} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
-              </div>
-            </div>
-          </div>
-
-          <div className="print-only hidden">
-            <div id="invoice-preview" className="print-area invoice-paper bg-white">
-              <InvoicePreview invoice={invoice} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
+          <div ref={previewFrame} className="invoice-preview-frame overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 xl:max-h-[calc(100vh-7rem)]">
+            <div id="invoice-preview" style={{ zoom: previewScale }} className="print-area invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm]">
+              <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
             </div>
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        returnFocusSelector="#invoice-actions-trigger"
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          deleteInvoice(adapter, invoice.id);
+          window.location.assign("/invoices");
+        }}
+        title={t(language, "invoice.deleteTitle")}
+        description={t(language, "invoice.deleteDescription")}
+        confirmLabel={t(language, "actions.delete")}
+        cancelLabel={t(language, "common.cancel")}
+        warningLabel={t(language, "common.cannotUndo")}
+        variant="danger"
+      />
     </main>
   );
 }

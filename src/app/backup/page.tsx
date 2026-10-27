@@ -46,10 +46,10 @@ export default function BackupPage() {
         return;
       }
       
-      const success = importData(adapter, result);
+      let success = importData(adapter, result);
       if (success) {
         flushPendingPersist();
-        await flushElectronStoreSync();
+        success = await flushElectronStoreSync();
       }
       setImportStatus(success ? "success" : "error");
       

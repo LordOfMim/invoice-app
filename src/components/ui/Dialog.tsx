@@ -7,9 +7,10 @@ type DialogProps = {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  returnFocusSelector?: string;
 };
 
-export function Dialog({ open, onClose, children }: DialogProps) {
+export function Dialog({ open, onClose, children, returnFocusSelector }: DialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const closeDialog = useEffectEvent(() => onClose());
 
@@ -60,9 +61,14 @@ export function Dialog({ open, onClose, children }: DialogProps) {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
+      // An action can open a dialog and close its surrounding disclosure.
+      // Return to that disclosure's visible trigger instead of a hidden button.
+      const returnTarget = (returnFocusSelector ? document.querySelector<HTMLElement>(returnFocusSelector) : null) ?? (previousFocus?.getClientRects().length
+        ? previousFocus
+        : previousFocus?.closest("details:not([open])")?.querySelector<HTMLElement>("summary"));
+      returnTarget?.focus();
     };
-  }, [open]);
+  }, [open, returnFocusSelector]);
 
   if (!open) return null;
 
@@ -142,6 +148,7 @@ type ConfirmDialogProps = {
   cancelLabel?: string;
   warningLabel?: string;
   variant?: "default" | "danger";
+  returnFocusSelector?: string;
 };
 
 export function ConfirmDialog({
@@ -154,9 +161,10 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   warningLabel,
   variant = "default",
+  returnFocusSelector,
 }: ConfirmDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog open={open} onClose={onClose} returnFocusSelector={returnFocusSelector}>
       <DialogHeader title={title} description={description} />
       <DialogBody>
         {variant === "danger" && warningLabel && (

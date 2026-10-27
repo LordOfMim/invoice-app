@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
+import { StorageBoundary } from "@/components/StorageBoundary";
 
 export const metadata: Metadata = {
   title: "Helferlein",
@@ -16,7 +17,7 @@ export default function RootLayout({
     <html lang="de">
       <body className="min-h-dvh antialiased relative">
         <div className="relative z-10">
-          <AppShell>{children}</AppShell>
+          <StorageBoundary><AppShell>{children}</AppShell></StorageBoundary>
         </div>
       </body>
     </html>

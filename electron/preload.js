@@ -7,6 +7,7 @@ let cacheLoaded = false;
 let pendingValue;
 let writeTimer;
 let storageStatus = 'saved';
+let writeGeneration = 0;
 const statusListeners = new Set();
 function setStorageStatus(status) {
   storageStatus = status;
@@ -23,6 +24,7 @@ function flushSync() {
   if (pendingValue === undefined) return true;
   const result = ipcRenderer.sendSync('store-set-sync', APP_DATA_KEY, pendingValue);
   if (!result?.ok) throw new Error(result?.error || 'Failed to save data');
+  writeGeneration++;
   pendingValue = undefined;
   setStorageStatus('saved');
   return true;
@@ -32,11 +34,13 @@ function scheduleWrite() {
   writeTimer = setTimeout(async () => {
     writeTimer = undefined;
     const value = pendingValue;
+    const generation = writeGeneration;
     if (value === undefined) return;
     try {
       await ipcRenderer.invoke('store-set', APP_DATA_KEY, value);
-      if (pendingValue === value) { pendingValue = undefined; setStorageStatus('saved'); }
+      if (generation === writeGeneration && pendingValue === value) { pendingValue = undefined; setStorageStatus('saved'); }
     } catch {
+      if (generation !== writeGeneration) return;
       // Keep the latest snapshot for retry and prevent silent loss on close.
       setStorageStatus('error');
       ipcRenderer.send('storage-write-error');
@@ -87,6 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const result = ipcRenderer.sendSync('store-set-sync', key, value);
       if (!result?.ok) throw new Error(result?.error || 'Failed to write store');
       if (key === APP_DATA_KEY) {
+        writeGeneration++;
         cachedValue = value;
         cacheLoaded = true;
         pendingValue = undefined;
@@ -111,6 +116,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // PDF generation
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
+  saveDocument: (payload) => ipcRenderer.invoke('save-document', payload),
+  exportEInvoice: (payload) => ipcRenderer.invoke('export-einvoice', payload),
 
   // Email with PDF attachment (best-effort; fully supported on macOS Apple Mail)
   emailInvoiceWithPdf: (payload) => ipcRenderer.invoke('email-invoice-with-pdf', payload),

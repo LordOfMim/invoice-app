@@ -16,7 +16,10 @@ async function renderZugferdPdf(d, assetsDir) {
   doc.registerFont('Regular', regular); doc.registerFont('Bold', bold);
   const chunks = [];
   const result = new Promise((resolve, reject) => { doc.on('data', c => chunks.push(c)); doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject); });
-  const money = n => new Intl.NumberFormat('de-DE', { style: 'currency', currency: d.currency }).format(n);
+  const moneyFormatter = new Intl.NumberFormat('de-DE', { style: 'currency', currency: d.currency });
+  const money = n => moneyFormatter.format(n);
+  const decimal = n => String(n).replace('.', ',');
+  const unitLabel = code => ({ C62: 'Stk.', H87: 'Stk.', HUR: 'Std.', DAY: 'Tage', MON: 'Mon.', ANN: 'Jahre', KGM: 'kg', GRM: 'g', MTR: 'm', MTK: 'm²', MTQ: 'm³', KMT: 'km', LTR: 'l', MIN: 'Min.', SEC: 'Sek.' })[code] || code;
   const label = d.presentation.labels;
   const text = (v, x, y, width, options = {}) => doc.text(String(v || ''), x, y, { width, ...options });
   const nextPageIfNeeded = height => { if (doc.y + height > 775) { doc.addPage(); doc.y = 48; } };
@@ -56,7 +59,7 @@ async function renderZugferdPdf(d, assetsDir) {
     if (height > 645) throw new Error(`Position ${l.id}: Beschreibung ist für eine Tabellenzeile zu lang. Bitte in mehrere Positionen aufteilen.`);
     if (doc.y + height > 735) { doc.addPage(); doc.y = 48; header(); doc.font('Regular').fontSize(9); }
     const y = doc.y;
-    text(l.description, 56, y, 225); text(`${l.quantity} ${l.unitCode}`, 286, y, 47, { align: 'right' }); text(money(l.unitPrice), 341, y, 70, { align: 'right' }); text(`${l.taxRate} %`, 419, y, 42, { align: 'right' }); text(money(l.net), 468, y, 72, { align: 'right' });
+    text(l.description, 56, y, 225); text(`${decimal(l.quantity)} ${unitLabel(l.unitCode)}`, 286, y, 47, { align: 'right' }); text(money(l.unitPrice), 341, y, 70, { align: 'right' }); text(`${decimal(l.taxRate)} %`, 419, y, 42, { align: 'right' }); text(money(l.net), 468, y, 72, { align: 'right' });
     doc.moveTo(48, y + height - 6).lineTo(547, y + height - 6).strokeColor('#dfe5e8').stroke(); doc.y = y + height;
   }
   nextPageIfNeeded(Math.min(120, 60 + d.taxes.length * 21)); doc.y += 12;

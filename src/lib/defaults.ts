@@ -157,6 +157,7 @@ export function createInvoiceFromDefaults(settings: AppSettings): Invoice {
     dueDate: today,
 
     sender: { ...settings.defaultSender },
+    einvoice: settings.defaultEInvoice ? structuredClone(settings.defaultEInvoice) : undefined,
     recipient: { name: "", address: "", contact: "" },
 
     lineItems: [createDefaultLineItem(settings.defaultTaxRate)],

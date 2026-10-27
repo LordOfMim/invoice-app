@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
@@ -23,6 +23,27 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 type SortKey = "date" | "number" | "total";
 type FilterKey = "all" | "paid" | "unpaid";
 
+const statusStyles = {
+  draft: "border-zinc-300 bg-zinc-50 text-zinc-700",
+  paid: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  partial: "border-amber-200 bg-amber-50 text-amber-900",
+  overdue: "border-red-200 bg-red-50 text-red-800",
+  open: "border-zinc-200 bg-white text-zinc-700",
+};
+
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatDate(iso: string, locale: string) {
+  const date = new Date(`${iso}T00:00:00`);
+  if (!iso || Number.isNaN(date.getTime())) return iso;
+  let formatter = dateFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
+    dateFormatters.set(locale, formatter);
+  }
+  return formatter.format(date);
+}
+
 export default function InvoicesPage() {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
@@ -30,11 +51,13 @@ export default function InvoicesPage() {
   const currency = data?.settings.currency ?? "EUR";
 
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [filterKey, setFilterKey] = useState<FilterKey>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const invoices = useMemo(() => {
+  const rows = useMemo(() => {
     const all = data?.invoices ?? [];
     const creditNotes = data?.creditNotes ?? [];
     const creditNotesByInvoiceId = new Map<string, typeof creditNotes>();
@@ -45,17 +68,25 @@ export default function InvoicesPage() {
       else creditNotesByInvoiceId.set(creditNote.linkedInvoiceId, [creditNote]);
     }
 
-    const rows = all.map((invoice) => ({
-      invoice,
-      balance: computeInvoiceBalance(invoice, creditNotesByInvoiceId.get(invoice.id) ?? []),
-    }));
+    return all.map((invoice) => {
+      const dateLabel = formatDate(invoice.invoiceDate, locale);
+      return {
+        invoice,
+        dateLabel,
+        searchText: `${invoice.invoiceNumber} ${invoice.recipient.name} ${invoice.invoiceDate} ${dateLabel}`.toLocaleLowerCase(locale),
+        balance: computeInvoiceBalance(invoice, creditNotesByInvoiceId.get(invoice.id) ?? []),
+      };
+    });
+  }, [data?.invoices, data?.creditNotes, locale]);
 
+  const invoices = useMemo(() => {
     const filtered =
       filterKey === "all"
         ? rows
         : rows.filter(({ balance }) => (filterKey === "paid" ? balance.isFullyPaid : !balance.isFullyPaid));
 
-    const searched = filtered.filter(({ invoice }) => `${invoice.invoiceNumber} ${invoice.recipient.name} ${invoice.invoiceDate}`.toLocaleLowerCase(locale).includes(query.trim().toLocaleLowerCase(locale)));
+    const normalizedQuery = deferredQuery.trim().toLocaleLowerCase(locale);
+    const searched = filtered.filter(({ searchText }) => !normalizedQuery || searchText.includes(normalizedQuery));
 
     const sorted = searched.sort((a, b) => {
       if (sortKey === "number") {
@@ -66,7 +97,11 @@ export default function InvoicesPage() {
     });
 
     return sorted;
-  }, [data?.creditNotes, data?.invoices, filterKey, sortKey, query, locale]);
+  }, [rows, filterKey, sortKey, deferredQuery, locale]);
+
+  const pageCount = Math.max(1, Math.ceil(invoices.length / 50));
+  const currentPage = Math.min(page, pageCount);
+  const visibleInvoices = invoices.slice((currentPage - 1) * 50, currentPage * 50);
 
   return (
     <main className="p-6 lg:p-8">
@@ -90,9 +125,9 @@ export default function InvoicesPage() {
           />
 
           <div className="no-print flex flex-wrap items-end gap-3">
-            <div className="min-w-56 flex-1"><Field label={language === "de" ? "Rechnung suchen" : "Search invoices"}><Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={language === "de" ? "Nummer, Kunde oder Datum" : "Number, customer or date"} /></Field></div>
+            <div className="min-w-56 flex-1"><Field label={language === "de" ? "Rechnung suchen" : "Search invoices"}><Input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={language === "de" ? "Nummer, Kunde oder Datum" : "Number, customer or date"} /></Field></div>
             <div className="w-48"><Field label={language === "de" ? "Sortieren nach" : "Sort by"}>
-              <Select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+              <Select value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1); }}>
                 <option value="date">{t(language, "sort.date")}</option>
                 <option value="number">{t(language, "sort.number")}</option>
                 <option value="total">{t(language, "sort.total")}</option>
@@ -100,16 +135,18 @@ export default function InvoicesPage() {
             </div>
 
             <div className="w-48">
-              <Field label={language === "de" ? "Zahlungsstatus" : "Payment status"}><Select value={filterKey} onChange={(e) => setFilterKey(e.target.value as FilterKey)}>
+              <Field label={language === "de" ? "Zahlungsstatus" : "Payment status"}><Select value={filterKey} onChange={(e) => { setFilterKey(e.target.value as FilterKey); setPage(1); }}>
                 <option value="all">{t(language, "filters.all")}</option>
                 <option value="paid">{t(language, "filters.paid")}</option>
                 <option value="unpaid">{t(language, "filters.unpaid")}</option>
               </Select></Field>
             </div>
-            {(query || filterKey !== "all") && <Button onClick={() => { setQuery(""); setFilterKey("all"); }}>{language === "de" ? "Filter zurücksetzen" : "Reset filters"}</Button>}
+            {(query || filterKey !== "all") && <Button onClick={() => { setQuery(""); setFilterKey("all"); setPage(1); }}>{language === "de" ? "Filter zurücksetzen" : "Reset filters"}</Button>}
           </div>
 
-          <p className="text-sm text-(--color-ink-subtle)" role="status">{invoices.length} {language === "de" ? "Rechnungen angezeigt" : "invoices shown"}</p>
+          <p className="text-sm text-(--color-ink-subtle)" role="status">
+            {invoices.length} {language === "de" ? (invoices.length === 1 ? "Rechnung angezeigt" : "Rechnungen angezeigt") : (invoices.length === 1 ? "invoice shown" : "invoices shown")}
+          </p>
           <div className="space-y-2">
             {invoices.length === 0 ? (
               <Surface variant="solid" padding="lg">
@@ -137,59 +174,70 @@ export default function InvoicesPage() {
               </Surface>
             ) : null}
 
-            {invoices.map(({ invoice: inv, balance }) => {
+            {visibleInvoices.map(({ invoice: inv, balance, dateLabel }) => {
               const isDefault = (data?.settings.defaultInvoiceId ?? null) === inv.id;
-              
+              // A blank, unnumbered invoice has nothing to pay yet; show it as a draft
+              // instead of the technically "fully paid" zero balance.
+              const isDraft = !inv.invoiceNumber && balance.invoiceTotal === 0;
+              const status: keyof typeof statusStyles = isDraft ? "draft"
+                : balance.isFullyPaid ? "paid"
+                : balance.isPartiallyPaid ? "partial"
+                : balance.isOverdue ? "overdue"
+                : "open";
+              const statusLabel = {
+                draft: language === "de" ? "Entwurf" : "Draft",
+                paid: t(language, "invoice.paid"),
+                partial: t(language, "invoice.partiallyPaid"),
+                overdue: t(language, "invoice.overdue"),
+                open: t(language, "invoices.unpaid"),
+              }[status];
+              const title = inv.invoiceNumber || (language === "de" ? "Ohne Rechnungsnummer" : "No invoice number");
+
               return (
                 <Surface
                   key={inv.id}
                   variant="solid"
                   padding="md"
-                  className="flex flex-wrap items-center justify-between gap-4"
+                  className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4"
                 >
-                  <div className="min-w-60">
-                    <div className="flex items-center gap-2">
-                      <Link 
-                        href={`/invoices/${inv.id}`} 
-                        className="text-base font-semibold text-[var(--color-ink)] hover:text-[var(--color-accent)] transition-colors"
+                  <div className="min-w-60 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/invoices/${inv.id}`}
+                        className="text-lg font-semibold text-(--color-ink) underline-offset-4 hover:text-(--color-accent) hover:underline"
                       >
-                        {inv.invoiceNumber || "(ohne Nummer)"}
+                        {title}
                       </Link>
+                      <span className={`rounded-full border px-2.5 py-0.5 text-sm font-medium ${statusStyles[status]}`}>{statusLabel}</span>
                       {isDefault && <Badge>{t(language, "invoice.default")}</Badge>}
-                      {balance.isFullyPaid ? (
-                        <Badge variant="success">{t(language, "invoice.paid")}</Badge>
-                      ) : balance.isPartiallyPaid ? (
-                        <Badge variant="warning">{t(language, "invoice.partiallyPaid")}</Badge>
-                      ) : null}
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm text-[var(--color-ink-subtle)]">
-                      <span>{inv.invoiceDate}</span>
-                      <span>·</span>
-                      <span className="font-medium text-[var(--color-ink-muted)]">
-                        {formatMoney(balance.effectiveTotal, inv.currency ?? currency, locale)}
-                      </span>
-                      {inv.recipient.name && (
-                        <>
-                          <span>·</span>
-                          <span>{inv.recipient.name}</span>
-                        </>
-                      )}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-(--color-ink-muted)">
+                      <span>{inv.recipient.name || (language === "de" ? "Kein Empfänger eingetragen" : "No recipient yet")}</span>
+                      {inv.invoiceDate && <><span aria-hidden="true">·</span><span>{dateLabel}</span></>}
                     </div>
                   </div>
 
-                  <div className="no-print flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (!adapter) return;
-                        togglePaid(adapter, inv.id);
-                      }}
-                    >
-                      {balance.isFullyPaid ? t(language, "actions.markUnpaid") : t(language, "actions.markPaid")}
-                    </Button>
+                  <div className="text-right text-lg font-semibold tabular-nums text-(--color-ink)">
+                    {formatMoney(balance.effectiveTotal, inv.currency ?? currency, locale)}
+                  </div>
+
+                  <div className="no-print flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                    {!isDraft && (
+                      <Button
+                        size="sm"
+                        aria-label={`${balance.isFullyPaid ? t(language, "actions.markUnpaid") : t(language, "actions.markPaid")}: ${title}`}
+                        onClick={() => {
+                          if (!adapter) return;
+                          togglePaid(adapter, inv.id);
+                        }}
+                      >
+                        {balance.isFullyPaid ? t(language, "actions.markUnpaid") : t(language, "actions.markPaid")}
+                      </Button>
+                    )}
 
                     <Button
                       size="sm"
+                      aria-label={`${t(language, "actions.duplicate")}: ${title}`}
                       onClick={() => {
                         if (!adapter) return;
                         const dup = duplicateInvoiceById(adapter, inv.id);
@@ -202,6 +250,7 @@ export default function InvoicesPage() {
                     <Button
                       size="sm"
                       variant="danger"
+                      aria-label={`${t(language, "actions.delete")}: ${title}`}
                       onClick={() => setDeleteConfirm(inv.id)}
                     >
                       {t(language, "actions.delete")}
@@ -211,6 +260,11 @@ export default function InvoicesPage() {
               );
             })}
           </div>
+          {pageCount > 1 && <nav aria-label={language === "de" ? "Rechnungsseiten" : "Invoice pages"} className="flex flex-wrap items-center justify-between gap-3">
+            <Button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>{language === "de" ? "Vorherige Seite" : "Previous page"}</Button>
+            <span className="text-base">{language === "de" ? `Seite ${currentPage} von ${pageCount}` : `Page ${currentPage} of ${pageCount}`}</span>
+            <Button disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>{language === "de" ? "Nächste Seite" : "Next page"}</Button>
+          </nav>}
         </Stack>
       </div>
 

@@ -333,6 +333,7 @@ export type AppSettings = {
   defaultTaxRate?: number;
 
   defaultSender: PartyDetails;
+  defaultEInvoice?: EInvoiceDetails;
   defaultFooterText: string;
 
   defaultTemplateId: InvoiceTemplateId;

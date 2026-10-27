@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { Invoice, InvoiceLineItem, LogoPosition, LogoSize, TemplateCustomization } from "@/lib/domain";
-import { computeInvoiceTotals, computeLineTotal } from "@/lib/calc";
-import { formatMoney } from "@/lib/money";
+import { computeInvoiceTotals, computeLineTotal, formatTaxPercent } from "@/lib/calc";
+import { formatMoney, formatQuantity } from "@/lib/money";
 
 export function Logo({ dataUrl, position, size = "medium" }: { dataUrl: string; position: LogoPosition; size?: LogoSize }) {
   const justify: Record<LogoPosition, string> = {
@@ -200,14 +200,14 @@ function renderLineItemRow(
       </td>
       {columns.showQuantity && (
         <td className={`${paddingClass} pr-2 text-right tabular-nums`}>
-          {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+          {formatQuantity(item.quantity, locale)}{item.unit ? ` ${item.unit}` : ""}
         </td>
       )}
       {columns.showUnitPrice && (
         <td className={`${paddingClass} pr-2 text-right tabular-nums`}>{formatMoney(item.unitPrice, currency, locale)}</td>
       )}
       {columns.showTax && (
-        <td className={`${paddingClass} pr-2 text-right tabular-nums`}>{item.taxRate ? `${Math.round(item.taxRate * 100)}%` : ""}</td>
+        <td className={`${paddingClass} pr-2 text-right tabular-nums`}>{item.taxRate ? `${formatTaxPercent(item.taxRate).replace(".", locale.startsWith("de") ? "," : ".")}%` : ""}</td>
       )}
       <td className={`${paddingClass} text-right tabular-nums`}>{formatMoney(totals.net + totals.tax, currency, locale)}</td>
     </tr>

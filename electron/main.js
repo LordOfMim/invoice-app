@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
-const { spawn, execSync, execFile } = require('child_process');
+const { spawn, execFile, fork } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 
@@ -88,6 +88,57 @@ function openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath 
 // electron-store is ESM, need dynamic import
 let store;
 let nextServer = null;
+const exportWorkers = new Set();
+
+function stopExportWorker(worker) {
+  if (!worker.pid) return;
+  try {
+    if (process.platform === 'win32') execFile('taskkill', ['/pid', String(worker.pid), '/T', '/F'], () => {});
+    else process.kill(-worker.pid, 'SIGTERM');
+  } catch { worker.kill(); }
+}
+
+// Keep the encrypted bytes before this version can normalize or migrate data.
+// Publish only a complete copy, with an exclusive link so older backups survive.
+function backupStoreBeforeUpgrade() {
+  const directory = app.getPath('userData');
+  const storePath = path.join(directory, `${STORE_NAME}.json`);
+  try {
+    if (!fs.statSync(storePath).isFile()) throw new Error('Existing data path is not a regular file');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  const version = String(app.getVersion()).replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 80);
+  if (!version) throw new Error('Cannot determine version for data backup');
+  const backupPath = path.join(directory, `${STORE_NAME}.before-${version}.json`);
+  function existingBackup() {
+    try {
+      if (!fs.lstatSync(backupPath).isFile()) throw new Error('Upgrade backup path is not a regular file');
+      return true;
+    } catch (error) {
+      if (error.code === 'ENOENT') return false;
+      throw error;
+    }
+  }
+  if (existingBackup()) return backupPath;
+  const temporary = `${backupPath}.${require('crypto').randomUUID()}.tmp`;
+  try {
+    fs.copyFileSync(storePath, temporary, fs.constants.COPYFILE_EXCL);
+    const descriptor = fs.openSync(temporary, 'r');
+    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    try {
+      fs.linkSync(temporary, backupPath);
+    } catch (error) {
+      if (error.code !== 'EEXIST' || !existingBackup()) throw error;
+    }
+    return backupPath;
+  } catch (error) {
+    throw new Error(`Die Sicherung vor dem Upgrade konnte nicht erstellt werden. Originaldaten bleiben unverändert: ${storePath}. ${String(error)}`);
+  } finally {
+    try { fs.unlinkSync(temporary); } catch {}
+  }
+}
 
 async function initStore() {
   const Store = (await import('electron-store')).default;
@@ -99,6 +150,8 @@ async function initStore() {
     }
   };
 
+  // Fail closed before electron-store can write defaults or migrated data.
+  backupStoreBeforeUpgrade();
   try {
     store = new Store(options);
   } catch (error) {
@@ -145,57 +198,55 @@ function log(...args) {
   } catch {}
 }
 
-// Check if Node.js is installed
-function isNodeInstalled() {
-  try {
-    execSync('node --version', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Show error dialog
-function showNodeRequiredError() {
-  dialog.showMessageBoxSync({
-    type: 'error',
-    title: 'Node.js Required',
-    message: 'Node.js is required to run this application.',
-    detail: 'Please install Node.js from https://nodejs.org and restart the application.\n\nRecommended: Download the LTS version.',
-    buttons: ['OK']
-  });
-  app.quit();
-}
-
 // Check if server is ready
-function waitForServer(url, timeout = 90000) {
+function waitForServer(url, timeout = 90000, { signal, requestTimeout = 5000, retryDelay = 500 } = {}) {
   return new Promise((resolve, reject) => {
-    const startTime = Date.now();
-    let lastError = null;
-    const check = () => {
-      http.get(url, (res) => {
-        // Treat any non-5xx response as "server is up".
-        // (Next may redirect or return 404 for some paths.)
-        const status = res.statusCode || 0;
-        res.resume();
-        if (status > 0 && status < 500) {
-          resolve();
-        } else {
-          retry();
-        }
-      }).on('error', (err) => {
-        lastError = err;
-        retry();
-      });
-    };
-    const retry = () => {
-      if (Date.now() - startTime > timeout) {
-        reject(lastError || new Error('Timeout waiting for server'));
-      } else {
-        setTimeout(check, 500);
-      }
-    };
-    check();
+    let settled = false;
+    let activeRequest;
+    let retryTimer;
+    function discardRequest() {
+      const request = activeRequest;
+      activeRequest = undefined;
+      request?.destroy();
+    }
+    function finish(error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadlineTimer);
+      clearTimeout(retryTimer);
+      signal?.removeEventListener('abort', abort);
+      discardRequest();
+      error ? reject(error) : resolve();
+    }
+    function abort() { finish(new Error('Local server startup canceled')); }
+    const deadlineTimer = setTimeout(() => finish(new Error('Timeout waiting for server')), timeout);
+    function retry() {
+      if (settled || retryTimer !== undefined) return;
+      discardRequest();
+      retryTimer = setTimeout(() => { retryTimer = undefined; check(); }, retryDelay);
+    }
+    function check() {
+      if (settled) return;
+      try {
+        const request = http.get(url, (response) => {
+          response.on('error', () => { if (activeRequest === request) retry(); });
+          response.resume();
+          if (settled || activeRequest !== request) { response.destroy(); return; }
+          const status = response.statusCode || 0;
+          if (status > 0 && status < 500) finish();
+          else retry();
+        });
+        activeRequest = request;
+        request.setTimeout(requestTimeout, () => {
+          if (activeRequest === request) request.destroy(new Error('Local server request timed out'));
+        });
+        request.on('error', () => { if (activeRequest === request) retry(); });
+        request.on('close', () => { if (activeRequest === request) retry(); });
+      } catch { retry(); }
+    }
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    else check();
   });
 }
 
@@ -214,8 +265,9 @@ function findAvailablePort(host) {
   });
 }
 
-async function startNextServer() {
-  if (isDev || (nextServer && nextServer.exitCode === null)) return; // Reuse server when reopening on macOS
+async function startNextServer(signal) {
+  if (isDev) return;
+  if (nextServer && nextServer.exitCode === null) return waitForServer(appOrigin, 90000, { signal }); // Reuse and check readiness on macOS
 
   // In packaged builds, prefer Electron's embedded Node mode so the app
   // does not depend on an external Node.js installation.
@@ -298,7 +350,7 @@ async function startNextServer() {
 
       // Wait for server to be ready
       log('Waiting for Next.js server on', appOrigin);
-      await waitForServer(appOrigin);
+      await waitForServer(appOrigin, 90000, { signal });
       log('Next.js server ready!');
     } catch (err) {
       log('Error starting Next.js server:', err);
@@ -322,7 +374,8 @@ async function createWindow() {
 
   const bounds = store?.get('windowBounds') || { width: 1400, height: 900 };
 
-  mainWindow = new BrowserWindow({
+  const startupController = new AbortController();
+  const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
     x: bounds.x,
@@ -339,28 +392,35 @@ async function createWindow() {
     icon: path.join(__dirname, '../public/icon.png')
   });
 
+  mainWindow = win;
+
+  function showError(message) {
+    if (win.isDestroyed()) return;
+    win.loadFile(path.join(__dirname, 'server-error.html'), { query: { message } })
+      .catch((error) => { if (!win.isDestroyed()) log('Failed to show server error', String(error)); });
+  }
+
   // Show loading screen instantly
-  mainWindow.loadFile(path.join(__dirname, 'loading.html'));
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  win.loadFile(path.join(__dirname, 'loading.html')).catch((error) => {
+    if (!win.isDestroyed()) log('Failed to load loading screen', String(error));
+  });
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
   });
 
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  win.webContents.on('will-navigate', (event, url) => {
     try { if (new URL(url).origin !== appOrigin) event.preventDefault(); } catch { event.preventDefault(); }
   });
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    if (win.isDestroyed() || errorCode === -3) return;
     log('did-fail-load', { errorCode, errorDescription, validatedURL });
-    try {
-      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-        query: { message: `Failed to load: ${validatedURL} (${errorCode}) ${errorDescription}` }
-      });
-    } catch (e) {
-      log('Failed to show server-error.html after did-fail-load', e);
-    }
+    // Do not recursively reload an error page that itself failed to load.
+    if (validatedURL.startsWith('file:')) return;
+    showError(`Failed to load: ${validatedURL} (${errorCode}) ${errorDescription}`);
   });
 
-  mainWindow.webContents.on('render-process-gone', (event, details) => {
+  win.webContents.on('render-process-gone', (event, details) => {
     log('render-process-gone', details);
   });
 
@@ -370,44 +430,43 @@ async function createWindow() {
     if (!isDev) {
       try {
         log('Starting Next.js server...');
-        await startNextServer();
+        await startNextServer(startupController.signal);
       } catch (err) {
         log('Server failed to start:', err);
         serverError = err;
       }
     }
+    if (win.isDestroyed() || startupController.signal.aborted) return;
     const url = appOrigin;
     if (!serverError) {
-      // Try to load the app
-      mainWindow.loadURL(url).catch((err) => {
-        log('Failed to load app URL:', err);
-        mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-          query: { message: `Failed to load URL: ${url}. ${String(err)}` }
-        });
+      win.loadURL(url).catch((error) => {
+        if (win.isDestroyed() || startupController.signal.aborted) return;
+        log('Failed to load app URL:', String(error));
+        showError(`Failed to load URL: ${url}. ${String(error)}`);
       });
     } else {
-      // Show error screen
-      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-        query: { message: String(serverError) }
-      });
+      showError(String(serverError));
     }
-    if (isDev) {
-      mainWindow.webContents.openDevTools();
-    }
-  })();
+    if (isDev && !win.isDestroyed()) win.webContents.openDevTools();
+  })().catch((error) => {
+    if (!win.isDestroyed()) { log('Window startup failed:', String(error)); showError(String(error)); }
+  });
 
-  mainWindow.on('close', () => {
-    if (store) {
-      const bounds = mainWindow.getBounds();
-      store.set('windowBounds', bounds);
+  win.on('close', () => {
+    try {
+      if (store && !win.isDestroyed()) store.set('windowBounds', win.getBounds());
+    } catch (error) {
+      // Geometry is optional. A disk error must not interrupt beforeunload's data flush.
+      log('Could not save window bounds:', String(error));
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  win.on('closed', () => {
+    startupController.abort();
+    if (mainWindow === win) mainWindow = null;
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url);
       if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
@@ -427,7 +486,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+    if (mainWindow && !mainWindow.isDestroyed()) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+    else void createWindow().catch((error) => log('Failed to reopen window:', String(error)));
   });
   app.whenReady().then(() => {
     if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -456,6 +516,7 @@ app.on('will-quit', () => {
   if (nextServer) {
     nextServer.kill();
   }
+  for (const worker of exportWorkers) stopExportWorker(worker);
 });
 
 function isTrustedSender(event, { allowFile = false } = {}) {
@@ -546,6 +607,80 @@ ipcMain.handle('get-app-info', (event) => {
   };
 });
 
+function safeDocumentFilename(value, extension) {
+  const name = String(value || 'Rechnung').replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').replace(/^\.+/, '').trim().slice(0, 160) || 'Rechnung';
+  return name.toLowerCase().endsWith(`.${extension}`) ? name : `${name}.${extension}`;
+}
+
+async function saveDocument(win, filename, bytes, extension) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: safeDocumentFilename(filename, extension),
+    filters: [{ name: extension === 'pdf' ? 'PDF-Dokument' : 'XML-Rechnung', extensions: [extension] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  const temporary = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${require('crypto').randomUUID()}.tmp`);
+  try {
+    await fs.promises.writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+    await fs.promises.rename(temporary, filePath);
+    return { ok: true };
+  } finally {
+    await fs.promises.rm(temporary, { force: true }).catch(() => {});
+  }
+}
+
+ipcMain.handle('save-document', async (event, payload) => {
+  ensureTrustedSender(event);
+  try {
+    const bytes = Buffer.from(payload?.bytes ?? []);
+    if (!bytes.length || bytes.length > 100 * 1024 * 1024 || bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('Ungültige PDF-Datei.');
+    return await saveDocument(BrowserWindow.fromWebContents(event.sender), payload.filename, bytes, 'pdf');
+  } catch (error) { return { ok: false, error: error.message }; }
+});
+
+let eInvoiceExportRunning = false;
+ipcMain.handle('export-einvoice', async (event, payload) => {
+  ensureTrustedSender(event);
+  if (eInvoiceExportRunning) return { ok: false, error: 'Es wird bereits eine E-Rechnung erstellt. Bitte warten.' };
+  if (!['zugferd', 'xrechnung'].includes(payload?.format)) return { ok: false, error: 'Unbekanntes Rechnungsformat.' };
+  eInvoiceExportRunning = true;
+  try {
+    if (!payload.document || Buffer.byteLength(JSON.stringify(payload.document)) > 20 * 1024 * 1024) throw new Error('Die E-Rechnungsdaten sind zu groß oder unvollständig.');
+    const result = await new Promise((resolve, reject) => {
+      const worker = fork(path.join(__dirname, 'einvoice-worker.cjs'), [], {
+        execPath: process.execPath,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        serialization: 'advanced',
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      });
+      exportWorkers.add(worker);
+      let settled = false;
+      function finish(error, message) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        error ? reject(error) : resolve(message);
+      }
+      const timeout = setTimeout(() => { stopExportWorker(worker); finish(new Error('Die Prüfung hat das Zeitlimit überschritten. Bitte erneut versuchen.')); }, 120000);
+      worker.once('message', (message) => finish(message.ok ? null : new Error(message.error), message));
+      worker.once('error', (error) => finish(error));
+      worker.once('exit', () => {
+        exportWorkers.delete(worker);
+        finish(new Error('Die E-Rechnungsprüfung wurde unterbrochen.'));
+      });
+      worker.send({
+        format: payload.format,
+        document: payload.document,
+        runtimeDir: app.isPackaged ? path.join(process.resourcesPath, 'einvoice-runtime') : path.join(__dirname, 'einvoice-runtime'),
+        assetsDir: app.isPackaged ? path.join(process.resourcesPath, 'einvoice-assets') : path.join(__dirname, 'einvoice-assets'),
+      });
+    });
+    const filename = `${payload.document?.number || 'Rechnung'}-${payload.format}`;
+    return await saveDocument(BrowserWindow.fromWebContents(event.sender), filename, Buffer.from(result.bytes), result.extension);
+  } catch (error) { return { ok: false, error: error.message || 'Export fehlgeschlagen.' }; }
+  finally { eInvoiceExportRunning = false; }
+});
+
 ipcMain.handle('print-to-pdf', async (event, options) => {
   ensureTrustedSender(event);
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -574,9 +709,7 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
   const subject = payload?.subject ?? "";
   const body = payload?.body ?? "";
   const requestedFilename = payload?.filename ?? "Invoice.pdf";
-  const filename = String(requestedFilename).toLowerCase().endsWith('.pdf')
-    ? String(requestedFilename)
-    : `${requestedFilename}.pdf`;
+  const filename = safeDocumentFilename(requestedFilename, 'pdf');
 
   try {
     const pdfData = await win.webContents.printToPDF({

@@ -54,3 +54,35 @@ test('backup failure aborts import without replacing primary data', () => {
   assert.equal(store.importData(storage, JSON.stringify({ schemaVersion: 1, settings: {}, invoices: [] })), false);
   assert.equal(storage.values.get(key), 'original');
 });
+
+test('legacy invoices retain IDs, money, payments, logo, attachments and layout through import and export', () => {
+  store.clearDataCache();
+  const legacyInvoice = {
+    schemaVersion: 1, id: 'father-invoice-001', invoiceNumber: 'RE-2025-017',
+    invoiceDate: '2025-12-30', dueDate: '2026-01-15', currency: 'EUR', paid: true,
+    sender: { name: 'Musterbetrieb', address: 'Straße 1\n12345 Musterstadt', contact: 'Kontakt' },
+    recipient: { name: 'Kunde ÄÖÜ', address: 'Weg 2', contact: 'Altbestand' },
+    lineItems: [{ id: 'existing-line', type: 'item', description: 'Montage\nund Wartung', quantity: 1.5, unitPrice: 123.45, taxRate: 0.19 }],
+    payments: [{ id: 'paid-1', amount: 100, date: '2026-01-02', reference: 'Altzahlung' }],
+    attachments: [{ id: 'old-attachment', name: 'Anlage.pdf', type: 'application/pdf', size: 7, dataUrl: 'data:application/pdf;base64,JVBERg==', createdAt: '2025-12-30T10:00:00Z' }],
+    logoDataUrl: 'data:image/png;base64,bG9nbw==', footerText: 'Bisherige Fußzeile', notesText: 'Hinweis ÄÖÜ',
+    layout: { templateId: 'modern', showLogo: true, showFooter: true, logoPosition: 'right', senderPosition: 'left', recipientPosition: 'right' },
+    futureOptionalData: { preserved: true },
+    createdAt: '2025-12-30T10:00:00Z', updatedAt: '2026-01-02T10:00:00Z',
+  };
+  const original = JSON.stringify({ schemaVersion: 1, settings: { language: 'de', defaultSender: legacyInvoice.sender }, invoices: [legacyInvoice], futureCollection: ['keep'] });
+  const storage = adapter();
+  assert.equal(store.importData(storage, original), true);
+  const roundTrip = JSON.parse(store.exportData(storage));
+  const actual = roundTrip.invoices[0];
+  for (const key of ['id', 'invoiceNumber', 'currency', 'paid', 'logoDataUrl', 'footerText', 'notesText', 'createdAt', 'updatedAt']) assert.equal(actual[key], legacyInvoice[key], key);
+  assert.equal(actual.lineItems[0].id, 'existing-line');
+  assert.equal(actual.lineItems[0].quantity, 1.5);
+  assert.equal(actual.lineItems[0].unitPrice, 123.45);
+  assert.equal(actual.payments[0].reference, 'Altzahlung');
+  assert.deepEqual(actual.attachments, legacyInvoice.attachments);
+  assert.equal(actual.layout.templateId, 'modern');
+  assert.equal(actual.layout.logoPosition, 'right');
+  assert.deepEqual(actual.futureOptionalData, { preserved: true });
+  assert.deepEqual(roundTrip.futureCollection, ['keep']);
+});

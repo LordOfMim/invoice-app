@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StorageStatus } from "@/components/StorageStatus";
 import { usePathname } from "next/navigation";
 import { t } from "@/lib/i18n";
 import { usePersistedSettings } from "@/lib/storage/useStore";
@@ -43,9 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </a>
       <header className="app-topbar no-print">
         <Link href="/" className="text-lg font-semibold tracking-tight">Helferlein</Link>
-        <span className="text-sm text-(--color-ink-subtle)">
-          {t(language, "common.localFirst")}
-        </span>
+        <StorageStatus />
       </header>
       <aside className="app-navigation no-print">
         <nav
@@ -56,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <details
             key={pathname}
             open={secondary.some(([href]) => isActive(href)) || undefined}
-            className="pt-5"
+            className="disclosure pt-5"
           >
             <summary className="navigation-link cursor-pointer text-(--color-ink-muted)">
               {language === "de" ? "Weitere Funktionen" : "More features"}

@@ -5,6 +5,13 @@ export function PrintStyles() {
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   body { background: white !important; }
+  .invoice-preview-frame {
+    overflow: visible !important;
+    max-height: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
   
   /* Print ONLY the invoice content */
   body * { visibility: hidden !important; }
@@ -17,6 +24,7 @@ export function PrintStyles() {
   }
   
   .invoice-paper {
+    zoom: 1 !important;
     width: auto !important;
     min-height: 0 !important;
     height: auto !important;

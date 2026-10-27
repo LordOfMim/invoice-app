@@ -4,6 +4,7 @@ import { Children, cloneElement, isValidElement, useId, type ReactNode, type Rea
 import { Input } from "./Input";
 import { Select } from "./Select";
 import { Textarea } from "./Textarea";
+import { DecimalInput } from "./DecimalInput";
 
 type FieldProps = {
   label: string;
@@ -24,7 +25,7 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
   const child = Children.count(children) === 1 && isValidElement(children) ? children : null;
   const isControl = child && (
     child.type === "input" || child.type === "select" || child.type === "textarea" ||
-    child.type === Input || child.type === Select || child.type === Textarea
+    child.type === Input || child.type === Select || child.type === Textarea || child.type === DecimalInput
   );
   const control = isControl ? child as ReactElement<ControlProps> : null;
   const controlId = control?.props.id ?? id;

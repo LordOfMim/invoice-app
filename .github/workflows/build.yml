@@ -1,103 +1,87 @@
-name: Build Electron App
+name: Verify and build Helferlein
 
 on:
   push:
     branches: [main, master]
-    tags:
-      - 'v*'
+    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run einvoice:prepare
+      - run: npm run check
+        env:
+          EINVOICE_REQUIRE_INTEGRATION: '1'
+      - run: npm run build:app
+
   build:
+    needs: verify
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: win
-          - os: macos-latest
+            arch: x64
+          - os: macos-15-intel
             platform: mac
-
+            arch: x64
+          - os: macos-15
+            platform: mac
+            arch: arm64
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify runtime storage
-        run: node --test tests/runtime/*.test.cjs
-
-      - name: Build Electron (Windows)
-        if: matrix.platform == 'win'
-        run: npm run electron:build:win -- --publish never
+          cache: npm
+      - run: npm ci
+      - name: Build app and matching offline validator
+        run: npm run electron:build:${{ matrix.platform }} -- --${{ matrix.arch }} --publish never
+      - name: Verify installed app resources with bundled Electron and Java
+        run: node scripts/smoke-packaged.mjs
+      - name: Verify source regression suite
+        run: npm test
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Electron (Mac)
-        if: matrix.platform == 'mac'
-        run: npm run electron:build:mac -- --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows artifacts
-        if: matrix.platform == 'win'
-        uses: actions/upload-artifact@v4
+          EINVOICE_REQUIRE_INTEGRATION: '1'
+      - uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: |
-            dist-electron/*.exe
-            dist-electron/*.exe.blockmap
-          retention-days: 30
-          if-no-files-found: error
-
-      - name: Upload Mac artifacts
-        if: matrix.platform == 'mac'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-build
+          name: helferlein-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             dist-electron/*.dmg
-            dist-electron/*.dmg.blockmap
-          retention-days: 30
+            dist-electron/*.exe
+            dist-electron/*.blockmap
           if-no-files-found: error
+          retention-days: 30
 
   release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
     steps:
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: windows-build
+          pattern: helferlein-*
+          merge-multiple: true
           path: dist
-
-      - name: Download Mac artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: mac-build
-          path: dist
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           draft: true
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

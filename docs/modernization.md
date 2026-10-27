@@ -1,0 +1,25 @@
+# Modernisierung von Helferlein
+
+Ausgangspunkt ist `main` mit Commit `ae06259`. Die Umsetzung priorisiert die tägliche Arbeit eines einzelnen Mac-Nutzers: vorhandene Rechnungen wiederfinden, Kunde und Positionen ergänzen, Ergebnis prüfen und speichern. Werknetz und das aktuelle Humaify-Overwatch-Design liefern das visuelle Muster; Markenembleme werden nicht übernommen.
+
+## Umgesetzt
+
+- Statische Oberfläche mit Systemschrift, klarer Hauptnavigation und größeren beschrifteten Feldern. Keine permanenten WebGL-Hintergründe, Glasfilter oder Font-Downloads. Selten benötigte Funktionen bleiben erreichbar.
+- Suche und Filter in der Rechnungsliste; höchstens 50 Rechnungen werden gleichzeitig dargestellt. Zahlungsberechnungen werden unabhängig von Suchtexteingaben zwischengespeichert.
+- Ein einzelner, an die verfügbare Breite angepasster Rechnungs-Preview statt doppeltem Dokumentbaum. Die Vorschau kann Eingaben nachgeordnet rendern; der PDF-Export wartet auf den aktuellen Stand und geladene Schriften.
+- Desktop-Änderungen werden im Preload gepuffert und spätestens nach 250 ms geschrieben. Lesen und Tippen lösen keine synchronen Datenträgeraufrufe pro Feld mehr aus. Der letzte Stand wird beim normalen Schließen synchron gesichert; Speicherfehler bleiben sichtbar und verhindern das unbeabsichtigte Schließen.
+- Vorhandener Desktop-Datenpfad und Schlüssel bleiben bestehen. Browser-Altdaten werden nur bei fehlendem Desktop-Key übernommen. Vor der ersten Initialisierung einer neuen Version wird auch die unveränderte verschlüsselte Datei einmalig gesichert. Importe legen eine zusätzliche Recovery-Kopie an; unbekannte oder beschädigte Daten stoppen die Initialisierung.
+- Normale PDFs lassen sich direkt speichern. Zusätzlich gibt es ZUGFeRD-PDF/A-3b mit eingebettetem XML und eigenständige XRechnung-CII. Eine lokale Prüfung muss erfolgreich sein, bevor eine Datei gespeichert werden kann. PDF-Erstellung und Prüfung laufen in einem eigenen Prozess.
+- Abhängigkeiten sind mit Lockfile und direkten Versionspins reproduzierbar. Electron 43 erhält die bisherige macOS-12-Unterstützung. Die CI prüft und baut getrennte Intel-/ARM-Mac-Pakete und Windows x64. Dependabot schlägt Aktualisierungen per PR vor; Hauptversionen brauchen eine bewusste Kompatibilitätsprüfung.
+
+## Verifikation und Grenzen
+
+Speichertests decken beschädigte Daten, additive Altdatenmigration, Sicherung vor Import, absichtlich leeren Desktopbestand, sofortiges Schließen während des Tippens und Speicherfehler ab. Exporttests prüfen echte XML- und PDF-Dateien mit dem gepinnten Mustang-/veraPDF-Paket, mehrere Steuersätze, Steuerbefreiung, lange Tabellen und einen semantischen Ablehnungsfall. Die separate KoSIT-Prüfung ist in `einvoice.md` dokumentiert.
+
+Die neue Oberfläche wurde im lokalen Browser kontrolliert, einschließlich Kommaeingabe, gespeicherter Werte nach Reload, E-Rechnungsfehlern, Aktionsmenü und Bestätigungsdialog. Eine separate Claude-Code-Sitzung über das vorhandene Team-Abo hat die UI geprüft und poliert; anschließend wurden deren Änderungen erneut geprüft und gefundene Bedienfehler korrigiert. Typprüfung, ESLint, 38 Tests und Produktions-Build sind erfolgreich. Ein Linux-x64-Paket hat zusätzlich echte XML-/PDF-Exporte sowie den eingebauten Next-Server und dessen CSS mit dem gebündelten Electron/Java bestanden. Doppelte Frontend-Laufzeitpakete werden aus dem Hauptpaket entfernt; der vollständige Next-Standalone-Server bleibt enthalten.
+
+Noch erforderlich vor Installation auf dem produktiven Mac: signierte und notarisierte Pakete, Gatekeeper-Test, native Prüfung auf Intel und Apple Silicon sowie ein Upgrade mit einer Kopie des tatsächlich vorhandenen Helferlein-Datenordners. Ohne diesen Bestand kann kein Test die vollständige Übernahme des individuellen Geräts beweisen. Die Daten wurden in dieser Umsetzung nicht aus dem Mac des Vaters gelesen oder verändert.
+
+Ein erzwungenes Beenden oder Betriebssystemabsturz kann die letzten 250 ms verlieren. Sehr große eingebettete Anhänge müssen weiterhin als Teil des JSON-Snapshots serialisiert werden; reale Mac-Messungen können eine spätere Auslagerung der Anhänge begründen. Weitere Änderungen daran sollten erst nach einem eigenen, getesteten Migrationspfad erfolgen.
+
+E-Rechnungsregeln und Betriebssystemunterstützung entwickeln sich weiter. Die Laufzeit- und Validator-Pins werden bewusst aktualisiert und danach erneut geprüft. Der Export verändert historische Steuerbeträge nicht stillschweigend; bei abweichender Positions-/Steuergruppenrundung erscheint ein erklärender Fehler.
