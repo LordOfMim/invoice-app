@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 type DialogProps = {
@@ -10,23 +10,59 @@ type DialogProps = {
 };
 
 export function Dialog({ open, onClose, children }: DialogProps) {
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose]
-  );
+  const contentRef = useRef<HTMLDivElement>(null);
+  const closeDialog = useEffectEvent(() => onClose());
 
   useEffect(() => {
-    if (open) {
-      document.addEventListener("keydown", handleEscape);
-      document.body.style.overflow = "hidden";
+    if (!open) return;
+
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    const content = contentRef.current;
+    const title = content?.querySelector("h2");
+    if (title) {
+      title.id ||= "active-dialog-title";
+      content?.setAttribute("aria-labelledby", title.id);
     }
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-      document.body.style.overflow = "";
+    const focusable = () => Array.from(content?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
+    ) ?? []).filter((element) => {
+      const style = window.getComputedStyle(element);
+      return element.getClientRects().length > 0 && style.visibility !== "hidden" &&
+        !element.closest('[hidden], [inert], [aria-hidden="true"]');
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeDialog();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first) {
+        event.preventDefault();
+        content?.focus();
+        return;
+      }
+      if (event.shiftKey && (document.activeElement === first || !content?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !content?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-  }, [open, handleEscape]);
+
+    (focusable()[0] ?? content)?.focus();
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -40,7 +76,9 @@ export function Dialog({ open, onClose, children }: DialogProps) {
       />
       {/* Content */}
       <div
-        className="relative dialog-content w-full max-w-lg animate-in fade-in zoom-in-95 duration-200"
+        ref={contentRef}
+        tabIndex={-1}
+        className="relative dialog-content w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto"
         role="dialog"
         aria-modal="true"
       >
@@ -69,7 +107,8 @@ export function DialogHeader({ title, description, onClose }: DialogHeaderProps)
       {onClose && (
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-ink-subtle)] hover:bg-[var(--color-sand-100)] hover:text-[var(--color-ink-muted)] transition-colors"
+          aria-label="Schließen / Close"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--color-ink-subtle)] hover:bg-[var(--color-sand-100)] hover:text-[var(--color-ink-muted)] transition-colors"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -136,7 +175,7 @@ export function ConfirmDialog({
       <DialogFooter>
         <button
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium text-[var(--color-ink-muted)] hover:bg-[var(--color-sand-100)] transition-colors"
+          className="inline-flex items-center justify-center min-h-11 rounded-lg px-4 py-2.5 text-base font-medium text-[var(--color-ink-muted)] hover:bg-[var(--color-sand-100)] transition-colors"
         >
           {cancelLabel}
         </button>
@@ -145,7 +184,7 @@ export function ConfirmDialog({
             onConfirm();
             onClose();
           }}
-          className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+          className={`inline-flex items-center justify-center min-h-11 rounded-lg px-4 py-2.5 text-base font-medium transition-colors ${
             variant === "danger"
               ? "bg-[var(--color-danger)] text-white hover:bg-[var(--color-danger)]/90"
               : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]"

@@ -49,7 +49,7 @@ const statVariants = {
 export function Stat({ label, value, subtitle, variant = "default", icon, trend }: StatProps) {
   return (
     <div
-      className={`rounded-2xl border border-[var(--glass-border)] backdrop-blur-sm p-5 ${statVariants[variant]}`}
+      className={`rounded-2xl border border-[var(--glass-border)] p-5 ${statVariants[variant]}`}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-3">

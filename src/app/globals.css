@@ -7,20 +7,20 @@
 
   /* Clean-white palette (cool neutrals) */
   --color-sand-50: #ffffff;
-  --color-sand-100: #f8fafc;
-  --color-sand-200: #eef2f7;
-  --color-sand-300: #e2e8f0;
+  --color-sand-100: #f7f8fa;
+  --color-sand-200: #f3f4f6;
+  --color-sand-300: #e4e7ec;
   --color-sand-400: #cbd5e1;
   --color-sand-500: #94a3b8;
-  --color-sand-600: #64748b;
+  --color-sand-600: #6f7988;
   --color-sand-700: #475569;
   --color-sand-800: #1f2937;
-  --color-sand-900: #0b1220;
+  --color-sand-900: #1c1d1f;
 
   /* Text */
-  --color-ink: #0b1220;
-  --color-ink-muted: #334155;
-  --color-ink-subtle: #64748b;
+  --color-ink: #1c1d1f;
+  --color-ink-muted: #505967;
+  --color-ink-subtle: #6f7988;
 
   /* Accent (cool, slightly futuristic) */
   --color-accent: #3b82f6;
@@ -33,11 +33,11 @@
   --color-danger: #dc2626;
 
   /* Glass surface colors (crisper) */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-bg-solid: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(15, 23, 42, 0.10);
-  --glass-shadow: 0 10px 32px -14px rgba(15, 23, 42, 0.22);
-  --glass-shadow-sm: 0 6px 18px -10px rgba(15, 23, 42, 0.18);
+  --glass-bg: #ffffff;
+  --glass-bg-solid: #ffffff;
+  --glass-border: #e4e7ec;
+  --glass-shadow: none;
+  --glass-shadow-sm: none;
 
   /* Layout */
   --sidebar-width: 240px;
@@ -80,66 +80,9 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-/* Base styles */
-html {
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  background:
-    radial-gradient(900px 520px at 22% 12%, rgba(59, 130, 246, 0.06), transparent 62%),
-    linear-gradient(180deg, var(--color-sand-50) 0%, var(--color-sand-100) 75%, var(--color-sand-200) 120%);
-  color: var(--color-ink);
-  min-height: 100dvh;
-}
-
-/* Subtle “grain” for a futuristic feel (very light) */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.02;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
-  mix-blend-mode: multiply;
-}
-
-:root[data-background="off"] body::before {
-  display: none;
-}
-
-.shape-grid-bg {
-  position: relative;
-  background-image:
-    linear-gradient(var(--shape-grid-border), var(--shape-grid-border)),
-    linear-gradient(90deg, var(--shape-grid-border), var(--shape-grid-border));
-  background-size: var(--shape-grid-size) var(--shape-grid-size);
-  background-position: 0 0;
-  opacity: 0.75;
-  transform: rotate(var(--shape-grid-angle)) scale(1.35);
-  animation: shape-grid-shift var(--shape-grid-speed) linear infinite;
-}
-
-.shape-grid-bg::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 34% 18%, var(--shape-grid-hover), transparent 34%),
-    radial-gradient(circle at 72% 64%, rgba(99, 102, 241, 0.055), transparent 36%);
-}
-
-@keyframes shape-grid-shift {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: var(--shape-grid-size) var(--shape-grid-size);
-  }
-}
+/* Static desktop surface: no canvas, noise, gradients or continuous animation. */
+html { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; scroll-padding-top: 5rem; }
+body { background: #fff; color: var(--color-ink); min-height: 100dvh; font-size: 16px; line-height: 1.5; }
 
 /* Typography refinements */
 h1, h2, h3, h4, h5, h6 {
@@ -169,30 +112,22 @@ h1, h2, h3, h4, h5, h6 {
 /* Glass panel utility classes */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
 }
 
 .glass-panel-solid {
   background: var(--glass-bg-solid);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
 }
 
 .glass-surface {
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: #fff;
   border: 1px solid var(--glass-border);
 }
 
 /* Soft container for grouped content */
 .soft-container {
-  background: rgba(255, 255, 255, 0.6);
+  background: #f7f8fa;
   border-radius: var(--radius-lg);
   padding: 1.5rem;
 }
@@ -229,18 +164,11 @@ textarea,
 /* Dialog / Modal styles - native UI feel */
 .dialog-overlay {
   background: rgba(15, 23, 42, 0.20);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
 }
 
 .dialog-content {
   background: var(--glass-bg-solid);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
-  box-shadow: 
-    0 24px 48px -12px rgba(0, 0, 0, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
   border-radius: var(--radius-xl);
 }
 
@@ -250,8 +178,6 @@ textarea,
   .glass-surface,
   .dialog-overlay,
   .dialog-content {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
 
   body::before {
@@ -401,3 +327,29 @@ textarea,
     @apply bg-background text-foreground;
   }
 }
+
+/* Readable ledger layout, adapted from the Humaify/Werknetz design contract.
+   System fonts, larger controls and no brand assets for this private Mac app. */
+.app-topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 32px; border-bottom: 1px solid var(--glass-border); background: #fff; }
+.app-navigation { width: 232px; position: absolute; top: 64px; bottom: 0; padding: 24px 16px; border-right: 1px solid var(--glass-border); background: #fcfcfc; overflow: auto; }
+.navigation-link { display: flex; align-items: center; min-height: 44px; padding: 10px 14px; border-radius: 8px; font-size: 16px; color: var(--color-ink-muted); }
+.navigation-link:hover { background: #f3f4f6; }
+.navigation-link-active { color: var(--color-ink); background: #eef2f7; font-weight: 600; }
+.app-content { margin-left: 232px; min-width: 0; }
+.skip-link { position: fixed; top: -100px; left: 16px; z-index: 100; background: white; padding: 12px; border: 2px solid #2563eb; }
+.skip-link:focus { top: 8px; }
+input, select, textarea { font-size: 16px; }
+input[type="checkbox"], input[type="radio"] { min-height: auto; accent-color: #2563eb; }
+table { font-variant-numeric: tabular-nums; }
+th, td { padding: 12px 16px; border-bottom: 1px solid var(--glass-border); }
+th { text-align: left; font-weight: 600; background: #fcfcfc; }
+@media (max-width: 1023px) {
+ .app-topbar { padding: 0 20px; }
+ .app-navigation { position: static; width: auto; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--glass-border); }
+ .app-navigation nav > a { display: inline-flex; margin-right: 4px; }
+ .app-navigation details { padding-top: 8px; }
+ .app-navigation details > div { display: flex; flex-wrap: wrap; }
+ .app-content { margin-left: 0; }
+}
+
+@media print { .app-topbar, .app-navigation, .skip-link { display: none !important; } .app-content { margin-left: 0; } }

@@ -11,9 +11,9 @@ type SurfaceProps = HTMLAttributes<HTMLDivElement> & {
 
 const variants: Record<SurfaceVariant, string> = {
   glass:
-    "bg-[var(--glass-bg)] backdrop-blur-xl border border-[var(--glass-border)] shadow-[var(--glass-shadow-sm)]",
+    "bg-[var(--glass-bg)] border border-[var(--glass-border)]",
   solid:
-    "bg-[var(--glass-bg-solid)] backdrop-blur-sm border border-[var(--glass-border)] shadow-[var(--glass-shadow)]",
+    "bg-[var(--glass-bg-solid)] border border-[var(--glass-border)]",
   soft:
     "bg-[var(--color-sand-100)]/70",
   outline:
@@ -29,9 +29,9 @@ const paddings = {
 
 const radiuses = {
   sm: "rounded-lg",
-  md: "rounded-xl",
-  lg: "rounded-2xl",
-  xl: "rounded-3xl",
+  md: "rounded-lg",
+  lg: "rounded-xl",
+  xl: "rounded-xl",
 };
 
 export function Surface({
@@ -113,7 +113,7 @@ export function PageHeader({ title, subtitle, description, actions, breadcrumb }
       {breadcrumb && <div className="text-sm text-[var(--color-ink-subtle)]">{breadcrumb}</div>}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{title}</h1>
+          <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-[var(--color-ink)]">{title}</h1>
           {descText && (
             <p className="text-sm text-[var(--color-ink-muted)]">{descText}</p>
           )}

@@ -43,6 +43,7 @@ export default function SettingsPage() {
             <Surface variant="solid" padding="lg">
               <div className="max-w-xs">
                 <Select
+                  aria-label={t(language, "settings.language")}
                   value={settings.language}
                   onChange={(e) => {
                     const nextLang = e.target.value as Language;
@@ -59,7 +60,7 @@ export default function SettingsPage() {
           <Section title={t(language, "settings.appearance")}>
             <Surface variant="solid" padding="lg">
               <div className="max-w-xs">
-                <Field label={t(language, "settings.background")}>
+                <Field label={t(language, "settings.background")} hint={language === "de" ? "Gespeicherte Auswahl. Für eine ruhige, sparsame Oberfläche bleiben animierte Hintergründe ausgeschaltet." : "Saved preference. Animated backgrounds stay off for a calm, efficient interface."}>
                   <Select
                     value={settings.backgroundChoice ?? "auto"}
                     onChange={(e) => {
