@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { UnderlineTabs } from "@/components/platform/underline-tabs";
 import { cn } from "@/components/platform/lib/cn";
 import { Button } from "@/components/ui/Button";
@@ -105,6 +105,16 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const deferredInvoice = useDeferredValue(invoice);
   usePageCrumb(invoice ? invoice.invoiceNumber || (de ? "Ohne Nummer" : "No number") : null);
 
+  // Measure the committed pane before painting, including when a hidden pane
+  // becomes visible. clientWidth excludes its scrollbar; remove padding too.
+  useLayoutEffect(() => {
+    const frame = previewFrame.current;
+    if (!frame) return;
+    const style = getComputedStyle(frame);
+    const width = frame.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    if (width > 2) setFitScale(Math.min(1, (width - 2) / PAPER_WIDTH));
+  }, [invoice?.id, split, narrowView]);
+
   // One observer on the real preview container: the fit scale follows its width (never per keystroke).
   useEffect(() => {
     const frame = previewFrame.current;
@@ -116,12 +126,13 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     return () => observer.disconnect();
   }, [invoice?.id]);
 
-  // Side by side only where both columns stay usable; only classes change, nothing remounts.
-  useEffect(() => {
+  // Resolve the initial layout before painting, then observe later resizes.
+  // Only classes change; no inputs or preview remount.
+  useLayoutEffect(() => {
     const element = workspace.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const nextSplit = entry.contentRect.width >= SPLIT_MIN_WIDTH;
+    const updateLayout = (width: number) => {
+      const nextSplit = width >= SPLIT_MIN_WIDTH;
       // A resize must never hide the field the user is editing or move its focus.
       if (!nextSplit) {
         if (element.querySelector("#invoice-inputs")?.contains(document.activeElement)) setNarrowView("form");
@@ -138,7 +149,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         });
       }
       setSplit(nextSplit);
-    });
+    };
+    updateLayout(element.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => updateLayout(entry.contentRect.width));
     observer.observe(element);
     return () => observer.disconnect();
   }, [invoice?.id]);
@@ -438,7 +451,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         {!split && (
           <div ref={narrowSwitch} role="group" aria-label={de ? "Ansicht des Rechnungsarbeitsplatzes" : "Invoice workspace view"} className="inline-flex rounded-md border border-line-control bg-surface-muted p-1">
             {(["form", "preview"] as const).map((view) => (
-              <button key={view} type="button" aria-pressed={narrowView === view} aria-controls={view === "form" ? "invoice-inputs" : "invoice-live-preview"} onClick={() => showNarrow(view)} className={cn("min-h-8 rounded-sm px-4 font-sans text-base font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50", narrowView === view ? "bg-surface" : "text-ink-body hover:text-ink")}>
+              <button key={view} type="button" aria-pressed={narrowView === view} aria-controls={view === "form" ? "invoice-inputs" : "invoice-live-preview"} onClick={() => showNarrow(view)} className={cn("min-h-10 rounded-sm px-4 font-sans text-lg font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50", narrowView === view ? "bg-surface" : "text-ink-body hover:text-ink")}>
                 {view === "form" ? (de ? "Eingaben" : "Inputs") : (de ? "Vorschau" : "Preview")}
               </button>
             ))}
@@ -452,7 +465,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
           <UnderlineTabs
             role="tablist"
             aria-label={de ? "Bereiche der Rechnung" : "Invoice areas"}
-            size="md"
+            size="lg"
             className="gap-x-4"
             items={tabs}
             value={tab}
@@ -466,7 +479,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 tabIndex={item.value === tab ? 0 : -1}
                 onClick={() => selectTab(item.value)}
                 onKeyDown={onTabKey}
-                className="rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 touch:pt-3"
+                className="min-h-10 rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 touch:pt-3"
               >
                 {content}
               </button>
@@ -477,7 +490,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             <div role="tabpanel" id="panel-edit" aria-labelledby="tab-edit" hidden={tab !== "edit"}>
               <nav aria-label={de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="mb-6 flex flex-wrap gap-x-4 gap-y-2 border-b border-line pb-4">
                 {sections.map(([anchor, label]) => (
-                  <a key={anchor} href={`#${anchor}`} onClick={() => { if (anchor === "absender") setSenderOpen(true); }} className="inline-flex min-h-8 items-center rounded-sm font-sans text-base font-medium tracking-snug text-ink-body underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-ring/50">
+                  <a key={anchor} href={`#${anchor}`} onClick={() => { if (anchor === "absender") setSenderOpen(true); }} className="inline-flex min-h-10 items-center rounded-sm font-sans text-lg font-medium tracking-snug text-ink-body underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-ring/50">
                     {label}
                   </a>
                 ))}
@@ -624,12 +637,12 @@ export function InvoiceEditorClient({ id }: { id: string }) {
           </div>
         </div>
 
-        <section id="invoice-live-preview" aria-labelledby="invoice-preview-title" className={cn("invoice-preview-pane min-w-0 overflow-hidden rounded-card-sm border border-line bg-surface-muted", split && "sticky top-17", !split && narrowView !== "preview" && "screen-hidden")}>
+        <section id="invoice-live-preview" aria-labelledby="invoice-preview-title" className={cn("invoice-preview-pane min-w-0 overflow-hidden rounded-card-sm border border-line bg-surface-muted", split && "sticky top-17 max-lg:top-27", !split && narrowView !== "preview" && "screen-hidden")}>
           <div className="no-print flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-rail px-3 py-2">
             <h2 id="invoice-preview-title" className="font-sans text-base font-semibold tracking-snug text-ink">{de ? "Live-Vorschau" : "Live preview"}</h2>
             <div role="group" aria-label={de ? "Vergrößerung der Vorschau" : "Preview zoom"} className="flex items-center gap-1">
               <Button size="sm" variant="ghost" aria-label={de ? "Vorschau verkleinern" : "Zoom out"} disabled={previewScale <= ZOOM_STEPS[0]} onClick={zoomOut} className="w-8 px-0">−</Button>
-              <output className="w-11 text-center font-sans text-base text-ink-body tabular-nums" aria-label={de ? "Aktuelle Vergrößerung" : "Current zoom"}>{Math.round(previewScale * 100)}%</output>
+              <span className="w-11 text-center font-sans text-base text-ink-body tabular-nums" aria-label={de ? "Aktuelle Vergrößerung" : "Current zoom"}>{Math.round(previewScale * 100)}%</span>
               <Button size="sm" variant="ghost" aria-label={de ? "Vorschau vergrößern" : "Zoom in"} disabled={previewScale >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} onClick={zoomIn} className="w-8 px-0">+</Button>
               <Button size="sm" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}>{de ? "Einpassen" : "Fit width"}</Button>
             </div>

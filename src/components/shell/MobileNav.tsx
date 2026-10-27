@@ -15,7 +15,7 @@ import type { NavGroup, NavItem } from "./nav";
  * focus trap, Escape, focus return). The row sticks below the top bar. The caller keys this component by the path,
  * so every navigation closes the menu and it never reopens by itself.
  */
-export function MobileNav({ groups, group, item: page, title, closeLabel }: { groups: readonly NavGroup[]; group?: NavGroup; item?: NavItem; title: string; closeLabel: string }) {
+export function MobileNav({ groups, group, item: page, title, closeLabel, openLabel, currentLabel, menuLabel }: { groups: readonly NavGroup[]; group?: NavGroup; item?: NavItem; title: string; closeLabel: string; openLabel: string; currentLabel: string; menuLabel: string }) {
   const [open, setOpen] = useState(false);
   const nested = Boolean(group?.label && page);
   return (
@@ -27,7 +27,7 @@ export function MobileNav({ groups, group, item: page, title, closeLabel }: { gr
             className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-sm text-left font-sans text-lg tracking-snug outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
           >
             <HugeiconsIcon icon={Menu01Icon} size={16} className="shrink-0 text-ink-muted" />
-            <span className="sr-only">{title} öffnen{page ? ", aktuell:" : ""} </span>
+            <span className="sr-only">{openLabel}{page ? `, ${currentLabel}:` : ""} </span>
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
               {nested && page ? (
                 <>
@@ -40,7 +40,7 @@ export function MobileNav({ groups, group, item: page, title, closeLabel }: { gr
               )}
             </span>
             <span className="flex shrink-0 items-center gap-1 font-medium text-ink-secondary">
-              Menü
+              {menuLabel}
               <HugeiconsIcon icon={ArrowDown01Icon} size={13} className="text-ink-soft" />
             </span>
           </button>
@@ -51,9 +51,9 @@ export function MobileNav({ groups, group, item: page, title, closeLabel }: { gr
           </SheetHeader>
           <SheetBody className="border-t border-line px-3 pt-2 pb-6">
             {groups.map((entry) => (
-              <section key={entry.key} aria-label={entry.label} className="border-b border-line py-2 last:border-b-0">
-                {entry.label && <h3 className="px-3 pt-2 pb-1 font-sans text-base font-medium tracking-snug text-ink-muted">{entry.label}</h3>}
-                <ul className="flex flex-col">
+              <div key={entry.key} className="border-b border-line py-2 last:border-b-0">
+                {entry.label && <p id={`mobile-nav-group-${entry.key}`} className="px-3 pt-2 pb-1 font-sans text-base font-medium tracking-snug text-ink-muted">{entry.label}</p>}
+                <ul aria-labelledby={entry.label ? `mobile-nav-group-${entry.key}` : undefined} className="flex flex-col">
                   {entry.items.map((item) => {
                     const current = page?.key === item.key;
                     return (
@@ -75,7 +75,7 @@ export function MobileNav({ groups, group, item: page, title, closeLabel }: { gr
                     );
                   })}
                 </ul>
-              </section>
+              </div>
             ))}
           </SheetBody>
         </SheetContent>

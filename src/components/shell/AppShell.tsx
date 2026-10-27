@@ -60,16 +60,16 @@ function Sidebar({ groups, active, pathname, label }: { groups: readonly NavGrou
       </div>
       <nav aria-label={label} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
         {groups.map((group) => (
-          <section key={group.key} aria-label={group.label} className="flex flex-col gap-0.5">
-            {group.label && <h2 className="px-2.5 pb-1 font-sans text-base font-medium tracking-snug text-ink-body">{group.label}</h2>}
-            <ul className="flex flex-col gap-0.5">
+          <div key={group.key} className="flex flex-col gap-0.5">
+            {group.label && <p id={`sidebar-group-${group.key}`} className="px-2.5 pb-1 font-sans text-base font-medium tracking-snug text-ink-body">{group.label}</p>}
+            <ul aria-labelledby={group.label ? `sidebar-group-${group.key}` : undefined} className="flex flex-col gap-0.5">
               {group.items.map((item) => (
                 <li key={item.key}>
                   <SidebarLink item={item} current={active?.key === item.key} exact={pathname === item.href} />
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
         ))}
       </nav>
     </aside>
@@ -124,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </nav>
           </TopBar>
-          <MobileNav key={pathname} groups={groups} group={group} item={item} title={de ? "Navigation" : "Navigation"} closeLabel={de ? "Schließen" : "Close"} />
+          <MobileNav key={pathname} groups={groups} group={group} item={item} title={de ? "Navigation" : "Navigation"} closeLabel={de ? "Schließen" : "Close"} openLabel={de ? "Navigation öffnen" : "Open navigation"} currentLabel={de ? "aktuell" : "current"} menuLabel={de ? "Menü" : "Menu"} />
           <main id="inhalt" tabIndex={-1} className="app-main flex w-full grow flex-col items-center px-4 pt-6 pb-20 outline-none sm:px-6">
             <div className="app-page-wrapper flex w-full max-w-[1600px] flex-col">{children}</div>
           </main>
