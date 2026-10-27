@@ -8,6 +8,9 @@ declare global {
       store: {
         get: (key: string) => Promise<string | null>;
         set: (key: string, value: string) => Promise<boolean>;
+        onStatus?: (callback: (status: "saving" | "saved" | "error") => void) => () => void;
+        getCached?: (key: string) => string | null;
+        setCached?: (key: string, value: string) => boolean;
         getSync?: (key: string) => string | null;
         setSync?: (key: string, value: string) => boolean;
         delete: (key: string) => Promise<boolean>;

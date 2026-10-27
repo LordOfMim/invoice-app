@@ -11,6 +11,9 @@ type ElectronAPI = {
   store: {
     get: (key: string) => Promise<unknown>;
     set: (key: string, value: unknown) => Promise<boolean>;
+    onStatus?: (callback: (status: "saving" | "saved" | "error") => void) => () => void;
+    getCached?: (key: string) => unknown;
+    setCached?: (key: string, value: string) => boolean;
     getSync?: (key: string) => unknown;
     setSync?: (key: string, value: unknown) => boolean;
   };
@@ -36,51 +39,13 @@ function recoveryKey(reason: string) {
   return `${RECOVERY_KEY_PREFIX}:${new Date().toISOString()}:${reason}`;
 }
 
-function backupLocalData(value: string | null, reason: string) {
-  if (!value || typeof window === "undefined") return;
-  try {
-    localStorage.setItem(recoveryKey(reason), value);
-  } catch (err) {
-    console.error("Failed to create local recovery copy:", err);
-  }
-}
-
 async function backupElectronData(api: ElectronAPI, value: string | null, reason: string) {
   if (!value) return;
   try {
     await api.store.set(recoveryKey(reason), value);
   } catch (err) {
-    console.error("Failed to create electron-store recovery copy:", err);
+    throw new Error("Sicherung der Desktop-Daten fehlgeschlagen", { cause: err });
   }
-}
-
-function dataIsEmpty(raw: string | null): boolean {
-  const data = parsePersistedData(raw);
-  if (!data) return true;
-  return (
-    data.invoices.length === 0 &&
-    data.customers.length === 0 &&
-    data.products.length === 0 &&
-    data.tags.length === 0 &&
-    data.creditNotes.length === 0 &&
-    data.recurringInvoices.length === 0 &&
-    data.templateVariants.length === 0
-  );
-}
-
-function dataFreshness(raw: string | null): number {
-  const data = parsePersistedData(raw);
-  if (!data) return 0;
-  const dates = [
-    data.settings.lastBackupDate,
-    ...data.invoices.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.customers.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.products.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.creditNotes.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.recurringInvoices.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.templateVariants.flatMap((item) => [item.createdAt, item.updatedAt]),
-  ].filter(Boolean) as string[];
-  return dates.reduce((latest, value) => Math.max(latest, Date.parse(value) || 0), 0);
 }
 
 async function writeElectronStore(value: string): Promise<boolean> {
@@ -93,68 +58,64 @@ async function writeElectronStore(value: string): Promise<boolean> {
 
 // Load from electron-store on startup (only once)
 let electronStoreLoaded = false;
+let electronLoadPromise: Promise<void> | null = null;
+let storageBlocked: Error | null = null;
 let electronWriteQueue: Promise<boolean> = Promise.resolve(true);
 async function loadFromElectronStore(): Promise<void> {
   if (!isElectron() || electronStoreLoaded) return;
-  electronStoreLoaded = true;
+  if (electronLoadPromise) return electronLoadPromise;
+  electronLoadPromise = reconcileElectronStore();
+  return electronLoadPromise;
+}
+
+async function reconcileElectronStore(): Promise<void> {
 
   try {
     const api = getElectronAPI();
     if (!api) return;
 
-    const electronData = await api.store.get(STORAGE_KEY);
+    const electronData = api.store.getCached ? api.store.getCached(STORAGE_KEY) : await api.store.get(STORAGE_KEY);
+    if (electronData != null && typeof electronData !== "string") throw new Error("Unbekanntes Desktop-Datenformat; Original bleibt erhalten.");
     const electronRaw = typeof electronData === "string" ? electronData : null;
     const localRaw = localStorage.getItem(STORAGE_KEY);
     const electronParsed = parsePersistedData(electronRaw);
     const localParsed = parsePersistedData(localRaw);
 
-    if (electronRaw && !electronParsed) {
-      await backupElectronData(api, electronRaw, "invalid-electron");
+    if (electronData != null && !electronParsed) {
+      throw new Error("Die Desktop-Daten sind ungültig. Die Originaldaten bleiben unverändert; bitte eine Sicherung wiederherstellen.");
     }
-    if (localRaw && !localParsed) {
-      backupLocalData(localRaw, "invalid-local");
+    if (localRaw && !localParsed && !electronParsed) {
+      throw new Error("Die lokalen Altdaten sind ungültig. Original bleibt erhalten.");
     }
 
-    if (electronParsed && !localParsed) {
-      backupLocalData(localRaw, "before-electron-restore");
-      localStorage.setItem(STORAGE_KEY, electronRaw!);
+    // Presence, not collection counts, determines authority. An intentionally
+    // empty desktop snapshot must never resurrect stale browser invoices.
+    if (electronParsed) {
+      electronStoreLoaded = true;
       clearDataCache();
-      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
       return;
     }
 
-    if (!electronParsed && localParsed && localRaw) {
+    if (electronData == null && localParsed && localRaw) {
+      await backupElectronData(api, localRaw, "before-local-migration");
       await writeElectronStore(localRaw);
-      return;
+      api.store.setSync?.(STORAGE_KEY, localRaw);
     }
-
-    if (electronParsed && localParsed && electronRaw && localRaw && electronRaw !== localRaw) {
-      const preferElectron =
-        (dataIsEmpty(localRaw) && !dataIsEmpty(electronRaw)) ||
-        (!dataIsEmpty(electronRaw) && dataFreshness(electronRaw) > dataFreshness(localRaw));
-
-      if (preferElectron) {
-        backupLocalData(localRaw, "before-electron-newer-restore");
-        localStorage.setItem(STORAGE_KEY, electronRaw);
-        clearDataCache();
-        window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
-      } else {
-        await backupElectronData(api, electronRaw, "before-local-newer-sync");
-        await writeElectronStore(localRaw);
-      }
-    }
+    electronStoreLoaded = true;
   } catch (err) {
-    console.error("Failed to load from electron-store:", err);
+    storageBlocked = err instanceof Error ? err : new Error(String(err));
+    window.alert(`Daten konnten nicht sicher geladen werden. Es werden keine Daten überschrieben.\n${storageBlocked.message}`);
   }
 }
 
 export async function flushElectronStoreSync(value?: string): Promise<boolean> {
   if (!isElectron()) return true;
 
-  const data = value ?? localStorage.getItem(STORAGE_KEY);
+  if (storageBlocked) return false;
+  const api = getElectronAPI();
+  const data = value ?? (api?.store.getCached ? api.store.getCached(STORAGE_KEY) as string | null : localStorage.getItem(STORAGE_KEY));
   if (!data) return false;
 
-  const api = getElectronAPI();
   if (api?.store.setSync) {
     try {
       return api.store.setSync(STORAGE_KEY, data);
@@ -185,7 +146,8 @@ function createHybridAdapter(): StorageAdapter | null {
   return {
     getItem: (key: string) => {
       if (key === STORAGE_KEY && hasSyncElectronStore) {
-        const value = api!.store.getSync!(key);
+        if (storageBlocked) throw storageBlocked;
+        const value = (api!.store.getCached ?? api!.store.getSync!)(key);
         return typeof value === "string" ? value : null;
       }
       return baseAdapter.getItem(key);
@@ -193,12 +155,18 @@ function createHybridAdapter(): StorageAdapter | null {
     setItem: (key: string, value: string) => {
       if (key === STORAGE_KEY) {
         if (hasSyncElectronStore) {
-          api!.store.setSync!(key, value);
+          if (storageBlocked) throw storageBlocked;
+          (api!.store.setCached ?? api!.store.setSync!)(key, value);
+          return;
         }
         baseAdapter.setItem(key, value);
         if (!hasSyncElectronStore) {
           void flushElectronStoreSync(value);
         }
+        return;
+      }
+      if (hasSyncElectronStore) {
+        api!.store.setSync!(key, value);
         return;
       }
       baseAdapter.setItem(key, value);
@@ -210,6 +178,9 @@ function subscribeStorage(adapter: StorageAdapter | null, listener: () => void) 
   if (!adapter || typeof window === "undefined") return () => {};
 
   const unsubscribe = subscribe(listener);
+  const unsubscribeStatus = getElectronAPI()?.store.onStatus?.((status) => {
+    window.dispatchEvent(new CustomEvent("invoice-storage-status", { detail: { status } }));
+  });
   const onStorage = (event: StorageEvent) => {
     if (event.key !== STORAGE_KEY) return;
     clearDataCache();
@@ -220,6 +191,7 @@ function subscribeStorage(adapter: StorageAdapter | null, listener: () => void) 
   window.addEventListener("storage", onStorage);
   return () => {
     unsubscribe();
+    unsubscribeStatus?.();
     window.removeEventListener("storage", onStorage);
   };
 }

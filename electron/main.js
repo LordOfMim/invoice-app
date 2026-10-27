@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
 const { spawn, execSync, execFile } = require('child_process');
 const http = require('http');
@@ -103,20 +103,11 @@ async function initStore() {
     store = new Store(options);
   } catch (error) {
     const storePath = path.join(app.getPath('userData'), `${STORE_NAME}.json`);
-    const backupPath = path.join(
-      app.getPath('userData'),
-      `${STORE_NAME}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-    );
-    try {
-      if (fs.existsSync(storePath)) {
-        fs.renameSync(storePath, backupPath);
-        log('Moved corrupt electron-store file to:', backupPath);
-      }
-    } catch (backupError) {
-      log('Failed to move corrupt electron-store file:', backupError);
-    }
-    store = new Store(options);
-    log('Started with a fresh electron-store after recovery from:', String(error));
+    // Preserve the original encrypted file and fail closed. Never replace it
+    // with an empty store after a permission, decryption, or JSON error.
+    const backupPath = `${storePath}.recovery-${Date.now()}`;
+    if (fs.existsSync(storePath)) fs.copyFileSync(storePath, backupPath, fs.constants.COPYFILE_EXCL);
+    throw new Error(`Lokale Daten konnten nicht geöffnet werden. Original: ${storePath}. Sicherung: ${backupPath}. ${String(error)}`);
   }
 }
 
@@ -224,11 +215,11 @@ function findAvailablePort(host) {
 }
 
 async function startNextServer() {
-  if (isDev) return; // In dev mode, Next.js runs separately
+  if (isDev || (nextServer && nextServer.exitCode === null)) return; // Reuse server when reopening on macOS
 
   // In packaged builds, prefer Electron's embedded Node mode so the app
   // does not depend on an external Node.js installation.
-  return new Promise(async (resolve) => {
+  return new Promise(async (resolve, reject) => {
     let standaloneDir, serverPath;
     const appPath = app.getAppPath();
 
@@ -255,7 +246,7 @@ async function startNextServer() {
 
     if (!fs.existsSync(serverPath)) {
       log('Standalone server not found!');
-      resolve();
+      reject(new Error('Packaged standalone server not found'));
       return;
     }
 
@@ -263,7 +254,7 @@ async function startNextServer() {
     // Installed apps often live in read-only locations (e.g. Program Files),
     // which causes startup failures and the loading screen to hang.
     // Assets should be copied into `.next/standalone` during the build step.
-    
+
     try {
       appPort = await findAvailablePort(HOST);
       appOrigin = `http://${HOST}:${appPort}`;
@@ -272,11 +263,11 @@ async function startNextServer() {
       const nodeCmd = isDev
         ? (process.platform === 'win32' ? 'node.exe' : 'node')
         : process.execPath;
-      
+
       nextServer = spawn(nodeCmd, [serverPath], {
         cwd: standaloneDir,
-        env: { 
-          ...process.env, 
+        env: {
+          ...process.env,
           NODE_ENV: 'production',
           PORT: appPort.toString(),
           HOSTNAME: HOST,
@@ -297,29 +288,36 @@ async function startNextServer() {
 
       nextServer.on('error', (err) => {
         log('Failed to start Next.js:', err);
+        reject(err);
       });
-      
+
       nextServer.on('exit', (code, signal) => {
         log('Next.js server exited with code:', code, 'signal:', signal);
+        reject(new Error(`Local server exited (${code ?? signal})`));
       });
-      
+
       // Wait for server to be ready
       log('Waiting for Next.js server on', appOrigin);
       await waitForServer(appOrigin);
       log('Next.js server ready!');
     } catch (err) {
       log('Error starting Next.js server:', err);
+      reject(err);
+      return;
     }
-    
+
     resolve();
   });
 }
 
 async function createWindow() {
   try {
-    await initStore();
+    if (!store) await initStore();
   } catch (error) {
     log('Failed to initialize electron-store:', error);
+    dialog.showErrorBox('Helferlein – Daten konnten nicht geladen werden', String(error));
+    app.quit();
+    return;
   }
 
   const bounds = store?.get('windowBounds') || { width: 1400, height: 900 };
@@ -347,6 +345,10 @@ async function createWindow() {
     mainWindow.show();
   });
 
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    try { if (new URL(url).origin !== appOrigin) event.preventDefault(); } catch { event.preventDefault(); }
+  });
+
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
     log('did-fail-load', { errorCode, errorDescription, validatedURL });
     try {
@@ -369,7 +371,6 @@ async function createWindow() {
       try {
         log('Starting Next.js server...');
         await startNextServer();
-        await waitForServer(appOrigin);
       } catch (err) {
         log('Server failed to start:', err);
         serverError = err;
@@ -417,16 +418,27 @@ async function createWindow() {
   });
 }
 
-ipcMain.handle('startup-log-get', async () => {
+ipcMain.handle('startup-log-get', async (event) => {
+  ensureTrustedSender(event, { allowFile: true });
   return startupLogBuffer.slice();
 });
 
-app.whenReady().then(createWindow);
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+  });
+  app.whenReady().then(() => {
+    if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu' }, { role: 'fileMenu' }, { role: 'editMenu' },
+      { role: 'viewMenu' }, { role: 'windowMenu' },
+    ]));
+    return createWindow();
+  });
+}
 
 app.on('window-all-closed', () => {
-  if (nextServer) {
-    nextServer.kill();
-  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -438,13 +450,16 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
+// before-quit precedes renderer beforeunload, which can cancel quitting when
+// a save fails. Keep the server available until quitting is confirmed.
+app.on('will-quit', () => {
   if (nextServer) {
     nextServer.kill();
   }
 });
 
 function isTrustedSender(event, { allowFile = false } = {}) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) return false;
   const senderUrl = event.senderFrame?.url || event.sender.getURL();
   try {
     const parsed = new URL(senderUrl);
@@ -496,6 +511,11 @@ ipcMain.handle('store-get', async (event, key) => {
   return store.get(key);
 });
 
+ipcMain.on('storage-write-error', (event) => {
+  ensureTrustedSender(event);
+  dialog.showErrorBox('Helferlein – Speichern fehlgeschlagen', 'Die letzten Änderungen konnten nicht gespeichert werden. Bitte die App geöffnet lassen, freien Speicher und Zugriffsrechte prüfen und eine Sicherung exportieren.');
+});
+
 ipcMain.handle('store-set', async (event, key, value) => {
   ensureTrustedSender(event);
   if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
@@ -530,7 +550,7 @@ ipcMain.handle('print-to-pdf', async (event, options) => {
   ensureTrustedSender(event);
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-  
+
   try {
     const pdfData = await win.webContents.printToPDF({
       marginsType: 0,

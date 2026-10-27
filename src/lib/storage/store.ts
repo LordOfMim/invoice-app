@@ -68,8 +68,18 @@ export function parsePersistedData(json: string | null): PersistedDataV1 | null 
     const data = parsed as Record<string, unknown>;
     if (data.schemaVersion !== 1) return null;
     if (!isRecord(data.settings) || !Array.isArray(data.invoices)) return null;
-    // Migrate: add new collections if missing
+    for (const key of ["invoices", "customers", "products", "tags", "creditNotes", "recurringInvoices", "templateVariants"]) {
+      if (data[key] !== undefined && (!Array.isArray(data[key]) || !(data[key] as unknown[]).every(isRecord))) return null;
+    }
+    for (const invoice of data.invoices as Record<string, unknown>[]) {
+      for (const key of ["lineItems", "payments", "attachments"]) {
+        const collection = invoice[key];
+        if (collection !== undefined && (!Array.isArray(collection) || !collection.every(isRecord))) return null;
+      }
+    }
+    // Preserve unknown additive fields for compatibility with newer exports.
     return {
+      ...data,
       schemaVersion: 1,
       settings: migrateSettings(data.settings),
       invoices: data.invoices.map(migrateInvoice),
@@ -443,7 +453,9 @@ function createEmptyData(): PersistedDataV1 {
 export function loadData(adapter: StorageAdapter): PersistedDataV1 {
   if (cachedData) return cachedData;
 
-  const existing = parsePersistedData(adapter.getItem(STORAGE_KEY));
+  const raw = adapter.getItem(STORAGE_KEY);
+  const existing = parsePersistedData(raw);
+  if (raw !== null && !existing) throw new Error("Gespeicherte Daten sind ungültig. Originaldaten bleiben unverändert.");
   if (existing) {
     cachedData = existing;
     return existing;
@@ -466,8 +478,8 @@ export function clearDataCache(): void {
 }
 
 export function replaceData(adapter: StorageAdapter, data: PersistedDataV1): void {
-  cachedData = data;
   adapter.setItem(STORAGE_KEY, JSON.stringify(data));
+  cachedData = data;
   emitChange();
 }
 
@@ -1371,6 +1383,10 @@ export function importData(adapter: StorageAdapter, json: string): boolean {
   try {
     const fullData = parsePersistedData(json);
     if (!fullData) return false;
+    const previous = adapter.getItem(STORAGE_KEY);
+    if (previous !== null) {
+      adapter.setItem(`${STORAGE_KEY}:recovery:${new Date().toISOString()}:before-import`, previous);
+    }
     saveData(adapter, fullData);
     return true;
   } catch {
