@@ -1,328 +1,186 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { UnderlineTabs } from "@/components/platform/underline-tabs";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Field } from "@/components/ui/Field";
+import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
-import { DecimalInput } from "@/components/ui/DecimalInput";
+import { KeyValueList, Page, PageHeader, StatusNote, initialsOf } from "@/components/ui/Layout";
+import { OverflowMenu } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
+import { DashedBadge, StatusPill } from "@/components/ui/Status";
 import { Textarea } from "@/components/ui/Textarea";
 import { InvoicePreview } from "@/components/templates/InvoicePreview";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
-import { ConfirmDialog } from "@/components/ui/Dialog";
 import { PrintStyles } from "@/components/PrintStyles";
-import type { Invoice, InvoiceLineItem, InvoiceTexts, InvoiceTemplateId, LayoutPreferences, LogoPosition, Payment, Attachment, LineItemType } from "@/lib/domain";
-import { createDefaultLineItem, createLineItemFromProduct } from "@/lib/defaults";
+import { usePageCrumb } from "@/components/shell/AppShell";
+import { formatDay, invoiceStatus } from "@/components/invoiceStatus";
+import type { Invoice, InvoiceLineItem } from "@/lib/domain";
+import type { EInvoiceError } from "@/lib/einvoice";
+import { waitForInvoicePrintReady } from "@/lib/printing";
 import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
-import { todayLocalISO } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
-import { computeInvoiceBalance } from "@/lib/calc";
+import { computeInvoiceBalance, computeInvoiceTotals } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
-import { 
-  deleteInvoice, 
-  duplicateInvoiceById, 
-  togglePaid, 
-  upsertInvoice,
+import {
+  createCreditNote,
+  deleteInvoice,
+  duplicateInvoiceById,
+  togglePaid,
   updateInvoice,
   updateSettings,
-  addPaymentToInvoice,
-  removePaymentFromInvoice,
-  removeAttachmentFromInvoice,
-  createCreditNote,
+  upsertInvoice,
 } from "@/lib/storage/store";
+import { errorTarget, fieldId, tabHash, type EditorTab } from "./fields";
+import { ExtrasTab } from "./ExtrasTab";
+import { LineItemsEditor } from "./LineItems";
+import { PAYMENT_AMOUNT_ID, PaymentsTab } from "./PaymentsTab";
 
-// Common currencies with metadata
-const CURRENCIES = [
-  { code: "EUR", symbol: "€", en: "Euro", de: "Euro" },
-  { code: "USD", symbol: "$", en: "US Dollar", de: "US-Dollar" },
-  { code: "GBP", symbol: "£", en: "British Pound", de: "Britisches Pfund" },
-  { code: "CHF", symbol: "CHF", en: "Swiss Franc", de: "Schweizer Franken" },
-  { code: "JPY", symbol: "¥", en: "Japanese Yen", de: "Japanischer Yen" },
-  { code: "CAD", symbol: "C$", en: "Canadian Dollar", de: "Kanadischer Dollar" },
-  { code: "AUD", symbol: "A$", en: "Australian Dollar", de: "Australischer Dollar" },
-  { code: "CNY", symbol: "¥", en: "Chinese Yuan", de: "Chinesischer Yuan" },
-  { code: "INR", symbol: "₹", en: "Indian Rupee", de: "Indische Rupie" },
-  { code: "BRL", symbol: "R$", en: "Brazilian Real", de: "Brasilianischer Real" },
-];
+const TAB_ORDER: EditorTab[] = ["edit", "preview", "payments", "einvoice", "extras"];
 
-function setInvoiceField<K extends keyof Invoice>(invoice: Invoice, key: K, value: Invoice[K]): Invoice {
-  return {
-    ...invoice,
-    [key]: value,
-  };
+function initialTab(): EditorTab {
+  if (typeof window === "undefined") return "edit";
+  const hash = window.location.hash.slice(1);
+  return (Object.entries(tabHash).find(([, value]) => value === hash)?.[0] as EditorTab | undefined) ?? "edit";
 }
 
-function setTexts(invoice: Invoice, next: InvoiceTexts): Invoice {
-  return { ...invoice, texts: next };
+/** Focus a control once its tab and group are rendered. */
+function focusLater(id: string) {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const element = document.getElementById(id);
+    element?.focus();
+    element?.scrollIntoView({ block: "center" });
+  }));
 }
 
-function setLayout(invoice: Invoice, next: LayoutPreferences): Invoice {
-  return { ...invoice, layout: next };
-}
-
-const card = "rounded-xl border border-zinc-200 bg-white p-5";
-const chip = "rounded-full border px-2.5 py-0.5 text-sm font-medium";
-const menuItem = "w-full justify-start hover:bg-zinc-100!";
-
-// Native disclosure used as a small menu: Escape returns focus to the trigger,
-// and choosing an action or moving focus elsewhere closes it.
-function ActionMenu({ label, children }: { label: string; children: ReactNode }) {
-  const menu = useRef<HTMLDetailsElement>(null);
-  const close = (focusTrigger: boolean) => {
-    const details = menu.current;
-    if (!details?.open) return;
-    details.open = false;
-    if (focusTrigger) details.querySelector("summary")?.focus();
-  };
-  return (
-    <details
-      ref={menu}
-      className="disclosure relative"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.preventDefault();
-        close(true);
-      }}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(false);
-      }}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button")) close(false);
-      }}
-    >
-      <summary id="invoice-actions-trigger" className="rounded-lg border border-zinc-300 bg-white px-4 text-base font-medium hover:bg-zinc-50">{label}</summary>
-      <div className="absolute right-0 z-20 mt-2 flex w-72 flex-col gap-1 rounded-xl border border-zinc-200 bg-white p-2">{children}</div>
-    </details>
-  );
-}
-
-function parseNumber(input: string): number {
-  const normalized = input.replace(",", ".");
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : 0;
-}
-
-type LineItemRowProps = {
-  item: InvoiceLineItem;
-  index: number;
-  texts: InvoiceTexts;
-  onUpdate: (id: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => void;
-  onRemove: (id: string) => void;
-};
-
-const LineItemRow = memo(function LineItemRow({
-  item,
-  index,
-  texts,
-  onUpdate,
-  onRemove,
-}: LineItemRowProps) {
-  const itemType = item.type ?? "item";
-  const isHeader = itemType === "header";
-  const isSubheader = itemType === "subheader";
-  const isItem = itemType === "item";
-
-  return (
-    <div
-      className={`@container rounded-lg border p-4 ${
-        isHeader ? "border-zinc-300 bg-zinc-100" : isSubheader ? "border-zinc-200 bg-zinc-50" : "border-zinc-200 bg-white"
-      }`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="text-sm font-medium text-zinc-700">{index + 1}.</div>
-          <Select
-            aria-label={`Art der Zeile ${index + 1}`}
-            value={itemType}
-            onChange={(e) => {
-              const newType = e.target.value as LineItemType;
-              onUpdate(item.id, (prev) => ({
-                ...prev,
-                type: newType,
-                quantity: newType === "item" ? (prev.quantity || 1) : 0,
-                unitPrice: newType === "item" ? prev.unitPrice : 0,
-                taxRate: newType === "item" ? prev.taxRate : undefined,
-              }));
-            }}
-            className="w-auto"
-          >
-            <option value="header">Überschrift</option>
-            <option value="subheader">Unter-Überschrift</option>
-            <option value="item">Position</option>
-          </Select>
-        </div>
-        <Button size="sm" variant="danger" aria-label={`Zeile ${index + 1} entfernen`} onClick={() => onRemove(item.id)}>
-          Entfernen
-        </Button>
-      </div>
-
-      <div className="mt-3 space-y-3">
-        <div className="grid grid-cols-[88px_1fr] gap-3">
-          <Field label="Pos.-Nr.">
-            <Input
-              value={item.positionNumber || ""}
-              placeholder={isHeader ? "01" : isSubheader ? "01.001" : ""}
-              onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, positionNumber: e.target.value }))}
-            />
-          </Field>
-          <Field label={isHeader ? "Überschrift" : isSubheader ? "Unter-Überschrift" : texts.itemsDescriptionLabel}>
-            <Textarea
-              rows={Math.min(8, Math.max(isItem ? 3 : 1, Math.ceil((item.description?.length || 0) / 80)))}
-              value={item.description}
-              placeholder={isHeader ? "z.B. Rückbau Klima" : isSubheader ? "z.B. Raum Düsseldorf" : "Beschreibung der Position"}
-              className="min-h-[60px] resize-y"
-              onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, description: e.target.value }))}
-            />
-          </Field>
-        </div>
-
-        {isItem && (
-          <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
-            <Field label={texts.itemsQuantityLabel}>
-              <DecimalInput value={item.quantity}
-                onValueChange={(quantity) => onUpdate(item.id, (prev) => ({ ...prev, quantity: quantity ?? 0 }))} />
-            </Field>
-            <Field label="Einheit">
-              <Input
-                value={item.unit || ""}
-                placeholder="z.B. Stunde"
-                onChange={(e) => onUpdate(item.id, (prev) => ({ ...prev, unit: e.target.value }))}
-              />
-            </Field>
-            <Field label={texts.itemsUnitPriceLabel}>
-              <DecimalInput value={item.unitPrice}
-                onValueChange={(unitPrice) => onUpdate(item.id, (prev) => ({ ...prev, unitPrice: unitPrice ?? 0 }))} />
-            </Field>
-            <Field label={`${texts.itemsTaxRateLabel} (%)`}>
-              <DecimalInput allowEmpty value={item.taxRate === undefined ? undefined : item.taxRate * 100}
-                onValueChange={(percent) => onUpdate(item.id, (prev) => ({ ...prev, taxRate: percent === undefined ? undefined : percent / 100 }))} />
-            </Field>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
+/**
+ * The invoice as one object (Platform `line-shell-frame` + Overwatch entity `PageHeader`): identity with status and
+ * the main actions, then UnderlineTabs for the areas of the invoice. „Bearbeiten“ is one 880px form column with a
+ * sticky section list and the running total; „Vorschau“ shows the single paper preview at readable size. Every
+ * input is saved immediately (no save/discard buttons). The one preview stays in the DOM so the PDF print finds it.
+ */
 export function InvoiceEditorClient({ id }: { id: string }) {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
-  const locale = language === "de" ? "de-DE" : "en-US";
+  const de = language === "de";
+  const locale = de ? "de-DE" : "en-US";
   const defaultCurrency = data?.settings.currency ?? "EUR";
 
   const [pdfBusy, setPdfBusy] = useState(false);
+  const pdfInFlight = useRef(false);
   const [pdfMessage, setPdfMessage] = useState("");
   const [pdfError, setPdfError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [previewImmediate, setPreviewImmediate] = useState(false);
+  const [tab, setTab] = useState<EditorTab>(initialTab);
+  const [einvoiceErrors, setEinvoiceErrors] = useState<EInvoiceError[]>([]);
+  const [senderOpen, setSenderOpen] = useState<boolean | null>(null);
   const previewFrame = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(1);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [newPaymentAmount, setNewPaymentAmount] = useState("");
-  const [newPaymentDate, setNewPaymentDate] = useState(todayLocalISO());
-  const [newPaymentMethod, setNewPaymentMethod] = useState("bank_transfer");
-  const [newPaymentReference, setNewPaymentReference] = useState("");
 
-  const invoice = useMemo(() => {
-    return data?.invoices.find((inv) => inv.id === id) ?? null;
-  }, [data?.invoices, id]);
-
+  const invoice = useMemo(() => data?.invoices.find((inv) => inv.id === id) ?? null, [data?.invoices, id]);
   const deferredInvoice = useDeferredValue(invoice);
+  usePageCrumb(invoice ? invoice.invoiceNumber || (de ? "Ohne Nummer" : "No number") : null);
+
   useEffect(() => {
     const frame = previewFrame.current;
     if (!frame) return;
     const observer = new ResizeObserver(([entry]) => {
-      setPreviewScale(Math.min(1, Math.max(0.3, (entry.contentRect.width - 24) / (210 * 96 / 25.4))));
+      setPreviewScale(Math.min(1, Math.max(0.3, (entry.contentRect.width - 2) / (210 * 96 / 25.4))));
     });
     observer.observe(frame);
     return () => observer.disconnect();
   }, [invoice?.id]);
+
   const settings = data?.settings;
-  
-  // Get related data
   const customers = data?.customers ?? [];
   const products = data?.products ?? [];
   const tags = data?.tags ?? [];
   const templateVariants = data?.templateVariants ?? [];
+  const creditNotes = useMemo(() => (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === id), [data?.creditNotes, id]);
+  const balance = useMemo(() => (invoice ? computeInvoiceBalance(invoice, creditNotes) : null), [creditNotes, invoice]);
 
-  const creditNotes = useMemo(() => {
-    return (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === id);
-  }, [data?.creditNotes, id]);
+  const save = useCallback((next: Invoice | ((prev: Invoice) => Invoice)) => {
+    if (!adapter) return;
+    if (typeof next === "function") updateInvoice(adapter, id, next);
+    else upsertInvoice(adapter, next);
+  }, [adapter, id]);
 
-  const balance = useMemo(() => {
-    if (!invoice) return null;
-    return computeInvoiceBalance(invoice, creditNotes);
-  }, [creditNotes, invoice]);
+  const clearErrors = useCallback((match: (field: string) => boolean) => {
+    setEinvoiceErrors((previous) => (previous.some((error) => match(error.field)) ? previous.filter((error) => !match(error.field)) : previous));
+  }, []);
 
-  const invoiceTotal = balance?.invoiceTotal ?? 0;
-  const paidAmount = balance?.paidAmount ?? 0;
-  const remainingAmount = balance?.remainingAmount ?? 0;
-  const isFullyPaid = balance?.isFullyPaid ?? false;
-  const isPartiallyPaid = balance?.isPartiallyPaid ?? false;
+  const updateLineItem = useCallback((lineItemId: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => {
+    save((prev) => ({ ...prev, lineItems: prev.lineItems.map((item) => (item.id === lineItemId ? updater(item) : item)) }));
+    clearErrors((field) => field.startsWith("lineItems"));
+  }, [save, clearErrors]);
 
-  const currency = invoice?.currency || defaultCurrency;
+  const removeLineItem = useCallback((lineItemId: string) => {
+    save((prev) => ({ ...prev, lineItems: prev.lineItems.filter((item) => item.id !== lineItemId) }));
+    clearErrors((field) => field.startsWith("lineItems"));
+  }, [save, clearErrors]);
 
-  const logoDataUrl = invoice?.logoDataUrl || settings?.defaultLogoDataUrl;
+  const moveLineItem = useCallback((lineItemId: string, offset: -1 | 1) => {
+    save((prev) => {
+      const index = prev.lineItems.findIndex((item) => item.id === lineItemId);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= prev.lineItems.length) return prev;
+      const lineItems = [...prev.lineItems];
+      [lineItems[index], lineItems[target]] = [lineItems[target], lineItems[index]];
+      return { ...prev, lineItems };
+    });
+    clearErrors((field) => field.startsWith("lineItems"));
+  }, [save, clearErrors]);
 
-  const isDefaultInvoice = (settings?.defaultInvoiceId ?? null) === invoice?.id;
+  const selectTab = useCallback((next: EditorTab, focus?: string) => {
+    setTab(next);
+    window.history.replaceState(null, "", `#${tabHash[next]}`);
+    if (focus) focusLater(focus);
+  }, []);
 
-  const save = useCallback(
-    (next: Invoice | ((prev: Invoice) => Invoice)) => {
-      if (!adapter) return;
+  const jumpTo = useCallback((field: string) => {
+    const target = errorTarget(field);
+    if (target.sender) setSenderOpen(true);
+    selectTab(target.tab, target.id);
+  }, [selectTab]);
 
-      if (typeof next === "function") {
-        updateInvoice(adapter, id, next);
-      } else {
-        upsertInvoice(adapter, next);
-      }
-    },
-    [adapter, id]
-  );
-
-  const updateLineItem = useCallback(
-    (lineItemId: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => {
-      save((prev) => ({
-        ...prev,
-        lineItems: prev.lineItems.map((item) => (item.id === lineItemId ? updater(item) : item)),
-      }));
-    },
-    [save]
-  );
-
-  const removeLineItem = useCallback(
-    (lineItemId: string) => {
-      save((prev) => ({
-        ...prev,
-        lineItems: prev.lineItems.filter((item) => item.id !== lineItemId),
-      }));
-    },
-    [save]
-  );
+  const errorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const error of einvoiceErrors) if (error.field && !(error.field in map)) map[error.field] = error.message;
+    return map;
+  }, [einvoiceErrors]);
 
   if (!adapter) {
+    return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
+  }
+
+  if (!invoice || !balance) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 text-base text-zinc-600">{t(language, "common.loading")}</div>
-      </main>
+      <Page>
+        <PageHeader title={t(language, "invoice.notFound")} description={de ? "Die Rechnung wurde gelöscht oder der Link ist veraltet." : "The invoice was deleted or the link is outdated."} />
+        <div><Link href="/invoices" className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{de ? "Zu allen Rechnungen" : "All invoices"}</Link></div>
+      </Page>
     );
   }
 
-  if (!invoice) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="space-y-3">
-          <p className="text-base text-zinc-700">{t(language, "invoice.notFound")}</p>
-          <Link href="/invoices" className="inline-flex min-h-11 items-center text-base text-blue-700 hover:underline">
-            ← {t(language, "nav.invoices")}
-          </Link>
-        </div>
-      </main>
-    );
-  }
+  const currency = invoice.currency || defaultCurrency;
+  const logoDataUrl = invoice.logoDataUrl || settings?.defaultLogoDataUrl;
+  const isDefaultInvoice = (settings?.defaultInvoiceId ?? null) === invoice.id;
+  const status = invoiceStatus(invoice, balance, language);
+  const totals = computeInvoiceTotals(invoice);
+  const title = `${invoice.texts.documentTitle || (de ? "Rechnung" : "Invoice")} ${invoice.invoiceNumber || (de ? "ohne Nummer" : "without number")}`;
+  const editTabLabel = de ? "Bearbeiten" : "Edit";
+
+  const editErrors = einvoiceErrors.filter((error) => error.field && errorTarget(error.field).tab === "edit");
 
   const onPrint = async () => {
+    if (pdfInFlight.current) return;
+    pdfInFlight.current = true;
     setPdfBusy(true);
     setPdfMessage("");
     setPdfError(false);
@@ -332,9 +190,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       saveDocument?: (payload: { filename: string; bytes: Uint8Array }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
     };
     try {
-      // Let the latest invoice reach the single preview before printing it.
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      await document.fonts.ready;
+      await waitForInvoicePrintReady();
       if (api?.printToPDF) {
         const bytes = await api.printToPDF({ printBackground: true, preferCSSPageSize: true });
         if (!bytes) throw new Error("Die PDF konnte nicht erstellt werden.");
@@ -360,13 +216,13 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       setPdfError(true);
       setPdfMessage(error instanceof Error ? error.message : "PDF-Erstellung fehlgeschlagen.");
     } finally {
+      pdfInFlight.current = false;
       setPdfBusy(false);
       setPreviewImmediate(false);
     }
   };
 
   const handleSelectCustomer = (customerId: string) => {
-    if (!adapter || !invoice) return;
     if (!customerId) { save({ ...invoice, customerId: undefined }); return; }
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
@@ -375,959 +231,363 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       customerId,
       // Structured recipient details must not follow a different customer.
       einvoice: invoice.einvoice ? { ...invoice.einvoice, buyer: undefined, buyerReference: undefined } : undefined,
-      recipient: {
-        salutation: customer.salutation,
-        name: customer.name,
-        address: customer.address,
-        contact: customer.contact,
-      },
+      recipient: { salutation: customer.salutation, name: customer.name, address: customer.address, contact: customer.contact },
     });
-  };
-
-  const handleAddProduct = (productId: string) => {
-    if (!adapter || !invoice) return;
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
-    const lineItem = createLineItemFromProduct(product);
-    save({
-      ...invoice,
-      lineItems: [...invoice.lineItems, lineItem],
-    });
+    clearErrors((field) => field === "buyer");
   };
 
   const handleCreateCreditNote = (type: "storno" | "gutschrift") => {
-    if (!adapter || !invoice) return;
     const creditNote = createCreditNote(adapter, invoice.id, type);
-    if (creditNote) {
-      window.location.assign(`/credit-notes/${creditNote.id}`);
-    }
+    if (creditNote) window.location.assign(`/credit-notes/${creditNote.id}`);
   };
 
   const handleEmailInvoice = async () => {
-    if (!invoice) return;
-
-    const customerEmail = invoice.customerId
-      ? customers.find((c) => c.id === invoice.customerId)?.email
-      : undefined;
-
+    if (pdfInFlight.current) return;
+    pdfInFlight.current = true;
+    const customerEmail = invoice.customerId ? customers.find((c) => c.id === invoice.customerId)?.email : undefined;
     const to = customerEmail ?? "";
     const subjectText = `${invoice.texts.documentTitle} ${invoice.invoiceNumber}`.trim();
     const bodyText =
-      `${language === "de" ? "Sehr geehrte Damen und Herren" : "Dear Sir or Madam"},\n\n` +
-      `${language === "de" ? "anbei erhalten Sie" : "Please find attached"} ${invoice.texts.documentTitle} ${invoice.invoiceNumber}.\n\n` +
-      `${language === "de" ? "Mit freundlichen Grüßen" : "Best regards"},\n${invoice.sender.name}`;
-
+      `${de ? "Sehr geehrte Damen und Herren" : "Dear Sir or Madam"},\n\n` +
+      `${de ? "anbei erhalten Sie" : "Please find attached"} ${invoice.texts.documentTitle} ${invoice.invoiceNumber}.\n\n` +
+      `${de ? "Mit freundlichen Grüßen" : "Best regards"},\n${invoice.sender.name}`;
     const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
     const filename = buildPdfFilename(pattern, invoice);
 
+    setPdfBusy(true);
+    setPdfMessage("");
+    setPdfError(false);
     setPreviewImmediate(true);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    await document.fonts.ready;
-
-    // Electron: generate PDF + open email compose with attachment
-    if (window.electronAPI?.emailInvoiceWithPdf) {
-      const result = await window.electronAPI.emailInvoiceWithPdf({
-        to,
-        subject: subjectText,
-        body: bodyText,
-        filename,
-      });
-      if (result?.ok) return;
-      console.error('Email compose failed:', result?.error);
-      // fall through to mailto
+    try {
+      await waitForInvoicePrintReady();
+      // Desktop compose includes the checked, fully rendered PDF.
+      if (window.electronAPI?.emailInvoiceWithPdf) {
+        const result = await window.electronAPI.emailInvoiceWithPdf({ to, subject: subjectText, body: bodyText, filename });
+        if (result?.ok) return;
+        setPdfError(true);
+        setPdfMessage(`${result?.error || "Die E-Mail mit PDF konnte nicht vorbereitet werden."} Der E-Mailentwurf wird ohne Anhang geöffnet. Bitte die PDF separat anhängen.`);
+      }
+      // Browser mailto cannot attach files.
+      const subject = encodeURIComponent(subjectText);
+      const body = encodeURIComponent(bodyText);
+      window.location.href = to
+        ? `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`
+        : `mailto:?subject=${subject}&body=${body}`;
+    } catch (error) {
+      setPdfError(true);
+      setPdfMessage(error instanceof Error ? error.message : "Die E-Mail mit PDF konnte nicht vorbereitet werden.");
+    } finally {
+      pdfInFlight.current = false;
+      setPdfBusy(false);
+      setPreviewImmediate(false);
     }
-
-    // Web fallback: mailto (cannot attach files)
-    const subject = encodeURIComponent(subjectText);
-    const body = encodeURIComponent(bodyText);
-    const mailto = to
-      ? `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`
-      : `mailto:?subject=${subject}&body=${body}`;
-    window.location.href = mailto;
   };
 
+  const tabs = [
+    { value: "edit" as const, label: editTabLabel },
+    { value: "preview" as const, label: de ? "Vorschau" : "Preview" },
+    { value: "payments" as const, label: de ? "Zahlungen" : "Payments", count: (invoice.payments ?? []).length || undefined },
+    { value: "einvoice" as const, label: de ? "E-Rechnung" : "E-invoice", count: einvoiceErrors.length ? (de ? `${einvoiceErrors.length} offen` : `${einvoiceErrors.length} open`) : undefined },
+    { value: "extras" as const, label: de ? "Gestaltung und mehr" : "Layout and more" },
+  ];
+
+  const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = TAB_ORDER.indexOf(tab);
+    const next = event.key === "ArrowRight" ? TAB_ORDER[(index + 1) % TAB_ORDER.length]
+      : event.key === "ArrowLeft" ? TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length]
+        : event.key === "Home" ? TAB_ORDER[0]
+          : event.key === "End" ? TAB_ORDER[TAB_ORDER.length - 1]
+            : null;
+    if (!next) return;
+    event.preventDefault();
+    selectTab(next);
+    requestAnimationFrame(() => document.getElementById(`tab-${next}`)?.focus());
+  };
+
+  const sections = [
+    ["rechnungsdaten", de ? "Rechnungsdaten" : "Invoice details"],
+    ["empfaenger", invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")],
+    ["positionen", de ? "Positionen" : "Line items"],
+    ["hinweise", invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")],
+    ["absender", invoice.texts.senderHeading || (de ? "Absender" : "Sender")],
+  ] as const;
+
+  const description = [
+    invoice.recipient.name || (de ? "Noch kein Empfänger" : "No recipient yet"),
+    formatMoney(balance.effectiveTotal, currency, locale),
+    invoice.dueDate ? `${de ? "fällig am" : "due"} ${formatDay(invoice.dueDate, locale)}` : null,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
+    <Page className="gap-0">
       <PrintStyles />
 
-      <div className="no-print mb-6 space-y-3">
-        <Link href="/invoices" className="inline-flex min-h-11 items-center text-base text-zinc-600 hover:text-zinc-900">
-          ← {language === "de" ? "Alle Rechnungen" : "All invoices"}
-        </Link>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold">
-              {invoice.texts.documentTitle || (language === "de" ? "Rechnung" : "Invoice")} {invoice.invoiceNumber || (language === "de" ? "ohne Nummer" : "without number")}
-            </h1>
-            {!invoice.invoiceNumber && invoiceTotal === 0 ? (
-              <span className={`${chip} border-zinc-300 bg-zinc-50 text-zinc-700`}>{language === "de" ? "Entwurf" : "Draft"}</span>
-            ) : isFullyPaid ? (
-              <span className={`${chip} border-emerald-200 bg-emerald-50 text-emerald-800`}>
-                {t(language, "invoice.paid")}
-              </span>
-            ) : isPartiallyPaid ? (
-              <span className={`${chip} border-amber-200 bg-amber-50 text-amber-900`}>
-                {t(language, "invoice.partiallyPaid")}
-              </span>
-            ) : balance?.isOverdue ? (
-              <span className={`${chip} border-red-200 bg-red-50 text-red-800`}>
-                {t(language, "invoice.overdue")}
-              </span>
-            ) : null}
-            {isDefaultInvoice ? (
-              <span className={`${chip} border-zinc-200 bg-white text-zinc-700`}>
-                {t(language, "invoice.default")}
-              </span>
-            ) : null}
-          </div>
+      <PageHeader
+        variant="entity"
+        className="no-print"
+        title={title}
+        initials={initialsOf(invoice.recipient.name) || "R"}
+        status={(
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            {isDefaultInvoice && <DashedBadge title={de ? "Vorlage für neue Rechnungen" : "Default for new invoices"}>{de ? "Standard" : "Default"}</DashedBadge>}
+          </span>
+        )}
+        description={description}
+        meta={[de ? "Jede Änderung wird sofort gespeichert." : "Every change is saved immediately."]}
+        actions={(
+          <>
+            <Button variant="primary" loading={pdfBusy} onClick={onPrint}>{pdfBusy ? (de ? "PDF wird erstellt …" : "Creating PDF …") : (de ? "PDF speichern" : "Save PDF")}</Button>
+            <Button onClick={() => selectTab("einvoice")}>{de ? "E-Rechnung" : "E-invoice"}</Button>
+            <OverflowMenu
+              label={de ? "Weitere Aktionen" : "More actions"}
+              trigger={de ? "Weitere Aktionen" : "More actions"}
+              items={[
+                { label: t(language, "actions.email"), onSelect: () => { void handleEmailInvoice(); } },
+                !balance.isFullyPaid && { label: t(language, "actions.addPayment"), onSelect: () => selectTab("payments", PAYMENT_AMOUNT_ID) },
+                {
+                  label: t(language, "actions.duplicate"),
+                  onSelect: () => {
+                    const dup = duplicateInvoiceById(adapter, invoice.id);
+                    if (dup) window.location.assign(`/invoices/${dup.id}`);
+                  },
+                },
+                !isDefaultInvoice && { label: t(language, "actions.setDefaultInvoice"), onSelect: () => updateSettings(adapter, (prev) => ({ ...prev, defaultInvoiceId: invoice.id })) },
+                { kind: "separator" },
+                { kind: "label", label: de ? "Korrektur erstellen" : "Create correction" },
+                { label: t(language, "creditNotes.storno"), onSelect: () => handleCreateCreditNote("storno") },
+                { label: t(language, "creditNotes.gutschrift"), onSelect: () => handleCreateCreditNote("gutschrift") },
+                { kind: "separator" },
+                { label: de ? "Rechnung löschen …" : "Delete invoice …", tone: "danger", onSelect: () => setConfirmDelete(true) },
+              ]}
+            />
+          </>
+        )}
+      />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" disabled={pdfBusy} onClick={onPrint}>{pdfBusy ? "PDF wird erstellt …" : "PDF speichern"}</Button>
-            <ActionMenu label={language === "de" ? "Weitere Aktionen" : "More actions"}>
-              <Button variant="ghost" className={menuItem} onClick={handleEmailInvoice}>
-                {t(language, "actions.email")}
-              </Button>
-              <Button variant="ghost" className={menuItem} onClick={() => setShowPaymentForm(!showPaymentForm)}>
-                {t(language, "actions.addPayment")}
-              </Button>
-              <Button
-                variant="ghost"
-                className={menuItem}
-                onClick={() => {
-                  const dup = duplicateInvoiceById(adapter, invoice.id);
-                  if (dup) window.location.assign(`/invoices/${dup.id}`);
-                }}
-              >
-                {t(language, "actions.duplicate")}
-              </Button>
-              <Button
-                variant="ghost"
-                className={menuItem}
-                onClick={() => {
-                  if (!adapter) return;
-                  updateSettings(adapter, (prev) => ({ ...prev, defaultInvoiceId: invoice.id }));
-                }}
-              >
-                {t(language, "actions.setDefaultInvoice")}
-              </Button>
-              <div role="group" aria-labelledby="credit-note-actions" className="mt-1 border-t border-zinc-200 pt-2">
-                <p id="credit-note-actions" className="px-4 pb-1 text-sm font-medium text-zinc-600">
-                  {language === "de" ? "Korrektur erstellen" : "Create correction"}
-                </p>
-                <Button variant="ghost" className={menuItem} onClick={() => handleCreateCreditNote("storno")}>{t(language, "creditNotes.storno")}</Button>
-                <Button variant="ghost" className={menuItem} onClick={() => handleCreateCreditNote("gutschrift")}>{t(language, "creditNotes.gutschrift")}</Button>
-              </div>
-              <div className="mt-1 border-t border-zinc-200 pt-2">
-                <Button variant="ghost" className={`${menuItem} text-red-700!`} onClick={() => setConfirmDelete(true)}>
-                  {language === "de" ? "Rechnung löschen …" : "Delete invoice …"}
-                </Button>
-              </div>
-            </ActionMenu>
-          </div>
-        </div>
+      <div className="no-print mt-6 flex flex-col gap-3 empty:hidden">
+        {pdfMessage && <StatusNote tone={pdfError ? "error" : "ok"} role={pdfError ? "alert" : "status"}>{pdfMessage}</StatusNote>}
+        {creditNotes.length > 0 && (
+          <StatusNote tone="attention" title={`${t(language, "invoice.linkedCreditNotes")} (${creditNotes.length})`}>
+            <ul className="flex flex-col gap-0.5">
+              {creditNotes.map((cn) => (
+                <li key={cn.id}>
+                  <Link href={`/credit-notes/${cn.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                    {cn.creditNoteNumber || (de ? "Ohne Nummer" : "No number")} · {t(language, `creditNotes.${cn.type}`)} · {formatMoney(cn.amount, currency, locale)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </StatusNote>
+        )}
       </div>
 
-      {pdfMessage && (
-        <p
-          role={pdfError ? "alert" : "status"}
-          className={`no-print mb-5 rounded-lg border p-3 text-base ${pdfError ? "border-red-200 bg-red-50 text-red-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
-        >
-          {pdfMessage}
-        </p>
-      )}
+      <UnderlineTabs
+        role="tablist"
+        aria-label={de ? "Bereiche der Rechnung" : "Invoice areas"}
+        size="lg"
+        className="no-print mt-8"
+        items={tabs}
+        value={tab}
+        renderItem={(item, content) => (
+          <button
+            type="button"
+            role="tab"
+            id={`tab-${item.value}`}
+            aria-selected={item.value === tab}
+            aria-controls={`panel-${item.value}`}
+            tabIndex={item.value === tab ? 0 : -1}
+            onClick={() => selectTab(item.value)}
+            onKeyDown={onTabKey}
+            className="rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 touch:pt-3"
+          >
+            {content}
+          </button>
+        )}
+      />
 
-      {/* Payment Form */}
-      {showPaymentForm && (
-        <section aria-labelledby="quick-payment-title" className={`no-print mb-6 ${card}`}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 id="quick-payment-title" className="text-lg font-semibold">{t(language, "actions.addPayment")}</h2>
-            <Button size="sm" variant="ghost" className="hover:bg-zinc-100!" onClick={() => setShowPaymentForm(false)}>
-              {language === "de" ? "Schließen" : "Close"}
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Field label={t(language, "common.amount")}>
-              <Input
-                inputMode="decimal"
-                value={newPaymentAmount}
-                onChange={(e) => setNewPaymentAmount(e.target.value)}
-                placeholder={formatMoney(remainingAmount, currency, locale)}
-              />
-            </Field>
-            <Field label={t(language, "common.date")}>
-              <Input
-                type="date"
-                value={newPaymentDate}
-                onChange={(e) => setNewPaymentDate(e.target.value)}
-              />
-            </Field>
-            <Field label={t(language, "invoices.paymentMethod")}>
-              <Select value={newPaymentMethod} onChange={(event) => setNewPaymentMethod(event.target.value)}>
-                <option value="bank_transfer">Überweisung</option><option value="cash">Barzahlung</option><option value="card">Karte</option><option value="paypal">PayPal</option><option value="other">Sonstiges</option>
-              </Select>
-            </Field>
-            <div className="flex items-end">
-              <Button variant="primary" onClick={() => {
-                const amount = parseNumber(newPaymentAmount);
-                if (amount <= 0) return;
-                const payment: Payment = {
-                  id: crypto.randomUUID(),
-                  amount,
-                  currency: invoice.currency ?? "EUR",
-                  date: newPaymentDate || todayLocalISO(),
-                  method: (newPaymentMethod || "bank_transfer") as Payment["method"],
-                };
-                save(addPaymentToInvoice(invoice, payment));
-                setShowPaymentForm(false);
-                setNewPaymentAmount("");
-                setNewPaymentMethod("bank_transfer");
-              }}>
-                {t(language, "actions.add")}
-              </Button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Credit Notes Warning */}
-      {creditNotes.length > 0 && (
-        <div className="no-print mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="text-base font-semibold text-amber-900">
-            {t(language, "invoice.linkedCreditNotes")} ({creditNotes.length})
-          </h2>
-          <div className="mt-2 space-y-1">
-            {creditNotes.map((cn) => (
-              <Link
-                key={cn.id}
-                href={`/credit-notes/${cn.id}`}
-                className="block py-1 text-base text-amber-900 underline-offset-4 hover:underline"
-              >
-                {cn.creditNoteNumber || cn.id} · {t(language, `creditNotes.${cn.type}`)} · {formatMoney(cn.amount, currency, locale)}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section className="no-print space-y-6">
-          <div className={card}>
-            <h2 className="text-lg font-semibold">{t(language, "invoice.editorTitle")}</h2>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label={invoice.texts.invoiceNumberLabel}>
-                <Input value={invoice.invoiceNumber} onChange={(e) => save(setInvoiceField(invoice, "invoiceNumber", e.target.value))} />
-              </Field>
-              <Field label={invoice.texts.invoiceDateLabel}>
-                <Input type="date" value={invoice.invoiceDate} onChange={(e) => save(setInvoiceField(invoice, "invoiceDate", e.target.value))} />
-              </Field>
-              <Field label={invoice.texts.dueDateLabel}>
-                <Input type="date" value={invoice.dueDate} onChange={(e) => save(setInvoiceField(invoice, "dueDate", e.target.value))} />
-              </Field>
-            </div>
-          </div>
-
-          <details className={`disclosure ${card}`}>
-            <summary className="flex-wrap">
-              <h2 className="text-lg font-semibold">{invoice.texts.senderHeading}</h2>
-              <span className={invoice.sender.name ? "text-base text-zinc-600" : "text-base font-medium text-amber-800"}>
-                {invoice.sender.name || (language === "de" ? "Bitte ergänzen" : "Please complete")}
-              </span>
-            </summary>
-            <div className="mt-4 grid gap-4">
-              <Field label="Name">
-                <Input value={invoice.sender.name} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } })} />
-              </Field>
-              <Field label="Adresse">
-                <Textarea rows={3} value={invoice.sender.address} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, address: e.target.value } })} />
-              </Field>
-              <Field label="Kontakt">
-                <Textarea rows={2} value={invoice.sender.contact} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, contact: e.target.value } })} />
-              </Field>
-            </div>
-          </details>
-
-          <div className={card}>
-            <h2 className="text-lg font-semibold">{invoice.texts.recipientHeading}</h2>
-            <div className="mt-4 grid gap-4">
-              {customers.length > 0 && (
-                <Field
-                  label={language === "de" ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
-                  hint={language === "de" ? "Ersetzt Anrede, Name, Adresse und Kontakt durch die gespeicherten Kundendaten." : "Replaces salutation, name, address and contact with the saved customer details."}
-                >
-                  <Select value={invoice.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
-                    <option value="">{t(language, "actions.selectCustomer")} …</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-              <Field label="Anrede">
-                <Input 
-                  value={invoice.recipient.salutation || ""} 
-                  placeholder="z.B. Sehr geehrte Damen und Herren"
-                  onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, salutation: e.target.value } })} 
-                />
-              </Field>
-              <Field label="Name">
-                <Input value={invoice.recipient.name} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, name: e.target.value } })} />
-              </Field>
-              <Field label="Adresse">
-                <Textarea rows={3} value={invoice.recipient.address} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, address: e.target.value } })} />
-              </Field>
-              <Field label="Kontakt">
-                <Textarea rows={2} value={invoice.recipient.contact} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, contact: e.target.value } })} />
-              </Field>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">Positionen</div>
-              <div className="flex items-center gap-2">
-                {products.length > 0 && (
-                  <Select
-                    aria-label="Produkt oder Leistung hinzufügen"
-                    value=""
-                    onChange={(e) => handleAddProduct(e.target.value)}
-                    className="w-auto text-sm"
+      <div className="pt-8 lg:pt-10">
+        {tab === "edit" && (
+          <div role="tabpanel" id="panel-edit" aria-labelledby="tab-edit" className="no-print flex flex-col gap-8 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-12">
+            <aside className="flex flex-col gap-6 max-lg:hidden lg:sticky lg:top-20">
+              <nav aria-label={de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="flex flex-col gap-0.5">
+                {sections.map(([anchor, label]) => (
+                  <a
+                    key={anchor}
+                    href={`#${anchor}`}
+                    onClick={() => { if (anchor === "absender") setSenderOpen(true); }}
+                    className="inline-flex min-h-9 items-center rounded-md px-2.5 font-sans text-lg font-medium tracking-snug text-ink-muted outline-none transition-colors duration-100 hover:bg-surface-muted hover:text-ink-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
                   >
-                    <option value="">{t(language, "actions.selectProduct")}...</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} - {formatMoney(p.unitPrice, currency, locale)}</option>
-                    ))}
-                  </Select>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 space-y-3">
-              {invoice.lineItems.map((lineItem, idx) => (
-                <LineItemRow
-                  key={lineItem.id}
-                  item={lineItem}
-                  index={idx}
-                  texts={invoice.texts}
-                  onUpdate={updateLineItem}
-                  onRemove={removeLineItem}
-                />
-              ))}
-
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    save({
-                      ...invoice,
-                      lineItems: [...invoice.lineItems, createDefaultLineItem(settings?.defaultTaxRate, "header")],
-                    });
-                  }}
-                >
-                  + Überschrift
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    save({
-                      ...invoice,
-                      lineItems: [...invoice.lineItems, createDefaultLineItem(settings?.defaultTaxRate, "subheader")],
-                    });
-                  }}
-                >
-                  + Unter-Überschrift
-                </Button>
-                <Button
-                  onClick={() => {
-                    save({
-                      ...invoice,
-                      lineItems: [...invoice.lineItems, createDefaultLineItem(settings?.defaultTaxRate, "item")],
-                    });
-                  }}
-                >
-                  + Position
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes Section (Hinweise) - shown under totals on invoice */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{invoice.texts.notesHeading || "Hinweise"}</div>
-            <p className="mt-1 text-xs text-zinc-500">Wird unter der Zusammenfassung angezeigt.</p>
-            <div className="mt-4">
-              <Textarea 
-                aria-label={invoice.texts.notesHeading || "Hinweise"}
-                rows={3} 
-                value={invoice.notesText || ""} 
-                placeholder="z.B. Zahlungsbedingungen, Hinweise, etc."
-                onChange={(e) => save({ ...invoice, notesText: e.target.value })} 
-              />
-            </div>
-          </div>
-
-          <EInvoicePanel invoice={{ ...invoice, logoDataUrl }} onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
-            onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))} />
-
-          <details className="rounded-xl border border-zinc-200 bg-white p-5">
-            <summary className="cursor-pointer text-base font-semibold">Layout, Fußzeile und weitere Einstellungen</summary>
-            <div className="mt-5 space-y-6">
-          {/* Footer Section - small with left/right */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">Fußzeile</div>
-            <p className="mt-1 text-xs text-zinc-500">Kleine Fußzeile am Seitenende mit links/rechts Aufteilung.</p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Links">
-                <Textarea 
-                  rows={4} 
-                  value={invoice.footerLeftText || ""} 
-                  placeholder="z.B. Bankverbindung, IBAN, BIC"
-                  className="min-h-[100px]"
-                  onChange={(e) => save({ ...invoice, footerLeftText: e.target.value })} 
-                />
-              </Field>
-              <Field label="Rechts">
-                <Textarea 
-                  rows={4} 
-                  value={invoice.footerRightText || ""} 
-                  placeholder="z.B. Steuernummer, USt-IdNr., Handelsregister"
-                  className="min-h-[100px]"
-                  onChange={(e) => save({ ...invoice, footerRightText: e.target.value })} 
-                />
-              </Field>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">Layout</div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label={t(language, "settings.defaultTemplate")}>
-                <Select
-                  value={invoice.layout.templateId}
-                  onChange={(e) => {
-                    const templateId = e.target.value as InvoiceTemplateId;
-                    save(setLayout(invoice, { ...invoice.layout, templateId, templateVariantId: undefined }));
-                  }}
-                >
-                  <option value="classic">Classic</option>
-                  <option value="modern">Modern</option>
-                  <option value="minimal">Minimal</option>
-                </Select>
-              </Field>
-
-              {templateVariants.length > 0 && (
-                <Field label="Vorlage (Variante)">
-                  <Select
-                    value={invoice.layout.templateVariantId || ""}
-                    onChange={(e) => {
-                      const variantId = e.target.value || undefined;
-                      const variant = templateVariants.find(v => v.id === variantId);
-                      if (variant) {
-                        save(setLayout(invoice, { 
-                          ...invoice.layout, 
-                          templateId: variant.baseTemplateId,
-                          templateVariantId: variantId,
-                          customization: variant.customization 
-                        }));
-                      } else {
-                        save(setLayout(invoice, { ...invoice.layout, templateVariantId: undefined, customization: undefined }));
-                      }
-                    }}
-                  >
-                    <option value="">Keine Variante</option>
-                    {templateVariants.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name} ({v.baseTemplateId})</option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-
-              <Field label={t(language, "settings.logoPosition")}>
-                <Select
-                  value={invoice.layout.logoPosition}
-                  onChange={(e) => {
-                    const pos = e.target.value as LogoPosition;
-                    save(setLayout(invoice, { ...invoice.layout, logoPosition: pos }));
-                  }}
-                >
-                  <option value="left">{t(language, "settings.topLeft")}</option>
-                  <option value="center">{t(language, "settings.topCenter")}</option>
-                  <option value="right">{t(language, "settings.topRight")}</option>
-                </Select>
-              </Field>
-
-              <Field label="Logo anzeigen">
-                <label className="flex items-center gap-3 h-10 px-3 rounded-lg border border-zinc-200 bg-white cursor-pointer hover:bg-zinc-50">
-                  <input 
-                    type="checkbox" 
-                    checked={invoice.layout.showLogo} 
-                    onChange={(e) => save(setLayout(invoice, { ...invoice.layout, showLogo: e.target.checked }))} 
-                    className="w-4 h-4 accent-zinc-800"
-                  />
-                  <span className="text-sm">{invoice.layout.showLogo ? t(language, "common.yes") : t(language, "common.no")}</span>
-                </label>
-              </Field>
-
-              {invoice.layout.showLogo && (
-                <Field label="Logo Größe">
-                  <Select
-                    value={invoice.layout.logoSize ?? "medium"}
-                    onChange={(e) => {
-                      const logoSize = e.target.value as "small" | "medium" | "large";
-                      save(setLayout(invoice, { ...invoice.layout, logoSize }));
-                    }}
-                  >
-                    <option value="small">{t(language, "settings.small")}</option>
-                    <option value="medium">{t(language, "settings.medium")}</option>
-                    <option value="large">{t(language, "settings.large")}</option>
-                  </Select>
-                </Field>
-              )}
-
-              <Field label="Footer anzeigen">
-                <label className="flex items-center gap-3 h-10 px-3 rounded-lg border border-zinc-200 bg-white cursor-pointer hover:bg-zinc-50">
-                  <input 
-                    type="checkbox" 
-                    checked={invoice.layout.showFooter} 
-                    onChange={(e) => save(setLayout(invoice, { ...invoice.layout, showFooter: e.target.checked }))} 
-                    className="w-4 h-4 accent-zinc-800"
-                  />
-                  <span className="text-sm">{invoice.layout.showFooter ? t(language, "common.yes") : t(language, "common.no")}</span>
-                </label>
-              </Field>
-
-              <Field label="Absender Position">
-                <Select
-                  value={invoice.layout.senderPosition}
-                  onChange={(e) => {
-                    const senderPosition = e.target.value as LayoutPreferences["senderPosition"];
-                    save(setLayout(invoice, { ...invoice.layout, senderPosition }));
-                  }}
-                >
-                  <option value="left">{t(language, "settings.left")}</option>
-                  <option value="right">{t(language, "settings.right")}</option>
-                </Select>
-              </Field>
-
-              <Field label="Empfänger Position">
-                <Select
-                  value={invoice.layout.recipientPosition}
-                  onChange={(e) => {
-                    const recipientPosition = e.target.value as LayoutPreferences["recipientPosition"];
-                    save(setLayout(invoice, { ...invoice.layout, recipientPosition }));
-                  }}
-                >
-                  <option value="left">{t(language, "settings.left")}</option>
-                  <option value="right">{t(language, "settings.right")}</option>
-                </Select>
-              </Field>
-
-              <Field label="Logo überschreiben (optional)">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const result = reader.result;
-                      if (typeof result !== "string") return;
-                      save((prev) => ({ ...prev, logoDataUrl: result }));
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                />
-              </Field>
-
-              {invoice.logoDataUrl ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    save({ ...invoice, logoDataUrl: undefined });
-                  }}
-                >
-                  Logo-Override entfernen
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">Texte (auf der Rechnung)</div>
-            <p className="mt-1 text-sm text-zinc-500">Alle sichtbaren Labels/Überschriften in der Vorschau kommen von diesen Feldern.</p>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {(
-                [
-                  ["documentTitle", "Dokumenttitel"],
-                  ["senderHeading", "Absender Überschrift"],
-                  ["recipientHeading", "Empfänger Überschrift"],
-                  ["invoiceNumberLabel", "Label: Rechnungsnummer"],
-                  ["invoiceDateLabel", "Label: Rechnungsdatum"],
-                  ["dueDateLabel", "Label: Fällig am"],
-                  ["itemsDescriptionLabel", "Label: Beschreibung"],
-                  ["itemsQuantityLabel", "Label: Menge"],
-                  ["itemsUnitPriceLabel", "Label: Einzelpreis"],
-                  ["itemsTaxRateLabel", "Label: MwSt."],
-                  ["itemsLineTotalLabel", "Label: Summe"],
-                  ["subtotalLabel", "Label: Zwischensumme"],
-                  ["taxTotalLabel", "Label: Steuer"],
-                  ["totalLabel", "Label: Gesamt"],
-                  ["notesHeading", "Hinweise Überschrift"],
-                  ["footerHeading", "Footer Überschrift (Legacy)"],
-                ] as Array<[keyof InvoiceTexts, string]>
-              ).map(([key, label]) => (
-                <Field key={key} label={label}>
-                  <Input
-                    value={invoice.texts[key] ?? ""}
-                    onChange={(e) => {
-                      save(setTexts(invoice, { ...invoice.texts, [key]: e.target.value }));
-                    }}
-                  />
-                </Field>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags Section */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{t(language, "tags.title")}</div>
-            <p className="mt-1 text-sm text-zinc-500">{t(language, "tags.assignToInvoice")}</p>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {(invoice.tagIds ?? []).map((tagId) => {
-                const tag = tags.find((t) => t.id === tagId);
-                if (!tag) return null;
-                return (
-                  <span
-                    key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
-                    style={{ backgroundColor: tag.color + "20", color: tag.color }}
-                  >
-                    {tag.name}
-                    <button
-                      type="button"
-                      className="ml-1 text-current hover:opacity-70"
-                      onClick={() => {
-                        save({ ...invoice, tagIds: (invoice.tagIds ?? []).filter((id) => id !== tagId) });
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="mt-3">
-              <Select
-                value=""
-                onChange={(e) => {
-                  const tagId = e.target.value;
-                  if (tagId && !(invoice.tagIds ?? []).includes(tagId)) {
-                    save({ ...invoice, tagIds: [...(invoice.tagIds ?? []), tagId] });
-                  }
-                }}
-              >
-                <option value="">{t(language, "tags.addTag")}</option>
-                {tags
-                  .filter((tag) => !(invoice.tagIds ?? []).includes(tag.id))
-                  .map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-              </Select>
-            </div>
-          </div>
-
-          {/* Multi-Currency Section */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{t(language, "invoices.currency")}</div>
-            <p className="mt-1 text-sm text-zinc-500">{t(language, "invoices.multiCurrencyNote")}</p>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label={t(language, "invoices.currency")}>
-                <Select
-                  value={invoice.currency ?? "EUR"}
-                  onChange={(e) => {
-                    save({ ...invoice, currency: e.target.value });
-                  }}
-                >
-                  {CURRENCIES.map((cur) => (
-                    <option key={cur.code} value={cur.code}>
-                      {cur.code} ({cur.symbol}) - {language === "de" ? cur.de : cur.en}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              {invoice.currency && invoice.currency !== "EUR" && (
-                <>
-                  <Field label={t(language, "invoices.exchangeRate")}>
-                    <DecimalInput value={invoice.exchangeRate ?? 1}
-                      onValueChange={(exchangeRate) => save({ ...invoice, exchangeRate: exchangeRate ?? 1 })} />
-                  </Field>
-
-                  <div className="sm:col-span-2">
-                    <Field label={t(language, "invoices.exchangeRateNote")}>
-                      <Input
-                        value={invoice.exchangeRateNote ?? ""}
-                        placeholder={`z.B. 1 ${invoice.currency} = ${invoice.exchangeRate ?? 1} EUR`}
-                        onChange={(e) => {
-                          save({ ...invoice, exchangeRateNote: e.target.value });
-                        }}
-                      />
-                    </Field>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Payments Section */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">{t(language, "invoices.payments")}</div>
-              <div className="flex items-center gap-2 text-sm">
-                {isFullyPaid ? (
-                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700">{t(language, "invoices.fullyPaid")}</span>
-                ) : isPartiallyPaid ? (
-                  <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-700">{t(language, "invoices.partiallyPaid")}</span>
-                ) : (
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{t(language, "invoices.unpaid")}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>{t(language, "invoices.invoiceTotal")}:</span>
-                <span className="font-medium">{formatMoney(invoiceTotal, invoice.currency ?? "EUR", locale)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>{t(language, "invoices.paidAmount")}:</span>
-                <span className="font-medium text-green-600">{formatMoney(paidAmount, invoice.currency ?? "EUR", locale)}</span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-2">
-                <span>{t(language, "invoices.remainingBalance")}:</span>
-                <span className={`font-semibold ${remainingAmount > 0 ? "text-red-600" : "text-green-600"}`}>
-                  {formatMoney(remainingAmount, invoice.currency ?? "EUR", locale)}
-                </span>
-              </div>
-            </div>
-
-            {(invoice.payments ?? []).length > 0 && (
-              <div className="mt-4 space-y-2">
-                <div className="text-xs font-medium text-zinc-500 uppercase">{t(language, "invoices.paymentHistory")}</div>
-                {(invoice.payments ?? []).map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between rounded-lg bg-zinc-50 p-3 text-sm">
-                    <div>
-                      <div className="font-medium">{formatMoney(payment.amount, payment.currency ?? invoice.currency ?? "EUR", locale)}</div>
-                      <div className="text-xs text-zinc-500">
-                        {new Date(payment.date).toLocaleDateString(locale)} - {payment.method}
-                        {payment.reference && ` (${payment.reference})`}
-                      </div>
-                      {payment.notes && <div className="text-xs text-zinc-400">{payment.notes}</div>}
-                    </div>
-                    <button
-                      type="button"
-                      className="text-red-500 hover:text-red-700"
-                      onClick={() => {
-                        const updated = removePaymentFromInvoice(invoice, payment.id);
-                        save(updated);
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
+                    {label}
+                  </a>
                 ))}
+              </nav>
+              <div className="border-t border-line pt-4">
+                <KeyValueList
+                  items={[
+                    { label: de ? "Netto" : "Net", value: formatMoney(totals.subtotal, currency, locale) },
+                    { label: de ? "Steuer" : "Tax", value: formatMoney(totals.taxTotal, currency, locale) },
+                    { label: invoice.texts.totalLabel || (de ? "Gesamt" : "Total"), value: formatMoney(totals.total, currency, locale), emphasis: true },
+                  ]}
+                />
               </div>
-            )}
+            </aside>
 
-            {!isFullyPaid && (
-              <div className="mt-4 border-t pt-4">
-                <div className="text-xs font-medium text-zinc-500 uppercase mb-3">{t(language, "invoices.addPayment")}</div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t(language, "invoices.paymentAmount")}>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={newPaymentAmount}
-                      onChange={(e) => setNewPaymentAmount(e.target.value)}
-                      placeholder={remainingAmount.toFixed(2)}
-                    />
-                  </Field>
-                  <Field label={t(language, "invoices.paymentDate")}>
-                    <Input
-                      type="date"
-                      value={newPaymentDate}
-                      onChange={(e) => setNewPaymentDate(e.target.value)}
-                    />
-                  </Field>
-                  <Field label={t(language, "invoices.paymentMethod")}>
-                    <Select value={newPaymentMethod} onChange={(e) => setNewPaymentMethod(e.target.value)}>
-                      <option value="bank_transfer">{t(language, "invoices.bankTransfer")}</option>
-                      <option value="cash">{t(language, "invoices.cash")}</option>
-                      <option value="card">{t(language, "invoices.card")}</option>
-                      <option value="paypal">PayPal</option>
-                      <option value="other">{t(language, "common.other")}</option>
+            <FormPage>
+              {editErrors.length > 0 && (
+                <StatusNote tone="attention" title={de ? "Für die E-Rechnung fehlen hier noch Angaben." : "The e-invoice still needs details here."}>
+                  <ul className="mt-1 flex flex-col gap-1">
+                    {editErrors.map((error, index) => (
+                      <li key={index}>
+                        <button type="button" onClick={() => jumpTo(error.field)} className="rounded-sm text-left underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">{error.message}</button>
+                      </li>
+                    ))}
+                  </ul>
+                </StatusNote>
+              )}
+
+              <FormSection id="rechnungsdaten" title={de ? "Rechnungsdaten" : "Invoice details"} description={de ? "Nummer, Rechnungsdatum und Zahlungsziel." : "Number, invoice date and due date."} columns={3}>
+                <Field label={invoice.texts.invoiceNumberLabel || "Rechnungsnummer"} id={fieldId("invoiceNumber")} error={errorMap.invoiceNumber}>
+                  <Input value={invoice.invoiceNumber} onChange={(e) => { save({ ...invoice, invoiceNumber: e.target.value }); clearErrors((field) => field === "invoiceNumber"); }} />
+                </Field>
+                <Field label={invoice.texts.invoiceDateLabel || "Rechnungsdatum"} id={fieldId("invoiceDate")} error={errorMap.invoiceDate}>
+                  <Input type="date" value={invoice.invoiceDate} onChange={(e) => { save({ ...invoice, invoiceDate: e.target.value }); clearErrors((field) => field === "invoiceDate"); }} />
+                </Field>
+                <Field label={invoice.texts.dueDateLabel || "Fällig am"} id={fieldId("dueDate")} error={errorMap.dueDate}>
+                  <Input type="date" value={invoice.dueDate} onChange={(e) => { save({ ...invoice, dueDate: e.target.value }); clearErrors((field) => field === "dueDate"); }} />
+                </Field>
+              </FormSection>
+
+              <FormSection id="empfaenger" title={invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")} description={de ? "An wen die Rechnung geht. Aus der Kundenliste übernehmen oder direkt eintragen." : "Who receives the invoice. Fill from the customer list or type directly."}>
+                {customers.length > 0 && (
+                  <Field
+                    label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
+                    hint={de ? "Ersetzt Anrede, Name, Adresse und Kontakt durch die gespeicherten Kundendaten." : "Replaces salutation, name, address and contact with the saved customer details."}
+                    className="sm:col-span-2"
+                  >
+                    <Select value={invoice.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
+                      <option value="">{t(language, "actions.selectCustomer")} …</option>
+                      {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Select>
                   </Field>
-                  <Field label={t(language, "invoices.paymentReference")}>
-                    <Input
-                      value={newPaymentReference}
-                      onChange={(e) => setNewPaymentReference(e.target.value)}
-                      placeholder="z.B. Überweisungs-ID"
-                    />
+                )}
+                <Field label="Anrede">
+                  <Input value={invoice.recipient.salutation || ""} placeholder="z. B. Sehr geehrte Damen und Herren" onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, salutation: e.target.value } })} />
+                </Field>
+                <Field label="Name" id={fieldId("recipient.name")} error={errorMap.buyer}>
+                  <Input value={invoice.recipient.name} onChange={(e) => { save({ ...invoice, recipient: { ...invoice.recipient, name: e.target.value } }); clearErrors((field) => field === "buyer"); }} />
+                </Field>
+                <Field label="Adresse">
+                  <Textarea rows={3} value={invoice.recipient.address} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, address: e.target.value } })} />
+                </Field>
+                <Field label="Kontakt">
+                  <Textarea rows={3} value={invoice.recipient.contact} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, contact: e.target.value } })} />
+                </Field>
+              </FormSection>
+
+              <FormSection id="positionen" title={de ? "Positionen" : "Line items"} description={de ? "Mengen und Preise mit Komma eingeben, z. B. 12,50. Überschriften gliedern längere Rechnungen." : "Enter quantities and prices with a comma or dot. Headings structure longer invoices."} columns={1}>
+                <LineItemsEditor
+                  invoice={invoice}
+                  products={products}
+                  defaultTaxRate={settings?.defaultTaxRate}
+                  currency={currency}
+                  locale={locale}
+                  errors={errorMap}
+                  save={save}
+                  onUpdate={updateLineItem}
+                  onRemove={removeLineItem}
+                  onMove={moveLineItem}
+                />
+              </FormSection>
+
+              <FormSection id="hinweise" title={invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")} description={de ? "Steht auf der Rechnung unter der Summe, z. B. Zahlungsbedingungen." : "Printed below the totals, e.g. payment terms."} columns={1}>
+                <Textarea aria-label={invoice.texts.notesHeading || "Hinweise"} rows={3} value={invoice.notesText || ""} placeholder={de ? "z. B. Zahlbar innerhalb von 14 Tagen ohne Abzug." : "e.g. Payable within 14 days."} onChange={(e) => save({ ...invoice, notesText: e.target.value })} />
+              </FormSection>
+
+              <Disclosure
+                id="absender"
+                as="h2"
+                title={invoice.texts.senderHeading || (de ? "Absender" : "Sender")}
+                open={senderOpen ?? !invoice.sender.name}
+                onOpenChange={setSenderOpen}
+                status={invoice.sender.name
+                  ? <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{invoice.sender.name}</span>
+                  : <StatusPill tone="attention">{de ? "Bitte ergänzen" : "Please complete"}</StatusPill>}
+                summary={de ? "Ihre eigenen Angaben. Neue Rechnungen übernehmen sie aus den Einstellungen." : "Your own details. New invoices take them from the settings."}
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Name" id={fieldId("sender.name")} error={errorMap.seller} className="sm:col-span-2">
+                    <Input value={invoice.sender.name} onChange={(e) => { setSenderOpen(true); save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } }); clearErrors((field) => field === "seller"); }} />
+                  </Field>
+                  <Field label="Adresse">
+                    <Textarea rows={3} value={invoice.sender.address} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, address: e.target.value } })} />
+                  </Field>
+                  <Field label="Kontakt">
+                    <Textarea rows={3} value={invoice.sender.contact} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, contact: e.target.value } })} />
                   </Field>
                 </div>
-                <div className="mt-3">
-                  <Button
-                    onClick={() => {
-                      const amount = parseFloat(newPaymentAmount);
-                      if (!amount || amount <= 0) return;
-                      const payment: Payment = {
-                        id: crypto.randomUUID(),
-                        amount,
-                        currency: invoice.currency ?? "EUR",
-                        date: newPaymentDate || todayLocalISO(),
-                        method: newPaymentMethod as Payment["method"],
-                        reference: newPaymentReference || undefined,
-                      };
-                      const updated = addPaymentToInvoice(invoice, payment);
-                      save(updated);
-                      setNewPaymentAmount("");
-                      setNewPaymentReference("");
-                    }}
-                  >
-                    {t(language, "invoices.recordPayment")}
-                  </Button>
-                </div>
-              </div>
-            )}
+              </Disclosure>
+            </FormPage>
           </div>
+        )}
 
-          {/* Attachments Section */}
-          <div className="rounded-xl bg-white p-5 ring-1 ring-zinc-200">
-            <div className="text-sm font-semibold">{t(language, "invoices.attachments")}</div>
-            <p className="mt-1 text-sm text-zinc-500">{t(language, "invoices.attachmentsNote")}</p>
-
-            {(invoice.attachments ?? []).length > 0 && (
-              <div className="mt-4 space-y-2">
-                {(invoice.attachments ?? []).map((attachment) => (
-                  <div key={attachment.id} className="flex items-center justify-between rounded-lg bg-zinc-50 p-3 text-sm">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">📎</span>
-                      <div>
-                        <div className="font-medium">{attachment.name}</div>
-                        <div className="text-xs text-zinc-500">
-                          {(attachment.size / 1024).toFixed(1)} KB • {new Date(attachment.createdAt).toLocaleDateString(locale)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {attachment.dataUrl && (
-                        <a
-                          href={attachment.dataUrl}
-                          download={attachment.name}
-                          className="text-blue-500 hover:text-blue-700 text-sm"
-                        >
-                          ⬇
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => {
-                          const updated = removeAttachmentFromInvoice(invoice, attachment.id);
-                          save(updated);
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-4">
-              <Input
-                type="file"
-                multiple
-                onChange={(e) => {
-                  const files = e.target.files;
-                  if (!files) return;
-
-                  const attachments: Attachment[] = [];
-                  let remainingFiles = files.length;
-
-                  Array.from(files).forEach((file) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const dataUrl = reader.result;
-                      remainingFiles -= 1;
-                      if (typeof dataUrl !== "string") {
-                        if (remainingFiles === 0 && attachments.length > 0) {
-                          save((prev) => ({
-                            ...prev,
-                            attachments: [...(prev.attachments ?? []), ...attachments],
-                          }));
-                        }
-                        return;
-                      }
-
-                      const attachment: Attachment = {
-                        id: crypto.randomUUID(),
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        dataUrl,
-                        createdAt: new Date().toISOString(),
-                      };
-                      attachments.push(attachment);
-                      if (remainingFiles === 0 && attachments.length > 0) {
-                        save((prev) => ({
-                          ...prev,
-                          attachments: [...(prev.attachments ?? []), ...attachments],
-                        }));
-                      }
-                    };
-                    reader.onerror = () => {
-                      remainingFiles -= 1;
-                      if (remainingFiles === 0 && attachments.length > 0) {
-                        save((prev) => ({
-                          ...prev,
-                          attachments: [...(prev.attachments ?? []), ...attachments],
-                        }));
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                  });
-
-                  e.target.value = "";
-                }}
-              />
-            </div>
-          </div>
-            </div>
-          </details>
-        </section>
-
-        <section className="min-w-0 space-y-3 xl:sticky xl:top-6 xl:self-start">
-          <div className="no-print text-sm font-semibold">{t(language, "invoice.previewTitle")}</div>
-
-          <div ref={previewFrame} className="invoice-preview-frame overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 xl:max-h-[calc(100vh-7rem)]">
+        <div role="tabpanel" id="panel-preview" aria-labelledby="tab-preview" className={tab === "preview" ? "flex flex-col gap-4" : "screen-hidden"}>
+          <p className="no-print max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">
+            {de ? "So wird die Rechnung als PDF gespeichert. Änderungen nehmen Sie im Tab „Bearbeiten“ vor." : "This is how the invoice is saved as PDF. Make changes in the Edit tab."}
+          </p>
+          <div ref={previewFrame} className="invoice-preview-frame overflow-auto rounded-card-sm border border-line bg-surface-muted p-4 sm:p-8">
             <div id="invoice-preview" style={{ zoom: previewScale }} className="print-area invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm]">
               <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
             </div>
           </div>
-        </section>
+        </div>
+
+        <div role="tabpanel" id="panel-payments" aria-labelledby="tab-payments" hidden={tab !== "payments"} className="no-print">
+          <PaymentsTab
+            key={invoice.id}
+            invoice={invoice}
+            balance={balance}
+            status={status}
+            creditNotes={creditNotes}
+            currency={currency}
+            locale={locale}
+            language={language}
+            save={save}
+            onTogglePaid={() => togglePaid(adapter, invoice.id)}
+            onCreateCreditNote={handleCreateCreditNote}
+          />
+        </div>
+
+        <div role="tabpanel" id="panel-einvoice" aria-labelledby="tab-einvoice" hidden={tab !== "einvoice"} className="no-print">
+          <EInvoicePanel
+            key={invoice.id}
+            invoice={{ ...invoice, logoDataUrl }}
+            onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
+            onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))}
+            errors={einvoiceErrors}
+            onErrors={(next) => setEinvoiceErrors((previous) => (previous.length === 0 && next.length === 0 ? previous : next))}
+            onJump={jumpTo}
+            fieldId={fieldId}
+            editTabLabel={editTabLabel}
+          />
+        </div>
+
+        {tab === "extras" && (
+          <div role="tabpanel" id="panel-extras" aria-labelledby="tab-extras" className="no-print">
+            <ExtrasTab
+              invoice={invoice}
+              templateVariants={templateVariants}
+              tags={tags}
+              language={language}
+              locale={locale}
+              errors={errorMap}
+              save={(next) => { save(next); clearErrors((field) => field === "currency"); }}
+            />
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
-        returnFocusSelector="#invoice-actions-trigger"
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         onConfirm={() => {
@@ -1341,6 +601,6 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

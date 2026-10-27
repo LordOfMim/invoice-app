@@ -1,33 +1,54 @@
-import type { ButtonHTMLAttributes } from "react";
+import Link from "next/link";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from "react";
+import { Button as PlatformButton, buttonVariants } from "@/components/platform/button";
+import { IconButton as PlatformIconButton, iconButtonVariants } from "@/components/platform/icon-button";
+import { cn } from "@/components/platform/lib/cn";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost";
-type Size = "sm" | "md" | "lg";
+/**
+ * Facade over the Platform `Button` (Overwatch `ui/button.tsx` recipe). `primary` (accent blue) is reserved for the
+ * one executing action per view. Sizes follow the Helferlein readability profile (docs/design-reference.md,
+ * deviation 2): `md` is the sanctioned 36px Platform `lg`, `sm` a 32px row action. Touch screens get 44px targets.
+ */
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "quiet" | "danger" | "dark";
+export type ButtonSize = "sm" | "md";
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: Variant;
-  size?: Size;
+const touchWrap = "touch:h-auto touch:py-1.5 touch:text-center touch:whitespace-normal";
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: `h-8 px-3 text-base ${touchWrap} touch:min-h-10`,
+  md: `${touchWrap} touch:min-h-11`,
 };
+const platformSize: Record<ButtonSize, "md" | "lg"> = { sm: "md", md: "lg" };
 
-const base =
-  "inline-flex items-center justify-center font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-sand-50)] disabled:opacity-50 disabled:pointer-events-none";
+/**
+ * Accessibility deviation (docs/design-reference.md, deviation 3): white text on accent-blue #5CABFF reaches only
+ * about 2.4:1. The one blue action keeps the source hue but carries ink #1C1D1F (about 6.9:1).
+ */
+const primaryText = "text-ink";
 
-const variants: Record<Variant, string> = {
-  primary:
-    "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)]",
-  secondary:
-    "bg-[var(--glass-bg)] text-[var(--color-ink)] border border-[var(--glass-border)] hover:bg-[var(--glass-bg-solid)] hover:border-[var(--color-sand-400)]",
-  danger:
-    "bg-[var(--glass-bg)] text-[var(--color-danger)] border border-[var(--glass-border)] hover:bg-[var(--color-danger)]/10 hover:border-[var(--color-danger)]/30",
-  ghost:
-    "text-[var(--color-ink-muted)] hover:bg-[var(--glass-bg)] hover:text-[var(--color-ink)]",
-};
+export function buttonClasses({ variant = "secondary", size = "md", className }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
+  return cn(buttonVariants({ variant, size: platformSize[size] }), sizeClasses[size], variant === "primary" && primaryText, className);
+}
 
-const sizes: Record<Size, string> = {
-  sm: "rounded-lg min-h-10 px-3 py-2 text-sm gap-1.5",
-  md: "rounded-lg min-h-11 px-4 py-2.5 text-base gap-2",
-  lg: "rounded-lg min-h-11 px-5 py-2.5 text-base gap-2.5",
-};
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean };
 
-export function Button({ variant = "secondary", size = "md", className = "", ...props }: Props) {
-  return <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props} />;
+export function Button({ type = "button", variant = "secondary", size = "md", className, ...props }: ButtonProps) {
+  return <PlatformButton type={type} variant={variant} size={platformSize[size]} className={cn(sizeClasses[size], variant === "primary" && primaryText, className)} {...props} />;
+}
+
+export type LinkButtonProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & { href: string; variant?: ButtonVariant; size?: ButtonSize };
+
+/** Navigation that reads as an action ("Rechnung öffnen"). Plain navigation uses TextLink. */
+export function LinkButton({ href, variant = "secondary", size = "md", className, ...props }: LinkButtonProps) {
+  return <Link href={href} data-slot="button" className={buttonClasses({ variant, size, className })} {...props} />;
+}
+
+export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> & { label: string; variant?: "outline" | "ghost" | "solid" };
+
+/** Platform `IconButton` lg (38px); the visible content must be a glyph that the label names. */
+export function iconButtonClasses({ variant = "outline", className }: { variant?: "outline" | "ghost" | "solid"; className?: string } = {}) {
+  return cn(iconButtonVariants({ variant, size: "lg" }), "size-9 touch:size-11", className);
+}
+
+export function IconButton({ label, type = "button", variant = "outline", className, ...props }: IconButtonProps) {
+  return <PlatformIconButton type={type} aria-label={label} title={label} variant={variant} size="lg" className={cn("size-9 touch:size-11", className)} {...props} />;
 }

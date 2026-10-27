@@ -1,34 +1,42 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Field";
+import { SearchInput } from "@/components/ui/Input";
+import { DataTable, PrimaryCell, type DataTableColumn } from "@/components/ui/DataTable";
+import { FilterBar, FilterControl } from "@/components/ui/FormLayout";
+import { EmptyState, Page, PageHeader } from "@/components/ui/Layout";
+import { OverflowMenu } from "@/components/ui/Menu";
+import { ConfirmDialog } from "@/components/ui/Dialog";
 import { t } from "@/lib/i18n";
+import type { Customer } from "@/lib/domain";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { createCustomer, deleteCustomer } from "@/lib/storage/store";
-import { Surface, PageHeader, Stack } from "@/components/ui/Surface";
-import { EmptyState } from "@/components/ui/DataDisplay";
-import { ConfirmDialog } from "@/components/ui/Dialog";
 
 export default function CustomersPage() {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
+  const de = language === "de";
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const invoiceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const invoice of data?.invoices ?? []) if (invoice.customerId) counts.set(invoice.customerId, (counts.get(invoice.customerId) ?? 0) + 1);
+    return counts;
+  }, [data?.invoices]);
 
   const customers = useMemo(() => {
     const all = data?.customers ?? [];
     if (!search.trim()) return all;
     const q = search.toLowerCase();
-    return all.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.address.toLowerCase().includes(q) ||
-        c.contact.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.phone?.toLowerCase().includes(q)
-    );
+    return all.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      c.address.toLowerCase().includes(q) ||
+      c.contact.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.phone?.toLowerCase().includes(q));
   }, [data?.customers, search]);
 
   const handleCreate = () => {
@@ -37,91 +45,73 @@ export default function CustomersPage() {
     window.location.assign(`/customers/${customer.id}`);
   };
 
+  const columns: DataTableColumn<Customer>[] = [
+    {
+      key: "name",
+      header: de ? "Kunde" : "Customer",
+      render: (customer) => <PrimaryCell title={customer.name || t(language, "common.unnamed")} href={`/customers/${customer.id}`} sub={customer.contact || undefined} />,
+    },
+    { key: "address", header: de ? "Adresse" : "Address", render: (customer) => <span className="whitespace-pre-line">{customer.address || "–"}</span> },
+    {
+      key: "reach",
+      header: de ? "Erreichbar" : "Contact",
+      render: (customer) => (
+        <span className="flex flex-col">
+          {customer.email && <span className="break-all">{customer.email}</span>}
+          {customer.phone && <span className="tabular-nums">{customer.phone}</span>}
+          {!customer.email && !customer.phone && <span className="text-ink-muted">–</span>}
+        </span>
+      ),
+    },
+    { key: "invoices", header: de ? "Rechnungen" : "Invoices", numeric: true, width: "8rem", render: (customer) => invoiceCounts.get(customer.id) ?? 0 },
+    {
+      key: "actions",
+      header: de ? "Aktionen" : "Actions",
+      hideHeader: true,
+      width: "4.5rem",
+      className: "text-right",
+      render: (customer) => (
+        <OverflowMenu
+          label={`${de ? "Aktionen für" : "Actions for"} ${customer.name || t(language, "common.unnamed")}`}
+          items={[
+            { kind: "link", label: t(language, "actions.edit"), href: `/customers/${customer.id}` },
+            { kind: "separator" },
+            { label: de ? "Kunde löschen …" : "Delete customer …", tone: "danger", onSelect: () => setDeleteConfirm(customer.id) },
+          ]}
+        />
+      ),
+    },
+  ];
+
+  const total = data?.customers.length ?? 0;
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <Stack gap="lg">
-          <PageHeader
-            title={t(language, "customers.title")}
-            description={t(language, "customers.description")}
-            actions={
-              <Button variant="primary" onClick={handleCreate}>
-                {t(language, "customers.new")}
-              </Button>
-            }
-          />
-
-          <div>
-            <Input
-              type="search"
-              placeholder={t(language, "actions.search") + "..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            {customers.length === 0 ? (
-              <Surface variant="solid" padding="lg">
-                <EmptyState
-                  title={search ? t(language, "common.noResults") : t(language, "customers.empty")}
-                  description={search ? t(language, "common.tryDifferentSearch") : t(language, "common.addFirstCustomer")}
-                  icon={
-                    <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                    </svg>
-                  }
-                  action={
-                    !search && (
-                      <Button variant="primary" onClick={handleCreate}>
-                        {t(language, "customers.new")}
-                      </Button>
-                    )
-                  }
-                />
-              </Surface>
-            ) : null}
-
-            {customers.map((customer) => (
-              <Surface
-                key={customer.id}
-                variant="solid"
-                padding="md"
-                className="flex flex-wrap items-center justify-between gap-4"
-              >
-                <div className="min-w-50">
-                  <div className="font-medium text-[var(--color-ink)]">{customer.name || t(language, "common.unnamed")}</div>
-                  <div className="mt-1.5 text-sm text-[var(--color-ink-subtle)] whitespace-pre-line line-clamp-2">
-                    {customer.address}
-                  </div>
-                  {customer.email && (
-                    <div className="mt-1 text-xs text-[var(--color-ink-subtle)]">{customer.email}</div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Link href={`/customers/${customer.id}`}>
-                    <Button size="sm" variant="secondary">{t(language, "actions.edit")}</Button>
-                  </Link>
-                  <Button size="sm" variant="danger" onClick={() => setDeleteConfirm(customer.id)}>
-                    {t(language, "actions.delete")}
-                  </Button>
-                </div>
-              </Surface>
-            ))}
-          </div>
-        </Stack>
-      </div>
+    <Page>
+      <PageHeader
+        title={t(language, "customers.title")}
+        description={de ? "Empfänger, die Sie mit einem Klick in eine Rechnung übernehmen. Änderungen hier ändern bestehende Rechnungen nicht." : "Recipients you can fill into an invoice with one click. Changes here do not alter existing invoices."}
+        actions={<Button variant="primary" onClick={handleCreate}>{t(language, "customers.new")}</Button>}
+      />
+      {total === 0 && data ? (
+        <EmptyState title={t(language, "customers.empty")} description={t(language, "common.addFirstCustomer")} action={<Button onClick={handleCreate}>{t(language, "customers.new")}</Button>} />
+      ) : (
+        <section className="flex min-w-0 flex-col gap-4" aria-label={de ? "Verzeichnis" : "Directory"}>
+          <FilterBar label={de ? "Kunden filtern" : "Filter customers"} aside={<span>{customers.length} {de ? "Kunden" : "customers"}</span>}>
+            <FilterControl width="grow">
+              <Field label={de ? "Suchen" : "Search"}>
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={de ? "Name, Adresse, E-Mail oder Telefon" : "Name, address, email or phone"} />
+              </Field>
+            </FilterControl>
+            {search && <Button variant="quiet" onClick={() => setSearch("")}>{de ? "Zurücksetzen" : "Reset"}</Button>}
+          </FilterBar>
+          <DataTable caption={t(language, "customers.title")} columns={columns} rows={customers} rowKey={(customer) => customer.id} empty={t(language, "common.tryDifferentSearch")} />
+        </section>
+      )}
 
       <ConfirmDialog
         open={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => {
-          if (adapter && deleteConfirm) {
-            deleteCustomer(adapter, deleteConfirm);
-          }
-        }}
+        onConfirm={() => { if (adapter && deleteConfirm) deleteCustomer(adapter, deleteConfirm); }}
+        returnFocusSelector="#inhalt"
         title={t(language, "customers.deleteTitle")}
         description={t(language, "customers.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
@@ -129,6 +119,6 @@ export default function CustomersPage() {
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

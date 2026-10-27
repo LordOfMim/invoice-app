@@ -40,7 +40,7 @@
       "!node_modules/@next/**/*",
       "!node_modules/react/**/*",
       "!node_modules/react-dom/**/*",
-      "!node_modules/lucide-react/**/*",
+      "!node_modules/@hugeicons/**/*",
       "!node_modules/@radix-ui/**/*"
     ],
     "extraResources": [
@@ -100,11 +100,14 @@
     "artifactName": "Helferlein-${version}-${os}-${arch}.${ext}"
   },
   "dependencies": {
-    "@radix-ui/react-accordion": "1.2.12",
+    "@hugeicons/core-free-icons": "4.3.5",
+    "@hugeicons/react": "1.1.10",
+    "@radix-ui/react-dialog": "1.2.0",
+    "@radix-ui/react-dropdown-menu": "2.1.25",
+    "@radix-ui/react-slot": "1.4.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "electron-store": "11.0.2",
-    "lucide-react": "0.562.0",
     "next": "16.4.3",
     "pdfkit": "0.20.2",
     "react": "19.2.3",

@@ -4,11 +4,28 @@ import { useState, type ReactNode } from "react";
 import type { EInvoiceDetails, EInvoiceParty, Invoice } from "@/lib/domain";
 import { prepareEInvoice, type EInvoiceError, type EInvoiceFormat } from "@/lib/einvoice";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Field } from "@/components/ui/Field";
+import { FormPage } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
+import { Card, CardZone, Section, StatusNote } from "@/components/ui/Layout";
 import { Select } from "@/components/ui/Select";
+import { StatusPill } from "@/components/ui/Status";
+import { cn } from "@/components/platform/lib/cn";
 
-type Props = { invoice: Invoice; onChange: (details: EInvoiceDetails) => void; onSaveDefaults: (details: EInvoiceDetails) => void };
+type Props = {
+  invoice: Invoice;
+  onChange: (details: EInvoiceDetails) => void;
+  onSaveDefaults: (details: EInvoiceDetails) => void;
+  /** Check results; kept by the editor so they survive switching tabs. */
+  errors: EInvoiceError[];
+  onErrors: (errors: EInvoiceError[]) => void;
+  /** Leads to the control behind a message (also outside this tab). */
+  onJump: (field: string) => void;
+  fieldId: (field: string) => string;
+  /** Label of the editor tab where invoice basics are edited. */
+  editTabLabel: string;
+};
 type Group = "seller" | "buyer" | "payment" | "tax" | "units";
 type PartyField = [keyof EInvoiceParty, string, string?];
 
@@ -51,29 +68,32 @@ function filled(values: (string | undefined)[]) {
   return values.filter((value) => value?.trim()).length;
 }
 
-export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
+/**
+ * E-Rechnung tab: structured details in collapsible groups (Overwatch `Disclosure`), then the two checked exports.
+ * Nothing is saved unless the pinned validator succeeds (unchanged export path). Every message leads to its field.
+ */
+export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErrors, onJump, fieldId, editTabLabel }: Props) {
   const details = invoice.einvoice ?? {};
   const [busy, setBusy] = useState<EInvoiceFormat | null>(null);
-  const [messages, setMessages] = useState<EInvoiceError[]>([]);
   const [success, setSuccess] = useState("");
-  const [open, setOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<Group>>(() => new Set());
-  const invalid = new Set(messages.map((message) => message.field));
+  const [defaultsSaved, setDefaultsSaved] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<Group>>(() => new Set(errors.map((error) => groupOf(error.field)).filter((group): group is Group => group !== null)));
   const items = invoice.lineItems.filter((item) => item.type === "item");
+  const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
 
   function change(key: keyof EInvoiceDetails, value: string) {
     onChange({ ...details, [key]: value });
-    setMessages([]);
+    onErrors([]);
     setSuccess("");
   }
 
   function changeParty(side: "seller" | "buyer", key: keyof EInvoiceParty, value: string) {
     onChange({ ...details, [side]: { ...details[side], [key]: value } });
-    setMessages([]);
+    onErrors([]);
     setSuccess("");
   }
 
-  function toggleGroup(group: Group, isOpen: boolean) {
+  function setGroup(group: Group, isOpen: boolean) {
     setOpenGroups((previous) => {
       if (previous.has(group) === isOpen) return previous;
       const next = new Set(previous);
@@ -83,10 +103,18 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
     });
   }
 
-  function showErrors(errors: EInvoiceError[]) {
-    setMessages(errors);
-    const groups = errors.map((error) => groupOf(error.field)).filter((group): group is Group => group !== null);
+  // Opens the group holding the field first, so the editor can focus it.
+  function jump(field: string) {
+    const target = groupOf(field);
+    if (target) setGroup(target, true);
+    onJump(field);
+  }
+
+  function showErrors(next: EInvoiceError[]) {
+    onErrors(next);
+    const groups = next.map((error) => groupOf(error.field)).filter((group): group is Group => group !== null);
     if (groups.length) setOpenGroups((previous) => new Set([...previous, ...groups]));
+    requestAnimationFrame(() => document.getElementById("einvoice-messages")?.focus());
   }
 
   async function exportInvoice(format: EInvoiceFormat) {
@@ -104,7 +132,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
       return;
     }
     setBusy(format);
-    setMessages([]);
+    onErrors([]);
     try {
       const exported = await api.exportEInvoice({ format, document: result.document });
       if (exported.ok) setSuccess(`${format === "zugferd" ? "ZUGFeRD-PDF" : "XRechnung-XML"} geprüft und gespeichert.`);
@@ -116,30 +144,29 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
     }
   }
 
-  const invalidClass = (field: string) => (invalid.has(field) ? "border-red-600" : "");
-
   function group(id: Group, title: string, status: string, children: ReactNode) {
-    const problems = messages.filter((message) => groupOf(message.field) === id).length;
+    const problems = errors.filter((message) => groupOf(message.field) === id).length;
     return (
-      <details className="disclosure rounded-lg border border-zinc-200" open={openGroups.has(id)}
-        onToggle={(event) => toggleGroup(id, event.currentTarget.open)}>
-        <summary className="flex-wrap px-4 py-2">
-          <span className="font-semibold">{title}</span>
-          <span className={`text-sm ${problems ? "font-medium text-red-700" : "text-(--color-ink-subtle)"}`}>
-            {problems ? `${problems} ${problems === 1 ? "Angabe" : "Angaben"} prüfen` : status}
-          </span>
-        </summary>
-        <div className="@container space-y-5 border-t border-zinc-200 p-4">{children}</div>
-      </details>
+      <Disclosure
+        id={`einvoice-${id}`}
+        title={title}
+        open={openGroups.has(id)}
+        onOpenChange={(isOpen) => setGroup(id, isOpen)}
+        status={problems
+          ? <StatusPill tone="error">{problems} {problems === 1 ? "Angabe" : "Angaben"} prüfen</StatusPill>
+          : <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{status}</span>}
+        className="@container"
+      >
+        {children}
+      </Disclosure>
     );
   }
 
   function partyInput(side: "seller" | "buyer", [key, label, hint]: PartyField) {
     const field = `einvoice.${side}.${key}`;
     return (
-      <Field key={key} label={label} hint={hint} className={key === "street" ? "@lg:col-span-2" : ""}>
-        <Input value={details[side]?.[key] ?? ""} aria-invalid={invalid.has(field) || undefined} className={invalidClass(field)}
-          onChange={(event) => changeParty(side, key, event.target.value)} />
+      <Field key={key} label={label} hint={hint} error={errorFor(field)} id={fieldId(field)} className={key === "street" ? "@lg:col-span-2" : ""}>
+        <Input value={details[side]?.[key] ?? ""} onChange={(event) => changeParty(side, key, event.target.value)} />
       </Field>
     );
   }
@@ -150,23 +177,22 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
     const count = filled(all.map(([key]) => details[side]?.[key]));
     const name = side === "seller" ? invoice.sender.name : invoice.recipient.name;
     return group(side, config.title, count ? `${count} von ${all.length} Angaben` : "Noch nicht ausgefüllt", <>
-      <p className="text-sm text-(--color-ink-muted)">
+      <p className="font-sans text-base tracking-snug text-ink-muted">
         {name
-          ? <>Name aus der Rechnung: <span className="font-medium text-(--color-ink)">{name}</span></>
-          : `Der Name fehlt noch. Bitte oben im Abschnitt „${side === "seller" ? invoice.texts.senderHeading : invoice.texts.recipientHeading}“ eintragen.`}
+          ? <>Name aus der Rechnung: <span className="font-medium text-ink">{name}</span></>
+          : <>Der Name fehlt noch. <button type="button" className="rounded-sm font-medium text-link underline-offset-3 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 outline-none" onClick={() => onJump(side)}>Im Tab „{editTabLabel}“ eintragen</button></>}
       </p>
       <div className="grid gap-4 @lg:grid-cols-2">{config.fields.map((field) => partyInput(side, field))}</div>
       {config.extra.map((extra) => (
-        <fieldset key={extra.legend} className="space-y-3">
-          <legend className="mb-2 text-sm font-semibold text-(--color-ink)">{extra.legend}</legend>
-          {extra.hint && <p className="text-sm text-(--color-ink-subtle)">{extra.hint}</p>}
+        <fieldset key={extra.legend} className="flex flex-col gap-3">
+          <legend className="mb-1 font-sans text-lg font-semibold tracking-snug text-ink">{extra.legend}</legend>
+          {extra.hint && <p className="font-sans text-base tracking-snug text-ink-muted">{extra.hint}</p>}
           <div className="grid gap-4 @lg:grid-cols-2">{extra.fields.map((field) => partyInput(side, field))}</div>
         </fieldset>
       ))}
       {side === "buyer" && (
-        <Field label="Käuferreferenz / Leitweg-ID" hint="Für XRechnung erforderlich. Bitte genau so übernehmen, wie der Empfänger sie mitgeteilt hat.">
-          <Input value={details.buyerReference ?? ""} aria-invalid={invalid.has("einvoice.buyerReference") || undefined}
-            className={invalidClass("einvoice.buyerReference")} onChange={(event) => change("buyerReference", event.target.value)} />
+        <Field label="Käuferreferenz / Leitweg-ID" hint="Für XRechnung erforderlich. Bitte genau so übernehmen, wie der Empfänger sie mitgeteilt hat." error={errorFor("einvoice.buyerReference")} id={fieldId("einvoice.buyerReference")}>
+          <Input value={details.buyerReference ?? ""} onChange={(event) => change("buyerReference", event.target.value)} />
         </Field>
       )}
     </>);
@@ -176,64 +202,91 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
   const unitCount = items.filter((item) => details.unitCodes?.[item.id]).length;
 
   return (
-    <details className="disclosure rounded-xl border border-zinc-200 bg-white p-5" id="einvoice" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary><h2 className="text-lg font-semibold">E-Rechnung (ZUGFeRD und XRechnung)</h2></summary>
-      {open && <div className="@container mt-4 space-y-5">
-        <p className="text-base text-(--color-ink-muted)">
-          Ergänzen Sie einmalig die strukturierten Angaben und speichern Sie die Rechnung dann als PDF mit Rechnungsdaten
-          oder als XML-Datei für Behörden. Ihre normale Rechnung bleibt unverändert erhalten.
-        </p>
+    <FormPage>
+      <p className="max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">
+        Ergänzen Sie einmalig die strukturierten Angaben. Danach speichern Sie die Rechnung als PDF mit eingebetteten
+        Rechnungsdaten oder als XML-Datei für Behörden. Ihre normale PDF-Rechnung bleibt unverändert.
+      </p>
 
-        <div className="space-y-3">
+      <Section title="E-Rechnung speichern" summary="Die Datei wird vorher auf diesem Gerät geprüft. Fehlen Angaben, wird nichts gespeichert und Sie sehen hier, was zu ergänzen ist. Das ZUGFeRD-PDF verwendet ein festes Archivlayout mit den hier erfassten Adressen.">
+        <Card>
+          <CardZone className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Button className="w-full" loading={busy === "zugferd"} disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
+              <p className="font-sans text-base tracking-snug text-ink-muted">Lesbares PDF mit eingebetteten Rechnungsdaten.</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button className="w-full" loading={busy === "xrechnung"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung")}>{busy === "xrechnung" ? "Wird geprüft …" : "XRechnung-XML speichern"}</Button>
+              <p className="font-sans text-base tracking-snug text-ink-muted">Eigenständige XML-Datei mit Käuferreferenz, bei Behörden meist die Leitweg-ID.</p>
+            </div>
+          </CardZone>
+        </Card>
+        <div id="einvoice-messages" tabIndex={-1} className="outline-none">
+          {errors.length > 0 && (
+            <StatusNote tone="error" title="Bitte diese Angaben prüfen. Ihre Eingaben bleiben erhalten.">
+              <ul className="mt-1 flex flex-col gap-1">
+                {errors.map((message, index) => (
+                  <li key={index}>
+                    {message.field ? (
+                      <button type="button" onClick={() => jump(message.field)} className={cn("rounded-sm text-left underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50")}>
+                        {message.message}
+                      </button>
+                    ) : message.message}
+                  </li>
+                ))}
+              </ul>
+            </StatusNote>
+          )}
+          {success && <StatusNote tone="ok">{success}</StatusNote>}
+        </div>
+      </Section>
+
+      <Section title="Angaben für die E-Rechnung" summary="Gruppen mit fehlenden Angaben öffnen sich nach der Prüfung von selbst.">
+        <div className="flex flex-col gap-8">
           {partyGroup("seller")}
           {partyGroup("buyer")}
           {group("payment", "Zahlung und Bankverbindung", details.iban ? `${paymentLabel}, IBAN eingetragen` : paymentLabel, (
             <div className="grid gap-4 @lg:grid-cols-2">
-              <Field label="Zahlungsart">
+              <Field label="Zahlungsart" error={errorFor("einvoice.paymentMeansCode")} id={fieldId("einvoice.paymentMeansCode")}>
                 <Select value={details.paymentMeansCode ?? "58"} onChange={(event) => change("paymentMeansCode", event.target.value)}>
                   <option value="58">SEPA-Überweisung</option><option value="30">Überweisung</option><option value="10">Barzahlung</option>
                 </Select>
               </Field>
-              <Field label="Kontoinhaber"><Input value={details.accountName ?? ""} onChange={(event) => change("accountName", event.target.value)} /></Field>
-              <Field label="IBAN" hint={details.paymentMeansCode === "10" ? "Bei Barzahlung nicht erforderlich." : "Ohne Leerzeichen, beginnend mit dem Ländercode."}>
-                <Input value={details.iban ?? ""} aria-invalid={invalid.has("einvoice.iban") || undefined} className={invalidClass("einvoice.iban")}
-                  onChange={(event) => change("iban", event.target.value)} />
+              <Field label="Kontoinhaber" id={fieldId("einvoice.accountName")}><Input value={details.accountName ?? ""} onChange={(event) => change("accountName", event.target.value)} /></Field>
+              <Field label="IBAN" hint={details.paymentMeansCode === "10" ? "Bei Barzahlung nicht erforderlich." : "Ohne Leerzeichen, beginnend mit dem Ländercode."} error={errorFor("einvoice.iban")} id={fieldId("einvoice.iban")}>
+                <Input value={details.iban ?? ""} onChange={(event) => change("iban", event.target.value)} />
               </Field>
-              <Field label="BIC (optional)"><Input value={details.bic ?? ""} onChange={(event) => change("bic", event.target.value)} /></Field>
-              <Field label="Zahlungsbedingungen" className="@lg:col-span-2"><Input value={details.paymentTerms ?? ""} onChange={(event) => change("paymentTerms", event.target.value)} /></Field>
+              <Field label="BIC (optional)" id={fieldId("einvoice.bic")}><Input value={details.bic ?? ""} onChange={(event) => change("bic", event.target.value)} /></Field>
+              <Field label="Zahlungsbedingungen" className="@lg:col-span-2" id={fieldId("einvoice.paymentTerms")}><Input value={details.paymentTerms ?? ""} onChange={(event) => change("paymentTerms", event.target.value)} /></Field>
             </div>
           ))}
           {group("tax", "Leistungsdatum und Steuer", details.serviceDate || details.taxCategory ? "Angaben eingetragen" : "Nur bei Bedarf", (
             <div className="grid gap-4 @lg:grid-cols-2">
-              <Field label="Leistungsdatum">
-                <Input type="date" value={details.serviceDate ?? ""} aria-invalid={invalid.has("einvoice.serviceDate") || undefined}
-                  className={invalidClass("einvoice.serviceDate")} onChange={(event) => change("serviceDate", event.target.value)} />
+              <Field label="Leistungsdatum" error={errorFor("einvoice.serviceDate")} id={fieldId("einvoice.serviceDate")}>
+                <Input type="date" value={details.serviceDate ?? ""} onChange={(event) => change("serviceDate", event.target.value)} />
               </Field>
-              <Field label="Steuerkategorie bei 0 % Steuer" hint="Nur nötig, wenn eine Position ohne Umsatzsteuer berechnet wird.">
-                <Select value={details.taxCategory ?? ""} aria-invalid={invalid.has("einvoice.taxCategory") || undefined}
-                  className={invalidClass("einvoice.taxCategory")} onChange={(event) => change("taxCategory", event.target.value)}>
+              <Field label="Steuerkategorie bei 0 % Steuer" hint="Nur nötig, wenn eine Position ohne Umsatzsteuer berechnet wird." error={errorFor("einvoice.taxCategory")} id={fieldId("einvoice.taxCategory")}>
+                <Select value={details.taxCategory ?? ""} onChange={(event) => change("taxCategory", event.target.value)}>
                   <option value="">Keine Angabe</option><option value="Z">Nullsteuersatz</option><option value="E">Steuerbefreit</option>
                   <option value="AE">Reverse Charge</option><option value="K">Innergemeinschaftliche Lieferung</option><option value="G">Ausfuhr</option><option value="O">Nicht steuerbar</option>
                 </Select>
               </Field>
-              <Field label="Begründung der Steuerbefreiung" className="@lg:col-span-2">
-                <Input value={details.taxExemptionReason ?? ""} aria-invalid={invalid.has("einvoice.taxExemptionReason") || undefined}
-                  className={invalidClass("einvoice.taxExemptionReason")} onChange={(event) => change("taxExemptionReason", event.target.value)} />
+              <Field label="Begründung der Steuerbefreiung" className="@lg:col-span-2" error={errorFor("einvoice.taxExemptionReason")} id={fieldId("einvoice.taxExemptionReason")}>
+                <Input value={details.taxExemptionReason ?? ""} onChange={(event) => change("taxExemptionReason", event.target.value)} />
               </Field>
             </div>
           ))}
           {group("units", "Einheiten der Positionen", unitCount ? `${unitCount} von ${items.length} angepasst` : "Automatisch erkannt", (
             items.length === 0
-              ? <p className="text-sm text-(--color-ink-muted)">Noch keine Positionen vorhanden.</p>
+              ? <p className="font-sans text-base tracking-snug text-ink-muted">Noch keine Positionen vorhanden.</p>
               : <>
-                <p className="text-sm text-(--color-ink-muted)">Die Einheit wird aus der Position übernommen. Nur ändern, wenn die Prüfung eine Einheit bemängelt.</p>
-                <div className="space-y-3">
+                <p className="font-sans text-base tracking-snug text-ink-muted">Die Einheit wird aus der Position übernommen. Nur ändern, wenn die Prüfung eine Einheit bemängelt.</p>
+                <div className="flex flex-col gap-3">
                   {items.map((item, index) => {
                     const field = `einvoice.unitCodes.${item.id}`;
                     return (
-                      <Field key={item.id} label={`${index + 1}. ${item.description || "Position ohne Beschreibung"}`}>
-                        <Select value={details.unitCodes?.[item.id] ?? ""} aria-invalid={invalid.has(field) || undefined} className={invalidClass(field)}
-                          onChange={(event) => onChange({ ...details, unitCodes: { ...details.unitCodes, [item.id]: event.target.value || undefined } as Record<string, string> })}>
+                      <Field key={item.id} label={`${index + 1}. ${item.description || "Position ohne Beschreibung"}`} error={errorFor(field)} id={fieldId(field)}>
+                        <Select value={details.unitCodes?.[item.id] ?? ""} onChange={(event) => { onChange({ ...details, unitCodes: { ...details.unitCodes, [item.id]: event.target.value || undefined } as Record<string, string> }); onErrors([]); }}>
                           <option value="">Automatisch aus „{item.unit || "Stück"}“</option><option value="C62">Stück</option><option value="HUR">Stunde</option><option value="DAY">Tag</option><option value="MON">Monat</option><option value="MTR">Meter</option><option value="MTK">Quadratmeter</option><option value="MTQ">Kubikmeter</option><option value="KGM">Kilogramm</option><option value="LTR">Liter</option><option value="KMT">Kilometer</option>
                         </Select>
                       </Field>
@@ -243,38 +296,18 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults }: Props) {
               </>
           ))}
         </div>
+      </Section>
 
-        <div className="space-y-2">
+      <Section title="Für neue Rechnungen merken" summary="Merkt sich Ihre Angaben als Rechnungssteller, die Bankverbindung und die Steuerangaben. Empfängerdaten werden nicht übernommen.">
+        <div className="flex flex-col items-start gap-3">
           <Button onClick={() => {
             const { seller, paymentMeansCode, iban, bic, accountName, paymentTerms, taxCategory, taxExemptionReason } = details;
             onSaveDefaults({ seller, paymentMeansCode, iban, bic, accountName, paymentTerms, taxCategory, taxExemptionReason });
-            setSuccess("Ihre Angaben als Rechnungssteller und die Zahlungsdaten werden für neue Rechnungen übernommen.");
+            setDefaultsSaved(true);
           }}>Als Vorgabe für neue Rechnungen merken</Button>
-          <p className="text-sm text-(--color-ink-subtle)">Merkt sich Ihre Angaben als Rechnungssteller, die Bankverbindung und die Steuerangaben. Empfängerdaten werden nicht übernommen.</p>
+          {defaultsSaved && <StatusNote tone="ok">Ihre Angaben als Rechnungssteller und die Zahlungsdaten werden für neue Rechnungen übernommen.</StatusNote>}
         </div>
-
-        <section aria-labelledby="einvoice-export" className="space-y-4 border-t border-zinc-200 pt-5">
-          <div>
-            <h3 id="einvoice-export" className="text-base font-semibold">E-Rechnung speichern</h3>
-            <p className="mt-1 text-sm text-(--color-ink-muted)">Die Datei wird vorher auf diesem Gerät geprüft. Fehlen Angaben, wird nichts gespeichert und Sie sehen hier, was zu ergänzen ist. Das ZUGFeRD-PDF verwendet ein festes Archivlayout mit den hier erfassten Adressen.</p>
-          </div>
-          <div className="grid gap-3 @lg:grid-cols-2">
-            <div className="space-y-1.5">
-              <Button className="w-full" disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
-              <p className="text-sm text-(--color-ink-subtle)">Lesbares PDF mit eingebetteten Rechnungsdaten.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Button className="w-full" disabled={busy !== null} onClick={() => exportInvoice("xrechnung")}>{busy === "xrechnung" ? "Wird geprüft …" : "XRechnung-XML speichern"}</Button>
-              <p className="text-sm text-(--color-ink-subtle)">Eigenständige XML-Datei mit Käuferreferenz, bei Behörden meist die Leitweg-ID.</p>
-            </div>
-          </div>
-          {messages.length > 0 && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-base text-red-900">
-            <p className="mb-2 font-semibold">Bitte diese Angaben prüfen:</p>
-            <ul className="list-disc space-y-1 pl-5">{messages.map((message, index) => <li key={index}>{message.message}</li>)}</ul>
-          </div>}
-          {success && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-base text-emerald-900">{success}</p>}
-        </section>
-      </div>}
-    </details>
+      </Section>
+    </FormPage>
   );
 }

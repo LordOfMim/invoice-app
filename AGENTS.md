@@ -5,7 +5,7 @@
 - Run `npm ci`, `npm run einvoice:prepare`, `EINVOICE_REQUIRE_INTEGRATION=1 npm run check`, and `npm run build:app` for meaningful runtime/export changes. Changes to packaging also require `node scripts/smoke-packaged.mjs` against a native unpacked app.
 - Build Mac architectures separately. Keep the Java bundle architecture aligned with Electron. Do not raise the macOS minimum version without checking the installed user's OS.
 - E-invoice files are released only after the pinned XML/PDF-A validator succeeds. Do not change historical accounting amounts silently to make a document validate. Keep ordinary PDFs available for legacy invoices.
-- UI uses system fonts, flat neutral surfaces, accessible labels, and no persistent GPU animation. Keep primary invoice tasks clear and preserve advanced accounting features.
+- UI uses the locally bundled, OFL-licensed Inter and Roboto Mono (`src/app/fonts`, no network fonts), flat neutral surfaces, accessible labels, and no persistent GPU animation. Invoice templates keep the system font (see `docs/design-reference.md`). Keep primary invoice tasks clear and preserve advanced accounting features.
 - Sign and notarize release packages, then test upgrading a copy of real legacy data before delivery. A source-tree test or unsigned DMG does not prove a safe production Mac upgrade.
 
 <!-- BEGIN:nextjs-agent-rules -->

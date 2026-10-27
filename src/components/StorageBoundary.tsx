@@ -59,15 +59,17 @@ function RecoveryScreen() {
     }
   }
 
-  return <main className="mx-auto max-w-2xl space-y-6 p-8">
-    <h1 className="text-2xl font-semibold">Helferlein konnte die Daten nicht sicher öffnen</h1>
-    <p>Die vorhandenen Daten werden nicht durch einen leeren Datenbestand ersetzt. Sichern Sie zuerst das Original und stellen Sie anschließend eine bekannte JSON-Sicherung wieder her.</p>
-    <Button onClick={downloadOriginal}>Originaldaten sichern</Button>
-    <label className="block space-y-3 font-medium">JSON-Sicherung wiederherstellen
-      <input type="file" accept=".json,application/json" className="block w-full text-base" onChange={(event) => { void restore(event.target.files?.[0]); event.target.value = ""; }} />
+  return <main className="mx-auto flex max-w-[880px] flex-col gap-8 px-4 py-12 sm:px-8">
+    <div className="flex flex-col gap-2">
+      <h1 className="font-sans text-display font-semibold tracking-snug text-ink">Helferlein konnte die Daten nicht sicher öffnen</h1>
+      <p className="max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">Die vorhandenen Daten werden nicht durch einen leeren Datenbestand ersetzt. Sichern Sie zuerst das Original und stellen Sie anschließend eine bekannte JSON-Sicherung wieder her.</p>
+    </div>
+    <div><Button variant="primary" onClick={downloadOriginal}>Originaldaten sichern</Button></div>
+    <label className="flex flex-col gap-2 font-sans text-base font-medium tracking-snug text-ink-secondary">JSON-Sicherung wiederherstellen
+      <input type="file" accept=".json,application/json" className="block w-full font-sans text-base text-ink-secondary file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-line-control file:bg-surface file:px-3.5 file:font-sans file:text-base file:font-medium file:text-ink-secondary hover:file:bg-surface-subtle" onChange={(event) => { void restore(event.target.files?.[0]); event.target.value = ""; }} />
     </label>
-    {message && <p role="alert" className="text-red-700">{message}</p>}
-    <p className="text-sm text-zinc-600">Auf dem Mac liegt der Datenordner unter Library / Application Support / Helferlein. Bei einer nicht lesbaren Datei bleibt diese am bisherigen Ort erhalten.</p>
+    {message && <p role="alert" className="rounded-lg border border-danger/20 bg-danger/6 px-4 py-3 font-sans text-base tracking-snug text-danger">{message}</p>}
+    <p className="font-sans text-base tracking-snug text-ink-muted">Auf dem Mac liegt der Datenordner unter Library / Application Support / Helferlein. Bei einer nicht lesbaren Datei bleibt diese am bisherigen Ort erhalten.</p>
   </main>;
 }
 

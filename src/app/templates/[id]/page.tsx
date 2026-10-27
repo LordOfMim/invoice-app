@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
+import { Choice, Field } from "@/components/ui/Field";
+import { FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Surface, PageHeader, Stack, Section, Grid } from "@/components/ui/Surface";
+import { Page, PageHeader, RecordStamp, Section, initialsOf } from "@/components/ui/Layout";
 import { ConfirmDialog } from "@/components/ui/Dialog";
+import { usePageCrumb } from "@/components/shell/AppShell";
 import { t } from "@/lib/i18n";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { deleteTemplateVariant, upsertTemplateVariant } from "@/lib/storage/store";
@@ -17,315 +19,145 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
+  const de = language === "de";
+  const locale = de ? "de-DE" : "en-US";
   const [showDelete, setShowDelete] = useState(false);
+  const variant = useMemo(() => data?.templateVariants.find((tv) => tv.id === id) ?? null, [data?.templateVariants, id]);
+  usePageCrumb(variant ? variant.name || t(language, "common.unnamed") : null);
 
-  const variant = useMemo(() => {
-    return data?.templateVariants.find((tv) => tv.id === id) ?? null;
-  }, [data?.templateVariants, id]);
-
-  if (!adapter) {
-    return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Surface className="p-6 text-sm text-(--color-ink-muted)">
-            {t(language, "common.loading")}
-          </Surface>
-        </div>
-      </main>
-    );
-  }
+  if (!adapter) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
   if (!variant) {
     return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">{t(language, "templates.notFound")}</p>
-            <Link href="/templates" className="text-sm text-(--color-accent) hover:underline">
-              ← {t(language, "templates.back")}
-            </Link>
-          </Stack>
-        </div>
-      </main>
+      <Page>
+        <PageHeader title={t(language, "templates.notFound")} />
+        <div><Link href="/templates" className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{t(language, "templates.back")}</Link></div>
+      </Page>
     );
   }
 
-  const save = (next: TemplateVariant) => {
-    upsertTemplateVariant(adapter, next);
-  };
-
-  const updateCustomization = (updates: Partial<TemplateCustomization>) => {
-    save({
-      ...variant,
-      customization: { ...variant.customization, ...updates },
-    });
-  };
-
-  const handleDelete = () => {
-    deleteTemplateVariant(adapter, id);
-    window.location.assign("/templates");
-  };
+  const save = (next: TemplateVariant) => upsertTemplateVariant(adapter, next);
+  const updateCustomization = (updates: Partial<TemplateCustomization>) => save({ ...variant, customization: { ...variant.customization, ...updates } });
+  const c = variant.customization;
+  const cellPadding = c.tablePadding === "compact" ? "py-1" : c.tablePadding === "spacious" ? "py-3" : "py-2";
 
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <PageHeader
-          title={variant.name || t(language, "templates.new")}
-          breadcrumb={
-            <Link href="/templates" className="text-(--color-ink-subtle) hover:text-(--color-accent) transition-colors">
-              ← {t(language, "nav.templates")}
-            </Link>
-          }
-          actions={
-            <Button variant="danger" onClick={() => setShowDelete(true)}>
-              {t(language, "actions.delete")}
-            </Button>
-          }
-        />
+    <Page>
+      <PageHeader
+        variant="entity"
+        title={variant.name || t(language, "templates.new")}
+        initials={initialsOf(variant.name) || "V"}
+        description={de ? `Variante der Vorlage ${variant.baseTemplateId}. Jede Änderung wird sofort gespeichert.` : `Variant of the ${variant.baseTemplateId} template. Every change is saved immediately.`}
+        actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Variante löschen …" : "Delete variant …"}</Button>}
+      />
 
-        <Grid cols={2} gap="lg" className="mt-6">
-          {/* Settings */}
-          <Stack gap="md">
-            <Surface>
-              <Stack gap="md" className="p-5">
-                <Section title={t(language, "templates.basicSettings")}>
-                  <Grid cols={1} gap="md">
-                    <Field label={t(language, "templates.variantName")}>
-                      <Input
-                        value={variant.name}
-                        onChange={(e) => save({ ...variant, name: e.target.value })}
-                        placeholder={language === "de" ? "z.B. Modern mit Logo links" : "e.g., Modern with logo left"}
-                      />
-                    </Field>
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-10">
+          <FormSection title={t(language, "templates.basicSettings")} columns={1}>
+            <Field label={t(language, "templates.variantName")}>
+              <Input value={variant.name} onChange={(e) => save({ ...variant, name: e.target.value })} placeholder={de ? "z. B. Modern mit Logo links" : "e.g. Modern with logo left"} />
+            </Field>
+            <Field label={t(language, "templates.baseTemplate")}>
+              <Select value={variant.baseTemplateId} onChange={(e) => save({ ...variant, baseTemplateId: e.target.value as InvoiceTemplateId })}>
+                <option value="classic">Classic</option>
+                <option value="modern">Modern</option>
+                <option value="minimal">Minimal</option>
+              </Select>
+            </Field>
+          </FormSection>
 
-                    <Field label={t(language, "templates.baseTemplate")}>
-                      <Select
-                        value={variant.baseTemplateId}
-                        onChange={(e) => save({ ...variant, baseTemplateId: e.target.value as InvoiceTemplateId })}
-                      >
-                        <option value="classic">Classic</option>
-                        <option value="modern">Modern</option>
-                        <option value="minimal">Minimal</option>
-                      </Select>
-                    </Field>
-                  </Grid>
-                </Section>
-              </Stack>
-            </Surface>
+          <FormSection title={t(language, "templates.typography")} columns={1}>
+            <Field label={`${t(language, "templates.fontSizeScale")}: ${(c.fontSizeScale * 100).toFixed(0)} %`}>
+              <input type="range" min="0.8" max="1.2" step="0.05" value={c.fontSizeScale} onChange={(e) => updateCustomization({ fontSizeScale: parseFloat(e.target.value) })} className="h-10 w-full accent-accent-blue" />
+            </Field>
+            <Field label={`${t(language, "templates.lineSpacing")}: ${c.lineSpacing.toFixed(1)}`}>
+              <input type="range" min="1" max="2" step="0.1" value={c.lineSpacing} onChange={(e) => updateCustomization({ lineSpacing: parseFloat(e.target.value) })} className="h-10 w-full accent-accent-blue" />
+            </Field>
+          </FormSection>
 
-            <Surface>
-              <Stack gap="md" className="p-5">
-                <Section title={t(language, "templates.typography")}>
-                  <Grid cols={1} gap="md">
-                    <Field label={t(language, "templates.fontSizeScale")}>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="0.8"
-                          max="1.2"
-                          step="0.05"
-                          value={variant.customization.fontSizeScale}
-                          onChange={(e) => updateCustomization({ fontSizeScale: parseFloat(e.target.value) })}
-                          className="flex-1 accent-(--color-accent)"
-                        />
-                        <span className="text-sm text-(--color-ink-muted) w-12">
-                          {(variant.customization.fontSizeScale * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </Field>
-
-                    <Field label={t(language, "templates.lineSpacing")}>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="range"
-                          min="1"
-                          max="2"
-                          step="0.1"
-                          value={variant.customization.lineSpacing}
-                          onChange={(e) => updateCustomization({ lineSpacing: parseFloat(e.target.value) })}
-                          className="flex-1 accent-(--color-accent)"
-                        />
-                        <span className="text-sm text-(--color-ink-muted) w-12">
-                          {variant.customization.lineSpacing.toFixed(1)}
-                        </span>
-                      </div>
-                    </Field>
-                  </Grid>
-                </Section>
-              </Stack>
-            </Surface>
-
-            <Surface>
-              <Stack gap="md" className="p-5">
-                <Section title={t(language, "templates.tableSettings")}>
-                  <Grid cols={1} gap="md">
-                    <Field label={t(language, "templates.tablePadding")}>
-                      <Select
-                        value={variant.customization.tablePadding}
-                        onChange={(e) => updateCustomization({ tablePadding: e.target.value as "compact" | "normal" | "spacious" })}
-                      >
-                        <option value="compact">{t(language, "templates.compact")}</option>
-                        <option value="normal">{t(language, "templates.normal")}</option>
-                        <option value="spacious">{t(language, "templates.spacious")}</option>
-                      </Select>
-                    </Field>
-
-                    <div className="space-y-2.5">
-                      <label className="flex items-center gap-2.5 text-sm text-(--color-ink-muted) cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={variant.customization.showQuantityColumn}
-                          onChange={(e) => updateCustomization({ showQuantityColumn: e.target.checked })}
-                          className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
-                        />
-                        {t(language, "templates.showQuantityColumn")}
-                      </label>
-                      <label className="flex items-center gap-2.5 text-sm text-(--color-ink-muted) cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={variant.customization.showUnitPriceColumn}
-                          onChange={(e) => updateCustomization({ showUnitPriceColumn: e.target.checked })}
-                          className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
-                        />
-                        {t(language, "templates.showUnitPriceColumn")}
-                      </label>
-                      <label className="flex items-center gap-2.5 text-sm text-(--color-ink-muted) cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={variant.customization.showTaxColumn}
-                          onChange={(e) => updateCustomization({ showTaxColumn: e.target.checked })}
-                          className="h-4 w-4 rounded border-(--glass-border) text-(--color-accent) focus:ring-(--color-accent)"
-                        />
-                        {t(language, "templates.showTaxColumn")}
-                      </label>
-                    </div>
-                  </Grid>
-                </Section>
-              </Stack>
-            </Surface>
-
-            <Surface>
-              <Stack gap="md" className="p-5">
-                <Section title={t(language, "templates.headerStyle")}>
-                  <Grid cols={1} gap="md">
-                    <Field label={t(language, "templates.headerStyle")}>
-                      <Select
-                        value={variant.customization.headerStyle}
-                        onChange={(e) => updateCustomization({ headerStyle: e.target.value as "simple" | "boxed" | "underlined" })}
-                      >
-                        <option value="simple">{t(language, "templates.simple")}</option>
-                        <option value="boxed">{t(language, "templates.boxed")}</option>
-                        <option value="underlined">{t(language, "templates.underlined")}</option>
-                      </Select>
-                    </Field>
-                  </Grid>
-                </Section>
-              </Stack>
-            </Surface>
-
-            <div className="text-xs text-(--color-ink-subtle)">
-              {t(language, "common.created")}: {new Date(variant.createdAt).toLocaleString()}
-              {" · "}
-              {t(language, "common.updated")}: {new Date(variant.updatedAt).toLocaleString()}
+          <FormSection title={t(language, "templates.tableSettings")} columns={1}>
+            <Field label={t(language, "templates.tablePadding")}>
+              <Select value={c.tablePadding} onChange={(e) => updateCustomization({ tablePadding: e.target.value as "compact" | "normal" | "spacious" })}>
+                <option value="compact">{t(language, "templates.compact")}</option>
+                <option value="normal">{t(language, "templates.normal")}</option>
+                <option value="spacious">{t(language, "templates.spacious")}</option>
+              </Select>
+            </Field>
+            <div className="flex flex-col gap-1">
+              <Choice label={t(language, "templates.showQuantityColumn")} checked={c.showQuantityColumn} onChange={(e) => updateCustomization({ showQuantityColumn: e.target.checked })} />
+              <Choice label={t(language, "templates.showUnitPriceColumn")} checked={c.showUnitPriceColumn} onChange={(e) => updateCustomization({ showUnitPriceColumn: e.target.checked })} />
+              <Choice label={t(language, "templates.showTaxColumn")} checked={c.showTaxColumn} onChange={(e) => updateCustomization({ showTaxColumn: e.target.checked })} />
             </div>
-          </Stack>
+          </FormSection>
 
-          {/* Preview */}
-          <div className="sticky top-6">
-            <Section title={t(language, "templates.preview")}>
-              <Surface 
-                variant="solid"
-                className="p-6"
-                style={{ 
-                  fontSize: `${variant.customization.fontSizeScale * 100}%`,
-                  lineHeight: variant.customization.lineSpacing,
-                }}
-              >
-                <div 
-                  className={`border-b pb-4 mb-4 ${
-                    variant.customization.headerStyle === "boxed" ? "border p-4 rounded-lg" : 
-                    variant.customization.headerStyle === "underlined" ? "border-b-2" : ""
-                  }`}
-                  style={{ borderColor: variant.customization.accentColor }}
-                >
-                  <div className="text-lg font-bold" style={{ color: variant.customization.accentColor }}>
-                    {language === "de" ? "Rechnung" : "Invoice"} #2024-001
-                  </div>
-                  <div className="text-sm text-(--color-ink-muted)">December 30, 2024</div>
-                </div>
+          <FormSection title={t(language, "templates.headerStyle")} columns={1}>
+            <Field label={t(language, "templates.headerStyle")} hideLabel>
+              <Select value={c.headerStyle} onChange={(e) => updateCustomization({ headerStyle: e.target.value as "simple" | "boxed" | "underlined" })}>
+                <option value="simple">{t(language, "templates.simple")}</option>
+                <option value="boxed">{t(language, "templates.boxed")}</option>
+                <option value="underlined">{t(language, "templates.underlined")}</option>
+              </Select>
+            </Field>
+          </FormSection>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">{t(language, "common.from")}</div>
-                    <div className="text-sm text-(--color-ink)">{language === "de" ? "Deine Firma" : "Your Company"}</div>
-                    <div className="text-sm text-(--color-ink-muted)">{language === "de" ? "Musterstraße 123, Stadt" : "123 Street, City"}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase text-(--color-ink-subtle)">{t(language, "common.to")}</div>
-                    <div className="text-sm text-(--color-ink)">{language === "de" ? "Kundenname" : "Customer Name"}</div>
-                    <div className="text-sm text-(--color-ink-muted)">{language === "de" ? "Beispielweg 456, Ort" : "456 Avenue, Town"}</div>
-                  </div>
-                </div>
+          <RecordStamp>
+            {t(language, "common.created")}: {new Date(variant.createdAt).toLocaleString(locale)} · {t(language, "common.updated")}: {new Date(variant.updatedAt).toLocaleString(locale)}
+          </RecordStamp>
+        </div>
 
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr 
-                      className={`border-b ${
-                        variant.customization.tablePadding === "spacious" ? "text-base" : ""
-                      }`}
-                      style={{ borderColor: variant.customization.accentColor }}
-                    >
-                      <th className={`text-left ${
-                        variant.customization.tablePadding === "compact" ? "py-1" :
-                        variant.customization.tablePadding === "spacious" ? "py-3" : "py-2"
-                      }`}>{language === "de" ? "Beschreibung" : "Description"}</th>
-                      {variant.customization.showQuantityColumn && <th className="text-right">{language === "de" ? "Menge" : "Qty"}</th>}
-                      {variant.customization.showUnitPriceColumn && <th className="text-right">{language === "de" ? "Preis" : "Price"}</th>}
-                      {variant.customization.showTaxColumn && <th className="text-right">{language === "de" ? "MwSt." : "Tax"}</th>}
-                      <th className="text-right">{language === "de" ? "Gesamt" : "Total"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-(--glass-border)">
-                      <td className={`${
-                        variant.customization.tablePadding === "compact" ? "py-1" :
-                        variant.customization.tablePadding === "spacious" ? "py-3" : "py-2"
-                      }`}>{language === "de" ? "Beratungsleistungen" : "Consulting services"}</td>
-                      {variant.customization.showQuantityColumn && <td className="text-right">10</td>}
-                      {variant.customization.showUnitPriceColumn && <td className="text-right">€100</td>}
-                      {variant.customization.showTaxColumn && <td className="text-right">19%</td>}
-                      <td className="text-right">€1,190</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div className="mt-4 text-right">
-                  <div className="text-lg font-bold" style={{ color: variant.customization.accentColor }}>
-                    {language === "de" ? "Gesamt" : "Total"}: €1,190.00
-                  </div>
-                </div>
-
-                <div 
-                  className={`mt-6 pt-4 border-t border-(--glass-border) text-xs text-(--color-ink-muted) ${
-                    variant.customization.footerColumns === 1 ? "" :
-                    variant.customization.footerColumns === 2 ? "grid grid-cols-2 gap-4" :
-                    "grid grid-cols-3 gap-4"
-                  }`}
-                >
-                  <div>{language === "de" ? "Zahlungsziel: 14 Tage" : "Payment terms: 14 days"}</div>
-                  {variant.customization.footerColumns >= 2 && <div>{language === "de" ? "Bank" : "Bank"}: DE123456789</div>}
-                  {variant.customization.footerColumns >= 3 && <div>{language === "de" ? "USt-IdNr." : "VAT"}: DE987654321</div>}
-                </div>
-              </Surface>
-            </Section>
+        {/* Schematic sample of the variant settings; the real document preview lives in the invoice. */}
+        <Section title={t(language, "templates.preview")} summary={de ? "Schematische Probe. Das echte Dokument sehen Sie in der Rechnung unter „Vorschau“." : "Schematic sample. See the real document in an invoice under “Preview”."} className="lg:sticky lg:top-20">
+          <div className="rounded-card-sm border border-line bg-surface p-6 text-ink" style={{ fontSize: `${c.fontSizeScale * 100}%`, lineHeight: c.lineSpacing }}>
+            <div className={`mb-4 pb-4 ${c.headerStyle === "boxed" ? "rounded-lg border p-4" : c.headerStyle === "underlined" ? "border-b-2" : "border-b"}`} style={{ borderColor: c.accentColor }}>
+              <div className="font-semibold" style={{ color: c.accentColor, fontSize: "1.15em" }}>{de ? "Rechnung" : "Invoice"} RE-2026-001</div>
+              <div className="text-ink-muted" style={{ fontSize: "0.9em" }}>27.10.2026</div>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-4" style={{ fontSize: "0.9em" }}>
+              <div>
+                <div className="font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{t(language, "common.from")}</div>
+                <div>{de ? "Ihre Firma" : "Your company"}</div>
+                <div className="text-ink-muted">{de ? "Musterstraße 1, Musterstadt" : "1 Sample Street, Sample Town"}</div>
+              </div>
+              <div>
+                <div className="font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{t(language, "common.to")}</div>
+                <div>{de ? "Beispielkunde" : "Sample customer"}</div>
+                <div className="text-ink-muted">{de ? "Beispielweg 2, Beispielort" : "2 Example Road, Example City"}</div>
+              </div>
+            </div>
+            <table className="w-full" style={{ fontSize: "0.9em" }}>
+              <thead>
+                <tr className="border-b" style={{ borderColor: c.accentColor }}>
+                  <th className={`text-left font-semibold ${cellPadding}`}>{de ? "Beschreibung" : "Description"}</th>
+                  {c.showQuantityColumn && <th className="text-right font-semibold">{de ? "Menge" : "Qty"}</th>}
+                  {c.showUnitPriceColumn && <th className="text-right font-semibold">{de ? "Preis" : "Price"}</th>}
+                  {c.showTaxColumn && <th className="text-right font-semibold">{de ? "MwSt." : "Tax"}</th>}
+                  <th className="text-right font-semibold">{de ? "Gesamt" : "Total"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-line">
+                  <td className={cellPadding}>{de ? "Beispielleistung" : "Sample service"}</td>
+                  {c.showQuantityColumn && <td className="text-right tabular-nums">10</td>}
+                  {c.showUnitPriceColumn && <td className="text-right tabular-nums">100,00 €</td>}
+                  {c.showTaxColumn && <td className="text-right tabular-nums">19 %</td>}
+                  <td className="text-right tabular-nums">1.190,00 €</td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="mt-4 text-right font-semibold" style={{ color: c.accentColor }}>{de ? "Gesamt" : "Total"}: 1.190,00 €</div>
+            <div className={`mt-6 border-t border-line pt-4 text-ink-muted ${c.footerColumns === 2 ? "grid grid-cols-2 gap-4" : c.footerColumns === 3 ? "grid grid-cols-3 gap-4" : ""}`} style={{ fontSize: "0.8em" }}>
+              <div>{de ? "Zahlungsziel: 14 Tage" : "Payment terms: 14 days"}</div>
+              {c.footerColumns >= 2 && <div>{de ? "Bank: DE00 0000 0000" : "Bank: DE00 0000 0000"}</div>}
+              {c.footerColumns >= 3 && <div>{de ? "USt-IdNr.: DE000000000" : "VAT: DE000000000"}</div>}
+            </div>
           </div>
-        </Grid>
+        </Section>
       </div>
 
       <ConfirmDialog
         open={showDelete}
         onClose={() => setShowDelete(false)}
-        onConfirm={handleDelete}
+        onConfirm={() => { deleteTemplateVariant(adapter, id); window.location.assign("/templates"); }}
         title={t(language, "templates.deleteTitle")}
         description={t(language, "templates.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
@@ -333,6 +165,6 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }
