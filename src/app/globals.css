@@ -7,6 +7,9 @@
  * for readable secondary text in this desktop app. */
 :root {
   --color-ink-muted: var(--color-ink-body);
+  /* The OS supplies San Francisco on macOS; other platforms keep bundled Inter.
+   * Authorized Mac adaptation of the Humaify typography, see design-reference.md. */
+  --font-sans: -apple-system, BlinkMacSystemFont, var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /*
@@ -30,7 +33,7 @@
   }
 }
 
-/* Visible on screen only while its tab is open; always present for printing. */
+/* A narrow workspace hides one mounted pane on screen; print always sees its document. */
 @media screen {
   .screen-hidden {
     display: none !important;

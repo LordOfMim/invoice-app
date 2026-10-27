@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { UnderlineTabs } from "@/components/platform/underline-tabs";
+import { cn } from "@/components/platform/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Field } from "@/components/ui/Field";
 import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
-import { KeyValueList, Page, PageHeader, StatusNote, initialsOf } from "@/components/ui/Layout";
+import { Page, PageHeader, StatusNote, initialsOf } from "@/components/ui/Layout";
 import { OverflowMenu } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { DashedBadge, StatusPill } from "@/components/ui/Status";
@@ -25,7 +26,7 @@ import { waitForInvoicePrintReady } from "@/lib/printing";
 import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
-import { computeInvoiceBalance, computeInvoiceTotals } from "@/lib/calc";
+import { computeInvoiceBalance } from "@/lib/calc";
 import { usePersistedData } from "@/lib/storage/useStore";
 import {
   createCreditNote,
@@ -36,17 +37,27 @@ import {
   updateSettings,
   upsertInvoice,
 } from "@/lib/storage/store";
-import { errorTarget, fieldId, tabHash, type EditorTab } from "./fields";
+import { PREVIEW_HASH, errorTarget, fieldId, tabHash, type EditorTab } from "./fields";
 import { ExtrasTab } from "./ExtrasTab";
 import { LineItemsEditor } from "./LineItems";
 import { PAYMENT_AMOUNT_ID, PaymentsTab } from "./PaymentsTab";
 
-const TAB_ORDER: EditorTab[] = ["edit", "preview", "payments", "einvoice", "extras"];
+const TAB_ORDER: EditorTab[] = ["edit", "payments", "einvoice", "extras"];
+
+/** Width of the workspace from which inputs and preview stand side by side (1280px Mac windows and wider). */
+const SPLIT_MIN_WIDTH = 880;
+/** A4 width in CSS pixels. */
+const PAPER_WIDTH = (210 * 96) / 25.4;
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5];
 
 function initialTab(): EditorTab {
   if (typeof window === "undefined") return "edit";
   const hash = window.location.hash.slice(1);
   return (Object.entries(tabHash).find(([, value]) => value === hash)?.[0] as EditorTab | undefined) ?? "edit";
+}
+
+function initialNarrowView(): "form" | "preview" {
+  return typeof window !== "undefined" && window.location.hash.slice(1) === PREVIEW_HASH ? "preview" : "form";
 }
 
 /** Focus a control once its tab and group are rendered. */
@@ -59,10 +70,12 @@ function focusLater(id: string) {
 }
 
 /**
- * The invoice as one object (Platform `line-shell-frame` + Overwatch entity `PageHeader`): identity with status and
- * the main actions, then UnderlineTabs for the areas of the invoice. „Bearbeiten“ is one 880px form column with a
- * sticky section list and the running total; „Vorschau“ shows the single paper preview at readable size. Every
- * input is saved immediately (no save/discard buttons). The one preview stays in the DOM so the PDF print finds it.
+ * The invoice workspace (docs/design-reference.md, „Rechnungsarbeitsplatz“): identity with status and the main
+ * actions on top, then inputs and the live paper preview side by side. The input column carries the areas of the
+ * invoice as UnderlineTabs (Bearbeiten · Zahlungen · E-Rechnung · Gestaltung und mehr); the preview column sticks
+ * below the top bar, scrolls by itself and has fit/zoom controls. When the workspace is narrower than
+ * SPLIT_MIN_WIDTH, an Eingaben/Vorschau switch shows one of the two columns over the same document. Every input is
+ * saved immediately (no save/discard buttons). There is exactly one preview in the DOM; the PDF print uses it.
  */
 export function InvoiceEditorClient({ id }: { id: string }) {
   const { adapter, data } = usePersistedData();
@@ -81,19 +94,52 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const [einvoiceErrors, setEinvoiceErrors] = useState<EInvoiceError[]>([]);
   const [senderOpen, setSenderOpen] = useState<boolean | null>(null);
   const previewFrame = useRef<HTMLDivElement>(null);
-  const [previewScale, setPreviewScale] = useState(1);
+  const workspace = useRef<HTMLDivElement>(null);
+  const narrowSwitch = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [zoom, setZoom] = useState<"fit" | number>("fit");
+  const [split, setSplit] = useState(true);
+  const [narrowView, setNarrowView] = useState<"form" | "preview">(initialNarrowView);
 
   const invoice = useMemo(() => data?.invoices.find((inv) => inv.id === id) ?? null, [data?.invoices, id]);
   const deferredInvoice = useDeferredValue(invoice);
   usePageCrumb(invoice ? invoice.invoiceNumber || (de ? "Ohne Nummer" : "No number") : null);
 
+  // One observer on the real preview container: the fit scale follows its width (never per keystroke).
   useEffect(() => {
     const frame = previewFrame.current;
     if (!frame) return;
     const observer = new ResizeObserver(([entry]) => {
-      setPreviewScale(Math.min(1, Math.max(0.3, (entry.contentRect.width - 2) / (210 * 96 / 25.4))));
+      if (entry.contentRect.width > 2) setFitScale(Math.min(1, (entry.contentRect.width - 2) / PAPER_WIDTH));
     });
     observer.observe(frame);
+    return () => observer.disconnect();
+  }, [invoice?.id]);
+
+  // Side by side only where both columns stay usable; only classes change, nothing remounts.
+  useEffect(() => {
+    const element = workspace.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const nextSplit = entry.contentRect.width >= SPLIT_MIN_WIDTH;
+      // A resize must never hide the field the user is editing or move its focus.
+      if (!nextSplit) {
+        if (element.querySelector("#invoice-inputs")?.contains(document.activeElement)) setNarrowView("form");
+        else if (element.querySelector("#invoice-live-preview")?.contains(document.activeElement)) setNarrowView("preview");
+      } else if (narrowSwitch.current?.contains(document.activeElement)) {
+        // The narrow-only switch disappears on expansion. Keep keyboard focus
+        // in the pane named by that control, without scrolling or touching drafts.
+        const preview = document.activeElement?.getAttribute("aria-controls") === "invoice-live-preview";
+        requestAnimationFrame(() => {
+          const target = preview
+            ? previewFrame.current
+            : element.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]');
+          target?.focus({ preventScroll: true });
+        });
+      }
+      setSplit(nextSplit);
+    });
+    observer.observe(element);
     return () => observer.disconnect();
   }, [invoice?.id]);
 
@@ -139,6 +185,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const selectTab = useCallback((next: EditorTab, focus?: string) => {
     setTab(next);
+    setNarrowView("form");
     window.history.replaceState(null, "", `#${tabHash[next]}`);
     if (focus) focusLater(focus);
   }, []);
@@ -172,7 +219,13 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const logoDataUrl = invoice.logoDataUrl || settings?.defaultLogoDataUrl;
   const isDefaultInvoice = (settings?.defaultInvoiceId ?? null) === invoice.id;
   const status = invoiceStatus(invoice, balance, language);
-  const totals = computeInvoiceTotals(invoice);
+  const previewScale = zoom === "fit" ? fitScale : zoom;
+  const zoomIn = () => setZoom(ZOOM_STEPS.find((step) => step > previewScale + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]);
+  const zoomOut = () => setZoom([...ZOOM_STEPS].reverse().find((step) => step < previewScale - 0.001) ?? ZOOM_STEPS[0]);
+  const showNarrow = (view: "form" | "preview") => {
+    setNarrowView(view);
+    window.history.replaceState(null, "", `#${view === "preview" ? PREVIEW_HASH : tabHash[tab]}`);
+  };
   const title = `${invoice.texts.documentTitle || (de ? "Rechnung" : "Invoice")} ${invoice.invoiceNumber || (de ? "ohne Nummer" : "without number")}`;
   const editTabLabel = de ? "Bearbeiten" : "Edit";
 
@@ -285,7 +338,6 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const tabs = [
     { value: "edit" as const, label: editTabLabel },
-    { value: "preview" as const, label: de ? "Vorschau" : "Preview" },
     { value: "payments" as const, label: de ? "Zahlungen" : "Payments", count: (invoice.payments ?? []).length || undefined },
     { value: "einvoice" as const, label: de ? "E-Rechnung" : "E-invoice", count: einvoiceErrors.length ? (de ? `${einvoiceErrors.length} offen` : `${einvoiceErrors.length} open`) : undefined },
     { value: "extras" as const, label: de ? "Gestaltung und mehr" : "Layout and more" },
@@ -319,7 +371,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   ].filter(Boolean).join(" · ");
 
   return (
-    <Page className="gap-0">
+    <Page className="invoice-editor gap-0">
       <PrintStyles />
 
       <PageHeader
@@ -365,7 +417,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         )}
       />
 
-      <div className="no-print mt-6 flex flex-col gap-3 empty:hidden">
+      <div className="no-print mt-4 flex flex-col gap-3 empty:hidden">
         {pdfMessage && <StatusNote tone={pdfError ? "error" : "ok"} role={pdfError ? "alert" : "status"}>{pdfMessage}</StatusNote>}
         {creditNotes.length > 0 && (
           <StatusNote tone="attention" title={`${t(language, "invoice.linkedCreditNotes")} (${creditNotes.length})`}>
@@ -382,209 +434,212 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         )}
       </div>
 
-      <UnderlineTabs
-        role="tablist"
-        aria-label={de ? "Bereiche der Rechnung" : "Invoice areas"}
-        size="lg"
-        className="no-print mt-8"
-        items={tabs}
-        value={tab}
-        renderItem={(item, content) => (
-          <button
-            type="button"
-            role="tab"
-            id={`tab-${item.value}`}
-            aria-selected={item.value === tab}
-            aria-controls={`panel-${item.value}`}
-            tabIndex={item.value === tab ? 0 : -1}
-            onClick={() => selectTab(item.value)}
-            onKeyDown={onTabKey}
-            className="rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 touch:pt-3"
-          >
-            {content}
-          </button>
+      <div className="no-print mt-5 mb-4 flex flex-wrap items-center justify-between gap-3">
+        {!split && (
+          <div ref={narrowSwitch} role="group" aria-label={de ? "Ansicht des Rechnungsarbeitsplatzes" : "Invoice workspace view"} className="inline-flex rounded-md border border-line-control bg-surface-muted p-1">
+            {(["form", "preview"] as const).map((view) => (
+              <button key={view} type="button" aria-pressed={narrowView === view} aria-controls={view === "form" ? "invoice-inputs" : "invoice-live-preview"} onClick={() => showNarrow(view)} className={cn("min-h-8 rounded-sm px-4 font-sans text-base font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50", narrowView === view ? "bg-surface" : "text-ink-body hover:text-ink")}>
+                {view === "form" ? (de ? "Eingaben" : "Inputs") : (de ? "Vorschau" : "Preview")}
+              </button>
+            ))}
+          </div>
         )}
-      />
+        <span className="font-sans text-base tracking-snug text-ink-body">{de ? "Änderungen erscheinen direkt in der Vorschau." : "Changes appear directly in the preview."}</span>
+      </div>
 
-      <div className="pt-8 lg:pt-10">
-        {tab === "edit" && (
-          <div role="tabpanel" id="panel-edit" aria-labelledby="tab-edit" className="no-print flex flex-col gap-8 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-12">
-            <aside className="flex flex-col gap-6 max-lg:hidden lg:sticky lg:top-20">
-              <nav aria-label={de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="flex flex-col gap-0.5">
+      <div ref={workspace} className={cn("invoice-workspace grid min-w-0 items-start gap-6", split && "grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]")}>
+        <div id="invoice-inputs" className={cn("invoice-input-pane no-print min-w-0", !split && narrowView !== "form" && "screen-hidden")}>
+          <UnderlineTabs
+            role="tablist"
+            aria-label={de ? "Bereiche der Rechnung" : "Invoice areas"}
+            size="md"
+            className="gap-x-4"
+            items={tabs}
+            value={tab}
+            renderItem={(item, content) => (
+              <button
+                type="button"
+                role="tab"
+                id={`tab-${item.value}`}
+                aria-selected={item.value === tab}
+                aria-controls={`panel-${item.value}`}
+                tabIndex={item.value === tab ? 0 : -1}
+                onClick={() => selectTab(item.value)}
+                onKeyDown={onTabKey}
+                className="rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 touch:pt-3"
+              >
+                {content}
+              </button>
+            )}
+          />
+
+          <div className="pt-6">
+            <div role="tabpanel" id="panel-edit" aria-labelledby="tab-edit" hidden={tab !== "edit"}>
+              <nav aria-label={de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="mb-6 flex flex-wrap gap-x-4 gap-y-2 border-b border-line pb-4">
                 {sections.map(([anchor, label]) => (
-                  <a
-                    key={anchor}
-                    href={`#${anchor}`}
-                    onClick={() => { if (anchor === "absender") setSenderOpen(true); }}
-                    className="inline-flex min-h-9 items-center rounded-md px-2.5 font-sans text-lg font-medium tracking-snug text-ink-muted outline-none transition-colors duration-100 hover:bg-surface-muted hover:text-ink-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
-                  >
+                  <a key={anchor} href={`#${anchor}`} onClick={() => { if (anchor === "absender") setSenderOpen(true); }} className="inline-flex min-h-8 items-center rounded-sm font-sans text-base font-medium tracking-snug text-ink-body underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-ring/50">
                     {label}
                   </a>
                 ))}
               </nav>
-              <div className="border-t border-line pt-4">
-                <KeyValueList
-                  items={[
-                    { label: de ? "Netto" : "Net", value: formatMoney(totals.subtotal, currency, locale) },
-                    { label: de ? "Steuer" : "Tax", value: formatMoney(totals.taxTotal, currency, locale) },
-                    { label: invoice.texts.totalLabel || (de ? "Gesamt" : "Total"), value: formatMoney(totals.total, currency, locale), emphasis: true },
-                  ]}
-                />
-              </div>
-            </aside>
-
-            <FormPage>
-              {editErrors.length > 0 && (
-                <StatusNote tone="attention" title={de ? "Für die E-Rechnung fehlen hier noch Angaben." : "The e-invoice still needs details here."}>
-                  <ul className="mt-1 flex flex-col gap-1">
-                    {editErrors.map((error, index) => (
-                      <li key={index}>
-                        <button type="button" onClick={() => jumpTo(error.field)} className="rounded-sm text-left underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">{error.message}</button>
-                      </li>
-                    ))}
-                  </ul>
-                </StatusNote>
-              )}
-
-              <FormSection id="rechnungsdaten" title={de ? "Rechnungsdaten" : "Invoice details"} description={de ? "Nummer, Rechnungsdatum und Zahlungsziel." : "Number, invoice date and due date."} columns={3}>
-                <Field label={invoice.texts.invoiceNumberLabel || "Rechnungsnummer"} id={fieldId("invoiceNumber")} error={errorMap.invoiceNumber}>
-                  <Input value={invoice.invoiceNumber} onChange={(e) => { save({ ...invoice, invoiceNumber: e.target.value }); clearErrors((field) => field === "invoiceNumber"); }} />
-                </Field>
-                <Field label={invoice.texts.invoiceDateLabel || "Rechnungsdatum"} id={fieldId("invoiceDate")} error={errorMap.invoiceDate}>
-                  <Input type="date" value={invoice.invoiceDate} onChange={(e) => { save({ ...invoice, invoiceDate: e.target.value }); clearErrors((field) => field === "invoiceDate"); }} />
-                </Field>
-                <Field label={invoice.texts.dueDateLabel || "Fällig am"} id={fieldId("dueDate")} error={errorMap.dueDate}>
-                  <Input type="date" value={invoice.dueDate} onChange={(e) => { save({ ...invoice, dueDate: e.target.value }); clearErrors((field) => field === "dueDate"); }} />
-                </Field>
-              </FormSection>
-
-              <FormSection id="empfaenger" title={invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")} description={de ? "An wen die Rechnung geht. Aus der Kundenliste übernehmen oder direkt eintragen." : "Who receives the invoice. Fill from the customer list or type directly."}>
-                {customers.length > 0 && (
-                  <Field
-                    label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
-                    hint={de ? "Ersetzt Anrede, Name, Adresse und Kontakt durch die gespeicherten Kundendaten." : "Replaces salutation, name, address and contact with the saved customer details."}
-                    className="sm:col-span-2"
-                  >
-                    <Select value={invoice.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
-                      <option value="">{t(language, "actions.selectCustomer")} …</option>
-                      {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </Select>
-                  </Field>
+              <FormPage>
+                {editErrors.length > 0 && (
+                  <StatusNote tone="attention" title={de ? "Für die E-Rechnung fehlen hier noch Angaben." : "The e-invoice still needs details here."}>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {editErrors.map((error, index) => (
+                        <li key={index}>
+                          <button type="button" onClick={() => jumpTo(error.field)} className="rounded-sm text-left underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">{error.message}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </StatusNote>
                 )}
-                <Field label="Anrede">
-                  <Input value={invoice.recipient.salutation || ""} placeholder="z. B. Sehr geehrte Damen und Herren" onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, salutation: e.target.value } })} />
-                </Field>
-                <Field label="Name" id={fieldId("recipient.name")} error={errorMap.buyer}>
-                  <Input value={invoice.recipient.name} onChange={(e) => { save({ ...invoice, recipient: { ...invoice.recipient, name: e.target.value } }); clearErrors((field) => field === "buyer"); }} />
-                </Field>
-                <Field label="Adresse">
-                  <Textarea rows={3} value={invoice.recipient.address} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, address: e.target.value } })} />
-                </Field>
-                <Field label="Kontakt">
-                  <Textarea rows={3} value={invoice.recipient.contact} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, contact: e.target.value } })} />
-                </Field>
-              </FormSection>
 
-              <FormSection id="positionen" title={de ? "Positionen" : "Line items"} description={de ? "Mengen und Preise mit Komma eingeben, z. B. 12,50. Überschriften gliedern längere Rechnungen." : "Enter quantities and prices with a comma or dot. Headings structure longer invoices."} columns={1}>
-                <LineItemsEditor
-                  invoice={invoice}
-                  products={products}
-                  defaultTaxRate={settings?.defaultTaxRate}
-                  currency={currency}
-                  locale={locale}
-                  errors={errorMap}
-                  save={save}
-                  onUpdate={updateLineItem}
-                  onRemove={removeLineItem}
-                  onMove={moveLineItem}
-                />
-              </FormSection>
+                <FormSection id="rechnungsdaten" title={de ? "Rechnungsdaten" : "Invoice details"} description={de ? "Nummer, Rechnungsdatum und Zahlungsziel." : "Number, invoice date and due date."} columns={3}>
+                  <Field label={invoice.texts.invoiceNumberLabel || "Rechnungsnummer"} id={fieldId("invoiceNumber")} error={errorMap.invoiceNumber}>
+                    <Input value={invoice.invoiceNumber} onChange={(e) => { save({ ...invoice, invoiceNumber: e.target.value }); clearErrors((field) => field === "invoiceNumber"); }} />
+                  </Field>
+                  <Field label={invoice.texts.invoiceDateLabel || "Rechnungsdatum"} id={fieldId("invoiceDate")} error={errorMap.invoiceDate}>
+                    <Input type="date" value={invoice.invoiceDate} onChange={(e) => { save({ ...invoice, invoiceDate: e.target.value }); clearErrors((field) => field === "invoiceDate"); }} />
+                  </Field>
+                  <Field label={invoice.texts.dueDateLabel || "Fällig am"} id={fieldId("dueDate")} error={errorMap.dueDate}>
+                    <Input type="date" value={invoice.dueDate} onChange={(e) => { save({ ...invoice, dueDate: e.target.value }); clearErrors((field) => field === "dueDate"); }} />
+                  </Field>
+                </FormSection>
 
-              <FormSection id="hinweise" title={invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")} description={de ? "Steht auf der Rechnung unter der Summe, z. B. Zahlungsbedingungen." : "Printed below the totals, e.g. payment terms."} columns={1}>
-                <Textarea aria-label={invoice.texts.notesHeading || "Hinweise"} rows={3} value={invoice.notesText || ""} placeholder={de ? "z. B. Zahlbar innerhalb von 14 Tagen ohne Abzug." : "e.g. Payable within 14 days."} onChange={(e) => save({ ...invoice, notesText: e.target.value })} />
-              </FormSection>
-
-              <Disclosure
-                id="absender"
-                as="h2"
-                title={invoice.texts.senderHeading || (de ? "Absender" : "Sender")}
-                open={senderOpen ?? !invoice.sender.name}
-                onOpenChange={setSenderOpen}
-                status={invoice.sender.name
-                  ? <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{invoice.sender.name}</span>
-                  : <StatusPill tone="attention">{de ? "Bitte ergänzen" : "Please complete"}</StatusPill>}
-                summary={de ? "Ihre eigenen Angaben. Neue Rechnungen übernehmen sie aus den Einstellungen." : "Your own details. New invoices take them from the settings."}
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Name" id={fieldId("sender.name")} error={errorMap.seller} className="sm:col-span-2">
-                    <Input value={invoice.sender.name} onChange={(e) => { setSenderOpen(true); save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } }); clearErrors((field) => field === "seller"); }} />
+                <FormSection id="empfaenger" title={invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")} description={de ? "An wen die Rechnung geht. Aus der Kundenliste übernehmen oder direkt eintragen." : "Who receives the invoice. Fill from the customer list or type directly."}>
+                  {customers.length > 0 && (
+                    <Field
+                      label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
+                      hint={de ? "Ersetzt Anrede, Name, Adresse und Kontakt durch die gespeicherten Kundendaten." : "Replaces salutation, name, address and contact with the saved customer details."}
+                      className="@md:col-span-2"
+                    >
+                      <Select value={invoice.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
+                        <option value="">{t(language, "actions.selectCustomer")} …</option>
+                        {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </Select>
+                    </Field>
+                  )}
+                  <Field label="Anrede">
+                    <Input value={invoice.recipient.salutation || ""} placeholder="z. B. Sehr geehrte Damen und Herren" onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, salutation: e.target.value } })} />
+                  </Field>
+                  <Field label="Name" id={fieldId("recipient.name")} error={errorMap.buyer}>
+                    <Input value={invoice.recipient.name} onChange={(e) => { save({ ...invoice, recipient: { ...invoice.recipient, name: e.target.value } }); clearErrors((field) => field === "buyer"); }} />
                   </Field>
                   <Field label="Adresse">
-                    <Textarea rows={3} value={invoice.sender.address} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, address: e.target.value } })} />
+                    <Textarea rows={3} value={invoice.recipient.address} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, address: e.target.value } })} />
                   </Field>
                   <Field label="Kontakt">
-                    <Textarea rows={3} value={invoice.sender.contact} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, contact: e.target.value } })} />
+                    <Textarea rows={3} value={invoice.recipient.contact} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, contact: e.target.value } })} />
                   </Field>
-                </div>
-              </Disclosure>
-            </FormPage>
-          </div>
-        )}
+                </FormSection>
 
-        <div role="tabpanel" id="panel-preview" aria-labelledby="tab-preview" className={tab === "preview" ? "flex flex-col gap-4" : "screen-hidden"}>
-          <p className="no-print max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">
-            {de ? "So wird die Rechnung als PDF gespeichert. Änderungen nehmen Sie im Tab „Bearbeiten“ vor." : "This is how the invoice is saved as PDF. Make changes in the Edit tab."}
-          </p>
-          <div ref={previewFrame} className="invoice-preview-frame overflow-auto rounded-card-sm border border-line bg-surface-muted p-4 sm:p-8">
-            <div id="invoice-preview" style={{ zoom: previewScale }} className="print-area invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm]">
-              <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
+                <FormSection id="positionen" title={de ? "Positionen" : "Line items"} description={de ? "Mengen und Preise mit Komma eingeben, z. B. 12,50. Überschriften gliedern längere Rechnungen." : "Enter quantities and prices with a comma or dot. Headings structure longer invoices."} columns={1}>
+                  <LineItemsEditor
+                    invoice={invoice}
+                    products={products}
+                    defaultTaxRate={settings?.defaultTaxRate}
+                    currency={currency}
+                    locale={locale}
+                    errors={errorMap}
+                    save={save}
+                    onUpdate={updateLineItem}
+                    onRemove={removeLineItem}
+                    onMove={moveLineItem}
+                  />
+                </FormSection>
+
+                <FormSection id="hinweise" title={invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")} description={de ? "Steht auf der Rechnung unter der Summe, z. B. Zahlungsbedingungen." : "Printed below the totals, e.g. payment terms."} columns={1}>
+                  <Textarea aria-label={invoice.texts.notesHeading || "Hinweise"} rows={3} value={invoice.notesText || ""} placeholder={de ? "z. B. Zahlbar innerhalb von 14 Tagen ohne Abzug." : "e.g. Payable within 14 days."} onChange={(e) => save({ ...invoice, notesText: e.target.value })} />
+                </FormSection>
+
+                <Disclosure
+                  id="absender"
+                  as="h2"
+                  title={invoice.texts.senderHeading || (de ? "Absender" : "Sender")}
+                  open={senderOpen ?? !invoice.sender.name}
+                  onOpenChange={setSenderOpen}
+                  status={invoice.sender.name
+                    ? <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{invoice.sender.name}</span>
+                    : <StatusPill tone="attention">{de ? "Bitte ergänzen" : "Please complete"}</StatusPill>}
+                  className="@container"
+                  summary={de ? "Ihre eigenen Angaben. Neue Rechnungen übernehmen sie aus den Einstellungen." : "Your own details. New invoices take them from the settings."}
+                >
+                  <div className="grid gap-4 @md:grid-cols-2">
+                    <Field label="Name" id={fieldId("sender.name")} error={errorMap.seller} className="@md:col-span-2">
+                      <Input value={invoice.sender.name} onChange={(e) => { setSenderOpen(true); save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } }); clearErrors((field) => field === "seller"); }} />
+                    </Field>
+                    <Field label="Adresse">
+                      <Textarea rows={3} value={invoice.sender.address} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, address: e.target.value } })} />
+                    </Field>
+                    <Field label="Kontakt">
+                      <Textarea rows={3} value={invoice.sender.contact} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, contact: e.target.value } })} />
+                    </Field>
+                  </div>
+                </Disclosure>
+              </FormPage>
+            </div>
+
+            <div role="tabpanel" id="panel-payments" aria-labelledby="tab-payments" hidden={tab !== "payments"} className="no-print">
+              <PaymentsTab
+                key={invoice.id}
+                invoice={invoice}
+                balance={balance}
+                status={status}
+                creditNotes={creditNotes}
+                currency={currency}
+                locale={locale}
+                language={language}
+                save={save}
+                onTogglePaid={() => togglePaid(adapter, invoice.id)}
+                onCreateCreditNote={handleCreateCreditNote}
+              />
+            </div>
+
+            <div role="tabpanel" id="panel-einvoice" aria-labelledby="tab-einvoice" hidden={tab !== "einvoice"} className="no-print">
+              <EInvoicePanel
+                key={invoice.id}
+                invoice={{ ...invoice, logoDataUrl }}
+                onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
+                onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))}
+                errors={einvoiceErrors}
+                onErrors={(next) => setEinvoiceErrors((previous) => (previous.length === 0 && next.length === 0 ? previous : next))}
+                onJump={jumpTo}
+                fieldId={fieldId}
+                editTabLabel={editTabLabel}
+              />
+            </div>
+
+            <div role="tabpanel" id="panel-extras" aria-labelledby="tab-extras" hidden={tab !== "extras"} className="no-print">
+              <ExtrasTab
+                invoice={invoice}
+                templateVariants={templateVariants}
+                tags={tags}
+                language={language}
+                locale={locale}
+                errors={errorMap}
+                save={(next) => { save(next); clearErrors((field) => field === "currency"); }}
+              />
             </div>
           </div>
         </div>
 
-        <div role="tabpanel" id="panel-payments" aria-labelledby="tab-payments" hidden={tab !== "payments"} className="no-print">
-          <PaymentsTab
-            key={invoice.id}
-            invoice={invoice}
-            balance={balance}
-            status={status}
-            creditNotes={creditNotes}
-            currency={currency}
-            locale={locale}
-            language={language}
-            save={save}
-            onTogglePaid={() => togglePaid(adapter, invoice.id)}
-            onCreateCreditNote={handleCreateCreditNote}
-          />
-        </div>
-
-        <div role="tabpanel" id="panel-einvoice" aria-labelledby="tab-einvoice" hidden={tab !== "einvoice"} className="no-print">
-          <EInvoicePanel
-            key={invoice.id}
-            invoice={{ ...invoice, logoDataUrl }}
-            onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
-            onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))}
-            errors={einvoiceErrors}
-            onErrors={(next) => setEinvoiceErrors((previous) => (previous.length === 0 && next.length === 0 ? previous : next))}
-            onJump={jumpTo}
-            fieldId={fieldId}
-            editTabLabel={editTabLabel}
-          />
-        </div>
-
-        {tab === "extras" && (
-          <div role="tabpanel" id="panel-extras" aria-labelledby="tab-extras" className="no-print">
-            <ExtrasTab
-              invoice={invoice}
-              templateVariants={templateVariants}
-              tags={tags}
-              language={language}
-              locale={locale}
-              errors={errorMap}
-              save={(next) => { save(next); clearErrors((field) => field === "currency"); }}
-            />
+        <section id="invoice-live-preview" aria-labelledby="invoice-preview-title" className={cn("invoice-preview-pane min-w-0 overflow-hidden rounded-card-sm border border-line bg-surface-muted", split && "sticky top-17", !split && narrowView !== "preview" && "screen-hidden")}>
+          <div className="no-print flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-rail px-3 py-2">
+            <h2 id="invoice-preview-title" className="font-sans text-base font-semibold tracking-snug text-ink">{de ? "Live-Vorschau" : "Live preview"}</h2>
+            <div role="group" aria-label={de ? "Vergrößerung der Vorschau" : "Preview zoom"} className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" aria-label={de ? "Vorschau verkleinern" : "Zoom out"} disabled={previewScale <= ZOOM_STEPS[0]} onClick={zoomOut} className="w-8 px-0">−</Button>
+              <output className="w-11 text-center font-sans text-base text-ink-body tabular-nums" aria-label={de ? "Aktuelle Vergrößerung" : "Current zoom"}>{Math.round(previewScale * 100)}%</output>
+              <Button size="sm" variant="ghost" aria-label={de ? "Vorschau vergrößern" : "Zoom in"} disabled={previewScale >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} onClick={zoomIn} className="w-8 px-0">+</Button>
+              <Button size="sm" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}>{de ? "Einpassen" : "Fit width"}</Button>
+            </div>
           </div>
-        )}
+          <div ref={previewFrame} tabIndex={0} role="region" aria-label={de ? "Rechnungsvorschau, scrollbar" : "Invoice preview, scrollable"} className="invoice-preview-frame max-h-[calc(100dvh-12rem)] min-w-0 overflow-auto overscroll-contain p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset lg:max-h-[calc(100dvh-9rem)]">
+            <div id="invoice-preview" style={{ zoom: previewScale }} className="print-area invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm]">
+              <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
+            </div>
+          </div>
+        </section>
       </div>
 
       <ConfirmDialog

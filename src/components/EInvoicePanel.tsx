@@ -209,8 +209,8 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
       </p>
 
       <Section title="E-Rechnung speichern" summary="Die Datei wird vorher auf diesem Gerät geprüft. Fehlen Angaben, wird nichts gespeichert und Sie sehen hier, was zu ergänzen ist. Das ZUGFeRD-PDF verwendet ein festes Archivlayout mit den hier erfassten Adressen.">
-        <Card>
-          <CardZone className="grid gap-4 sm:grid-cols-2">
+        <Card className="@container">
+          <CardZone className="grid gap-4 @lg:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Button className="w-full" loading={busy === "zugferd"} disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
               <p className="font-sans text-base tracking-snug text-ink-muted">Lesbares PDF mit eingebetteten Rechnungsdaten.</p>

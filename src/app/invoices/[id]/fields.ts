@@ -1,9 +1,13 @@
-/** Editor tabs; the hash keeps the open tab across reloads (#vorschau). */
-export type EditorTab = "edit" | "preview" | "payments" | "einvoice" | "extras";
+/**
+ * Areas of the input column; the hash keeps the open area across reloads. The preview is not an area: it stands
+ * next to the inputs (or behind the Eingaben/Vorschau switch when the window is narrow, hash #vorschau).
+ */
+export type EditorTab = "edit" | "payments" | "einvoice" | "extras";
+
+export const PREVIEW_HASH = "vorschau";
 
 export const tabHash: Record<EditorTab, string> = {
   edit: "bearbeiten",
-  preview: "vorschau",
   payments: "zahlungen",
   einvoice: "e-rechnung",
   extras: "gestaltung",

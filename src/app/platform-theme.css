@@ -180,7 +180,7 @@
   }
 
   /* Mobile chrome adds a 44px menu row below the 52px TopBar. */
-  @media (width < 48rem) {
+  @media (width < 64rem) {
     html {
       scroll-padding-top: 7rem;
     }

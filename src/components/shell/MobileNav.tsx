@@ -6,19 +6,20 @@ import { ArrowDown01Icon, ArrowRight01Icon, Menu01Icon } from "@hugeicons/core-f
 import { HugeiconsIcon } from "@/components/platform/icon";
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/platform/sheet";
 import { cn } from "@/components/platform/lib/cn";
-import type { NavArea, NavItem } from "./nav";
+import type { NavGroup, NavItem } from "./nav";
 
 /*
- * After humaify-overwatch `src/components/shell/mobile-nav.tsx`: below md one labelled row names where the user is
- * („Rechnungen › Gutschriften“) and opens every area and page as a full list in a Platform `Sheet` (Radix Dialog:
+ * After humaify-overwatch `src/components/shell/mobile-nav.tsx`: below lg, where the sidebar does not fit, one
+ * labelled row names where the user is („Weitere Dokumente › Vorlagen“) and opens the same grouped navigation as the
+ * sidebar as a full list in a Platform `Sheet` (Radix Dialog:
  * focus trap, Escape, focus return). The row sticks below the top bar. The caller keys this component by the path,
  * so every navigation closes the menu and it never reopens by itself.
  */
-export function MobileNav({ areas, area, page, title, closeLabel }: { areas: readonly NavArea[]; area?: NavArea; page?: NavItem; title: string; closeLabel: string }) {
+export function MobileNav({ groups, group, item: page, title, closeLabel }: { groups: readonly NavGroup[]; group?: NavGroup; item?: NavItem; title: string; closeLabel: string }) {
   const [open, setOpen] = useState(false);
-  const nested = area?.pages && page && page.key !== area.pages[0]?.key;
+  const nested = Boolean(group?.label && page);
   return (
-    <nav aria-label={title} className="no-print sticky top-13 z-25 border-b border-line bg-surface px-4 sm:px-8 md:hidden">
+    <nav aria-label={title} className="no-print sticky top-13 z-25 border-b border-line bg-surface px-4 sm:px-6 lg:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
@@ -28,14 +29,14 @@ export function MobileNav({ areas, area, page, title, closeLabel }: { areas: rea
             <HugeiconsIcon icon={Menu01Icon} size={16} className="shrink-0 text-ink-muted" />
             <span className="sr-only">{title} öffnen{page ? ", aktuell:" : ""} </span>
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              {nested ? (
+              {nested && page ? (
                 <>
-                  <span className="min-w-0 shrink truncate font-medium text-ink-muted">{area.label}</span>
+                  <span className="min-w-0 shrink truncate font-medium text-ink-muted">{group?.label}</span>
                   <HugeiconsIcon icon={ArrowRight01Icon} size={12} className="shrink-0 text-line-strong" />
                   <span className="min-w-0 truncate font-semibold text-ink">{page.label}</span>
                 </>
               ) : (
-                <span className="min-w-0 truncate font-semibold text-ink">{(page ?? area)?.label ?? title}</span>
+                <span className="min-w-0 truncate font-semibold text-ink">{page?.label ?? title}</span>
               )}
             </span>
             <span className="flex shrink-0 items-center gap-1 font-medium text-ink-secondary">
@@ -49,12 +50,12 @@ export function MobileNav({ areas, area, page, title, closeLabel }: { areas: rea
             <SheetTitle>{title}</SheetTitle>
           </SheetHeader>
           <SheetBody className="border-t border-line px-3 pt-2 pb-6">
-            {areas.map((entry) => (
+            {groups.map((entry) => (
               <section key={entry.key} aria-label={entry.label} className="border-b border-line py-2 last:border-b-0">
-                {entry.pages && <h3 className="px-3 pt-2 pb-1 font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{entry.label}</h3>}
+                {entry.label && <h3 className="px-3 pt-2 pb-1 font-sans text-base font-medium tracking-snug text-ink-muted">{entry.label}</h3>}
                 <ul className="flex flex-col">
-                  {(entry.pages ?? [entry]).map((item) => {
-                    const current = page?.key === item.key && area?.key === entry.key;
+                  {entry.items.map((item) => {
+                    const current = page?.key === item.key;
                     return (
                       <li key={item.key}>
                         <Link

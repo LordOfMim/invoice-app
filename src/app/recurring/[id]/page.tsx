@@ -90,7 +90,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
           <Field label={t(language, "recurring.reminder")} hint={t(language, "recurring.daysBeforeNextRun")}>
             <Input type="number" min="0" value={String(recurring.reminderDays)} onChange={(e) => save({ ...recurring, reminderDays: parseInt(e.target.value) || 0 })} />
           </Field>
-          <div className="flex flex-col gap-1 sm:col-span-2">
+          <div className="flex flex-col gap-1 @md:col-span-2">
             <Choice label={t(language, "recurring.active")} checked={recurring.active} onChange={(e) => save({ ...recurring, active: e.target.checked })} />
             <Choice label={t(language, "recurring.autoGenerate")} checked={recurring.autoGenerate} onChange={(e) => save({ ...recurring, autoGenerate: e.target.checked })} />
           </div>
@@ -98,14 +98,14 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
 
         <FormSection title={recurring.texts.recipientHeading}>
           {customers.length > 0 && (
-            <Field label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"} className="sm:col-span-2">
+            <Field label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"} className="@md:col-span-2">
               <Select value={recurring.customerId || ""} onChange={(e) => handleSelectCustomer(e.target.value)}>
                 <option value="">{t(language, "actions.selectCustomer")} …</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
           )}
-          <Field label={t(language, "common.name")} className="sm:col-span-2">
+          <Field label={t(language, "common.name")} className="@md:col-span-2">
             <Input value={recurring.recipient.name} onChange={(e) => save({ ...recurring, recipient: { ...recurring.recipient, name: e.target.value } })} />
           </Field>
           <Field label={t(language, "customers.address")}>

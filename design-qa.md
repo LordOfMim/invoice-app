@@ -1,40 +1,40 @@
 # Designprüfung Helferlein
 
-Stand: 27.10.2026. Umfang: Desktop-Oberfläche und zentrale Rechnungsabläufe. Die aktuelle Humaify-Familie liefert die Primitives und Kompositionsmuster; die Inhalte und Aufgaben stammen aus Helferlein.
+Stand: 27.10.2026. Folgeauftrag: linke Navigation, Eingaben und Live-Vorschau nebeneinander, zurückhaltende macOS-Anmutung. Grundlage sind die akzeptierten Humaify-/Werknetz-Primitives und die in [design-reference.md](docs/design-reference.md) verlinkten Apple-Richtlinien.
 
-## Visuelle Grundlage und Vergleich
+## Aktueller Prüfstatus
 
-- Quellen: [Designverträge und Übernahmematrix](docs/design-reference.md), Paper `2MTE-0`, unverändert gerenderte Overwatch-Styleguide-Komponenten mit fiktiven Daten.
-- Quellbilder: `/home/mika/Work/invoice-app/artifacts/design-capture/03-overwatch-shell.jpg` und `04-overwatch-list-pattern.jpg`.
-- Geprüfter Produktionsbuild: `http://127.0.0.1:3128`.
-- Ergebnisbilder: [Rechnungen](docs/screenshots/rechnungen.jpg), [Editor](docs/screenshots/editor.jpg), [Vorschau](docs/screenshots/vorschau.jpg).
-- Desktop-Messung: Browserfenster 1422 × 800 CSS-Pixel, DPR 0,9; Quell- und Ergebnisaufnahmen 1562 × 889 Pixel. Die vollständige Vorschau misst 1561 × 1876 Pixel. Native Rundung und Scrollleisten werden nicht als Gestaltungsunterschied bewertet.
-- Quelle und Umsetzung wurden gemeinsam im selben Bildvergleich geöffnet. Firmenverzeichnis und Rechnungsverzeichnis haben unterschiedliche fachliche Inhalte. Verglichen wurden Rahmen, Typografie, Ausrichtung, Tabellenrhythmus, Controls und Zustände. Die Details waren in den vollständigen Bildern lesbar; zusätzliche Ausschnitte waren nicht erforderlich.
+Implementierung und Funktionsprüfung sind abgeschlossen. **Neue Bildaufnahmen, visuelle Abnahme und die vom Nutzer verlangte unabhängige Claude-Abnahme stehen noch aus.** Die Bilder unter `docs/screenshots/` zeigen bislang den früheren horizontalen Entwurf; sie sind kein Nachweis für diese Iteration. Der aktuelle Stand darf nicht mit der früheren visuellen Freigabe gleichgesetzt werden.
 
-## Befunde und Nachprüfung
-
-Die erste Prüfung identifizierte verlorene Zahlungsentwürfe und Exportzustände beim Tabwechsel, eine beim ersten Buchstaben zuklappende Absendergruppe, eine unbeabsichtigte Änderung der Menge null bei erneutem Wählen desselben Zeilentyps, fehlende Fokusrückgabe aus Bestätigungsdialogen und zu kleine Schließen-Ziele. Diese Punkte sind korrigiert. Menüs bleiben innerhalb der verfügbaren Höhe scrollbar; mobile Anker berücksichtigen beide Kopfzeilen.
-
-Die visuelle Nachprüfung bestätigt horizontale Bereichsnavigation, objektbezogene Tabs, eine zusammenhängende Formularspalte und eine lesbare separate Papiervorschau. Suchfelder nutzen die verfügbare Breite. Der Bezahlt-Filter zeigt den sichtbaren Zahlungsstatus und ordnet leere Entwürfe nicht als bezahlt ein.
-
-Bewusste Lesbarkeitsabweichungen: größere Controls und Schriftstufen, dunkler Text auf dem Quellblau, Sekundärtext mit dem bestehenden `ink-body`-Token. Inter/Roboto Mono stammen aus den lizenzierten lokalen Quelldateien. Haarlinien, Radien und Farben folgen den Designquellen. Es gibt keine neu erfundenen Bildassets oder Humaify-Embleme; Hugeicons liefert die Bedienelement-Symbole.
+Der eingebettete Browser konnte DOM, Accessibility, Eingaben und tatsächliche Layoutmaße liefern, aber keine Screenshots. Geprüft wurden die dokumentierten Aufnahmewege, ein frischer Tab, eine neue Verbindung und wirksame Viewportwechsel; die Bildaufnahme meldete weiterhin „Unable to capture screenshot“. Es wurden keine alten Bilder als aktuelle Aufnahmen ausgegeben. Die Nachprüfung soll die neuen Ansichten aufnehmen und erst danach die Ergebnisbilder ersetzen.
 
 ## Geprüfte Abläufe
 
-1. Regulärer Import eines fiktiven Schema-1-Bestands in der vorherigen Oberfläche; danach sechs Rechnungen, drei Kunden und drei Produkte im neuen Build erhalten.
-2. Suche, Zahlungsfilter und Rücknavigation; Teilzahlung weiterhin 699,36 € gesamt, 250,00 € bezahlt und 449,36 € offen.
-3. Zahlungsentwurf `120,50` und Referenz bleiben beim Wechsel Vorschau → Zahlungen erhalten.
-4. Menge null bleibt nach erneutem Wählen von „Position“ null; anschließend Ausgangswert wiederhergestellt.
-5. Leerer Absender bleibt beim ersten Buchstaben geöffnet und fokussiert; Änderung über Reload erhalten und anschließend Ausgangswert wiederhergestellt.
-6. E-Rechnungsprüfung öffnet fehlende Angaben; Fehlerlink fokussiert das konkrete strukturierte Adressfeld. Eingaben werden nicht verworfen.
-7. Löschdialog nur geöffnet und abgebrochen; Escape gibt den Fokus an „Weitere Aktionen“ zurück. Keine Rechnung gelöscht.
-8. Kunden, Produkte, Einstellungen, Datensicherung und Auswertung über die sichtbare Navigation geöffnet. Browserkonsole ohne Warnungen oder Fehler.
-9. Lange Rechnung mit 20 Positionsfeldern und unverändertem Betrag 1.368,60 € geöffnet; der übernommene Anhang bleibt mit Download-Aktion sichtbar. Kein horizontales Überlaufen im gemessenen Desktopfenster.
+Produktionsbuild auf `http://127.0.0.1:3128`, ausschließlich fiktive lokale Daten. Die sechs vorhandenen Rechnungen blieben erhalten. Für den Erstellungsablauf kam eine siebte Demo-Rechnung hinzu. Kein echter Datenordner des installierten Mac wurde geöffnet oder verändert.
 
-Typprüfung, ESLint, 46 Tests ohne übersprungene Fälle und Produktionsbuild sind erfolgreich. Die Tests umfassen echte lokale PDF/A-/XML-Validierung sowie sieben zusätzliche Fälle für Schrift-/Bildbereitschaft, defekte Bilder und Zeitlimits vor dem Druck. Das native Linux-Paket besteht Export, Server und CSS mit gebündeltem Electron/Java.
+1. **Navigation:** Alle elf bisherigen Ziele sind als beschriftete Einträge der linken Leiste vorhanden. Der aktuelle Listeneintrag und zugehörige Detailseiten sind markiert. Die horizontale Haupt-/Unterbereichsnavigation entfällt.
+2. **Neue Rechnung:** Direkt nach „Neue Rechnung“ stehen Eingaben und Live-Vorschau gleichzeitig im DOM und sichtbar nebeneinander. Nummer, Empfänger, Beschreibung, Menge `2` und Einzelpreis `120,50` wurden über die Oberfläche erfasst. Vorschau und Eingaben zeigen übereinstimmend `241,00 €` netto, `45,79 €` Steuer und `286,79 €` gesamt. Der Einzelpreis behielt während der Eingabe den Fokus.
+3. **Einpassen und Zoom:** Bei 1422 CSS-Pixeln ist das Formular etwa 519px breit. Die eingepasste Papierbreite beträgt etwa 521px; der Vorschaucontainer hat 555px Innenbreite einschließlich Padding. Bei 100% Zoom scrollt ausschließlich die Vorschau horizontal; die Seite läuft nicht über. „Einpassen“ stellt die passende Breite wieder her. Es gibt stets genau ein `#invoice-preview`.
+4. **Bereichswechsel und Entwürfe:** Zahlungsentwurf `120,50` und Referenz bleiben über Gestaltung, E-Rechnung und Fenstergrößenwechsel erhalten. Die Vorschau bleibt im breiten Arbeitsplatz auch neben diesen Bereichen sichtbar. Es wurde keine Zahlung gespeichert.
+5. **E-Rechnung:** Fehlende Pflichtangaben verhindern den Export und öffnen die betroffenen Gruppen. Der Fehlerlink für die Straße des Rechnungsstellers fokussiert `f-einvoice-seller-street`, nachdem der vorgesehene doppelte Animation-Frame abgelaufen ist. Die Vorschau bleibt erhalten.
+6. **Fenstergrößen und Fokus:** Gemessene Breiten 1422, 1280, 1088 und 320 CSS-Pixel bei DPR etwa 0,9. Bei 1280 stehen beide Arbeitsspalten nebeneinander. Bei 1088 wechselt der Arbeitsplatz auf Eingaben/Vorschau. Beim Verkleinern bleibt eine fokussierte Vorschau sichtbar; beim Vergrößern wechselt der Fokus vom verschwindenden Vorschau-Umschalter in deren Scrollbereich. Bei 320 gibt es Menü und Ansichtsumschalter, ohne horizontales Seitenüberlaufen; das Papier passt sich bis ungefähr 30% an. Temporäre Viewportvorgaben wurden zurückgesetzt. Dies war kein physischer Touch-Test.
+7. **Kleines Navigationsmenü:** Das Radix-Sheet zeigt dieselben elf Ziele. Escape schließt es und gibt den Fokus an den Menüauslöser zurück; die ausblendende Animation wurde vor der Fokusprüfung abgewartet.
+8. **Bestehende lange Rechnung:** DEMO-2026-105 enthält weiterhin 18 Mengenpositionen plus zwei Überschriften, `1.150,08 €` netto, `218,52 €` Steuer und `1.368,60 €` gesamt. Hinweistext, beide Fußzeilen und `DEMO-Dokumentation.txt` mit Download-Aktion bleiben vorhanden. Der Vorschau-Scrollbereich erreicht das Ende der etwa 2532px hohen Darstellung; die Fußzeile liegt innerhalb seiner Begrenzung. Kein horizontales Seitenüberlaufen.
+9. **Browsermeldungen:** Keine Warnungen oder Fehler während der geprüften Abläufe.
 
-## Grenzen
+## Technische Prüfungen
 
-Die angebotene Browser-Größensteuerung änderte die gemessene Fensterbreite nicht. Ein 320px-/Touch-Test ist deshalb nicht als bestanden ausgewiesen; das responsive Layout und die Touch-Regeln wurden im Code geprüft. Reale Mac-Bedienung, Gatekeeper und Upgrade mit einer Kopie des tatsächlichen Datenordners bleiben Teil der Releaseprüfung. Die normale Bildschirmvorschau wurde visuell geprüft; das unveränderte anpassbare Drucklayout wurde in dieser Runde nicht auf einem physischen Mac gedruckt. Vollständige Barrierefreiheit wird nicht behauptet.
+Erfolgreich: `npm ci` (Audit ohne bekannte Schwachstellen), `npm run einvoice:prepare`, `EINVOICE_REQUIRE_INTEGRATION=1 npm run check` (Typprüfung, ESLint, 46 bestandene Tests, keine übersprungenen Tests) und `npm run build:app`. Die Tests enthalten echte lokale XML-/PDF/A-Validierung und die bestehenden sieben Fälle zur Druckbereitschaft. Keine Tests oder Abhängigkeiten wurden für diese Iteration geändert.
 
-final result: passed
+Das neu gebaute native Linux-Paket besteht `scripts/smoke-packaged.mjs`: ZUGFeRD-PDF, XRechnung-XML und Standalone-Server/CSS mit den tatsächlich gebündelten Electron-/Java-Laufzeiten. Das belegt keine normale Druckvorschau oder macOS-Installation.
+
+Quellprüfung durch Root und zwei unabhängige Sol-Reviews: einzelne Vorschau, dauerhaft montierte Eingabepanels, lokale Containerqueries, unveränderte Speicher-/Betragslogik und vollständige Druck-Overrides für die neuen Grid-/Sticky-/Scroll-Vorfahren. Die Fokuserhaltung für beide Spalten wurde ergänzt und anschließend über die Oberfläche geprüft.
+
+## Offene Abnahme und Grenzen
+
+- Neue Screenshots und tatsächlicher Bildvergleich der Sidebar, des Rechnungsarbeitsplatzes und weiterer Seiten.
+- Unabhängige Abnahme durch Claude Opus 5.5 im vorhandenen Abo nach dessen Nutzungslimit-Reset am 28.10.2026 um 00:20 Uhr (Europe/Berlin). Erst danach Abschlussbericht und Telegram-Bilder.
+- Normalen mehrseitigen Druck/PDF mit dem neuen Screenlayout praktisch prüfen; die CSS-Prüfung und der separate archivfeste E-Rechnungs-Export ersetzen diesen Nachweis nicht.
+- Die Mac-Systemschrift wird unter Linux nur als korrekte Font-Fallback-Reihenfolge geprüft. Reales macOS-Look-and-Feel, Gatekeeper, Signierung/Notarisierung und Upgrade mit einer Kopie des tatsächlichen Datenordners bleiben Releaseprüfungen. Keine vollständige Barrierefreiheit oder sichere Produktionsmigration wird behauptet.
+
+final result: functional checks passed; visual and Claude acceptance pending

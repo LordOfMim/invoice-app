@@ -39,7 +39,7 @@ export default function SettingsPage() {
 
       <FormPage>
         <FormSection title={t(language, "settings.defaultSender")} description={de ? "Erscheint als Absender auf neuen Rechnungen." : "Printed as sender on new invoices."}>
-          <Field label={t(language, "common.name")} className="sm:col-span-2">
+          <Field label={t(language, "common.name")} className="@md:col-span-2">
             <Input value={settings.defaultSender.name} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultSender: { ...prev.defaultSender, name: e.target.value } }))} />
           </Field>
           <Field label={t(language, "customers.address")}>
@@ -61,7 +61,7 @@ export default function SettingsPage() {
               onValueChange={(percent) => updateSettings(adapter, (prev) => ({ ...prev, defaultTaxRate: percent === undefined ? undefined : percent / 100 }))}
             />
           </Field>
-          <Field label={t(language, "settings.pdfFilenamePattern")} hint={de ? "{invoiceNumber} wird durch die Rechnungsnummer ersetzt." : "{invoiceNumber} is replaced by the invoice number."} className="sm:col-span-2">
+          <Field label={t(language, "settings.pdfFilenamePattern")} hint={de ? "{invoiceNumber} wird durch die Rechnungsnummer ersetzt." : "{invoiceNumber} is replaced by the invoice number."} className="@md:col-span-2">
             <Input value={settings.pdfFilenamePattern} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, pdfFilenamePattern: e.target.value }))} />
           </Field>
         </FormSection>
@@ -100,7 +100,7 @@ export default function SettingsPage() {
               <option value="right">{t(language, "settings.right")}</option>
             </Select>
           </Field>
-          <div className="flex flex-col gap-1 sm:col-span-2">
+          <div className="flex flex-col gap-1 @md:col-span-2">
             <Choice label={t(language, "settings.showLogo")} checked={layout.showLogo} onChange={(e) => setLayout({ showLogo: e.target.checked })} />
             <Choice label={t(language, "settings.showFooter")} checked={layout.showFooter} onChange={(e) => setLayout({ showFooter: e.target.checked })} />
           </div>

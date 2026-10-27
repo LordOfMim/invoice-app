@@ -57,7 +57,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
           <Field label={`${t(language, "products.category")} ${de ? "(optional)" : "(optional)"}`}>
             <Input value={product.category || ""} onChange={(e) => save({ ...product, category: e.target.value })} placeholder={de ? "z. B. Montage, Material" : "e.g. Consulting, Development"} />
           </Field>
-          <Field label={t(language, "products.description")} hint={de ? "Steht so in der Rechnungsposition." : "Appears like this in the line item."} className="sm:col-span-2">
+          <Field label={t(language, "products.description")} hint={de ? "Steht so in der Rechnungsposition." : "Appears like this in the line item."} className="@md:col-span-2">
             <Textarea rows={3} value={product.description} onChange={(e) => save({ ...product, description: e.target.value })} />
           </Field>
         </FormSection>

@@ -65,7 +65,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
           <Field label={creditNote.texts.amountLabel} hint={de ? "Mit Komma, z. B. 120,50" : "e.g. 120.50"}>
             <DecimalInput value={creditNote.amount} onValueChange={(amount) => save({ ...creditNote, amount: Math.max(0, amount ?? 0) })} />
           </Field>
-          <Field label={creditNote.texts.reasonLabel} className="sm:col-span-2 xl:col-span-3">
+          <Field label={creditNote.texts.reasonLabel} className="@md:col-span-2 @2xl:col-span-3">
             <Textarea rows={3} value={creditNote.reason} onChange={(e) => save({ ...creditNote, reason: e.target.value })} placeholder={de ? "Grund für diese Gutschrift oder diesen Storno" : "Reason for this credit note or cancellation"} />
           </Field>
         </FormSection>

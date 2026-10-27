@@ -138,7 +138,7 @@ export function ExtrasTab({
             <option value="right">{t(language, "settings.right")}</option>
           </Select>
         </Field>
-        <div className="flex flex-col gap-1 sm:col-span-2">
+        <div className="flex flex-col gap-1 @md:col-span-2">
           <Choice label={de ? "Logo anzeigen" : "Show logo"} checked={invoice.layout.showLogo} onChange={(e) => setLayout({ showLogo: e.target.checked })} />
           <Choice label={de ? "Fußzeile anzeigen" : "Show footer"} checked={invoice.layout.showFooter} onChange={(e) => setLayout({ showFooter: e.target.checked })} />
         </div>
@@ -160,7 +160,7 @@ export function ExtrasTab({
             </Field>
           </>
         )}
-        <Field label={de ? "Eigenes Logo nur für diese Rechnung (optional)" : "Logo for this invoice only (optional)"} hint={de ? "Ohne eigenes Logo wird das Logo aus den Einstellungen verwendet." : "Without one, the logo from the settings is used."} className="sm:col-span-2">
+        <Field label={de ? "Eigenes Logo nur für diese Rechnung (optional)" : "Logo for this invoice only (optional)"} hint={de ? "Ohne eigenes Logo wird das Logo aus den Einstellungen verwendet." : "Without one, the logo from the settings is used."} className="@md:col-span-2">
           <Input
             type="file"
             accept="image/*"
@@ -176,7 +176,7 @@ export function ExtrasTab({
           />
         </Field>
         {invoice.logoDataUrl && (
-          <div className="sm:col-span-2">
+          <div className="@md:col-span-2">
             <Button size="sm" onClick={() => save({ ...invoice, logoDataUrl: undefined })}>{de ? "Eigenes Logo entfernen" : "Remove invoice logo"}</Button>
           </div>
         )}
@@ -210,7 +210,7 @@ export function ExtrasTab({
             <Field label={t(language, "invoices.exchangeRate")}>
               <DecimalInput value={invoice.exchangeRate ?? 1} onValueChange={(exchangeRate) => save({ ...invoice, exchangeRate: exchangeRate ?? 1 })} />
             </Field>
-            <Field label={t(language, "invoices.exchangeRateNote")} className="sm:col-span-2">
+            <Field label={t(language, "invoices.exchangeRateNote")} className="@md:col-span-2">
               <Input value={invoice.exchangeRateNote ?? ""} placeholder={`z. B. 1 ${invoice.currency} = ${invoice.exchangeRate ?? 1} EUR`} onChange={(e) => save({ ...invoice, exchangeRateNote: e.target.value })} />
             </Field>
           </>

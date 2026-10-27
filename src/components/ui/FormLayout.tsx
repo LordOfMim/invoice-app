@@ -8,10 +8,14 @@ import { cn } from "@/components/platform/lib/cn";
  * submit row unless a form really submits something.
  */
 
-/** Form group: section head over a field grid. Groups stack 40px apart inside `FormPage`. */
+/**
+ * Form group: section head over a field grid. Groups stack 40px apart inside `FormPage`. The grid follows the width
+ * of the section itself (container query), so a form in the narrow half of the invoice split never squeezes three
+ * date fields into one row. Children spanning the grid use `@md:col-span-2` / `@2xl:col-span-3`.
+ */
 export function FormSection({ title, description, columns = 2, id, actions, className, children }: { title: ReactNode; description?: ReactNode; columns?: 1 | 2 | 3; id?: string; actions?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <section className={cn("flex min-w-0 scroll-mt-24 flex-col gap-4", className)} aria-labelledby={id ? `${id}-title` : undefined} id={id}>
+    <section className={cn("@container flex min-w-0 scroll-mt-24 flex-col gap-4", className)} aria-labelledby={id ? `${id}-title` : undefined} id={id}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h2 id={id ? `${id}-title` : undefined} tabIndex={id ? -1 : undefined} className="font-sans text-xl/5.5 font-semibold tracking-snug text-ink outline-none">{title}</h2>
@@ -19,7 +23,7 @@ export function FormSection({ title, description, columns = 2, id, actions, clas
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      <div className={cn("grid min-w-0 content-start gap-4", { "sm:grid-cols-2": columns === 2, "sm:grid-cols-2 xl:grid-cols-3": columns === 3 })}>{children}</div>
+      <div className={cn("grid min-w-0 content-start gap-4", { "@md:grid-cols-2": columns === 2, "@md:grid-cols-2 @2xl:grid-cols-3": columns === 3 })}>{children}</div>
     </section>
   );
 }

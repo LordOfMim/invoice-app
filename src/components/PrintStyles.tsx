@@ -5,7 +5,25 @@ export function PrintStyles() {
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   body { background: white !important; }
-  .invoice-preview-frame {
+  /* Every screen layout shares this one document. Release all shell, grid,
+     sticky and scroll ancestors, including a hidden narrow preview pane. */
+  .app-frame, .app-main-column, .app-main, .app-page-wrapper,
+  .invoice-editor, .invoice-workspace, .invoice-preview-pane, .invoice-preview-frame {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    contain: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+  .invoice-preview-pane, .invoice-preview-frame {
     overflow: visible !important;
     max-height: none !important;
     border: 0 !important;

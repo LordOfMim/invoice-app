@@ -48,7 +48,7 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
   return (
     <CardZone className={`@container ${itemType === "header" ? "bg-surface-subtle" : ""}`}>
       <div className="flex items-start gap-3">
-        <span className="w-7 shrink-0 pt-9 font-mono text-sm font-medium tracking-loose text-ink-muted tabular-nums" aria-hidden>{String(index + 1).padStart(2, "0")}</span>
+        <span className="hidden w-7 shrink-0 pt-9 @lg:block font-mono text-sm font-medium tracking-loose text-ink-muted tabular-nums" aria-hidden>{String(index + 1).padStart(2, "0")}</span>
         <div className="grid min-w-0 flex-1 gap-3">
           {!isItem && <div><KindBadge>{typeLabel[itemType]}</KindBadge></div>}
           <div className="grid gap-3 @lg:grid-cols-[7rem_minmax(0,1fr)]">
@@ -69,7 +69,7 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
             </Field>
           </div>
           {isItem && (
-            <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-3 @xs:grid-cols-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)]">
               <Field label={texts.itemsQuantityLabel || "Menge"} id={id("quantity")} error={errors[`lineItems.${index}.quantity`]}>
                 <DecimalInput value={item.quantity} onValueChange={(quantity) => onUpdate(item.id, (prev) => ({ ...prev, quantity: quantity ?? 0 }))} />
               </Field>
@@ -82,7 +82,7 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
               <Field label={`${texts.itemsTaxRateLabel || "MwSt."} %`} id={id("taxRate")} error={errors[`lineItems.${index}.taxRate`]}>
                 <DecimalInput allowEmpty value={percentOf(item.taxRate)} onValueChange={(percent) => onUpdate(item.id, (prev) => ({ ...prev, taxRate: percent === undefined ? undefined : percent / 100 }))} />
               </Field>
-              <div className="col-span-2 flex min-w-0 flex-col gap-1.5 @2xl:col-span-1">
+              <div className="flex min-w-0 flex-col gap-1.5 @xs:col-span-2 @2xl:col-span-1">
                 <span className="font-sans text-base font-medium tracking-snug text-ink-secondary">Netto</span>
                 <span className="flex h-10 items-center justify-end rounded-md bg-surface-subtle px-3 font-sans text-lg font-semibold tracking-snug text-ink tabular-nums">
                   {formatMoney(net, currency, locale)}

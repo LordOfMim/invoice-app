@@ -158,7 +158,7 @@ export function PaymentsTab({
           <Field label={`${t(language, "invoices.paymentReference")} ${de ? "(optional)" : "(optional)"}`}>
             <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={de ? "z. B. Überweisungs-ID" : "e.g. transfer ID"} />
           </Field>
-          <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+          <div className="flex flex-wrap items-center gap-3 @md:col-span-2">
             <Button onClick={record}>{t(language, "invoices.recordPayment")}</Button>
             {recorded && <span role="status" className="font-sans text-base tracking-snug text-success-ink">{recorded}</span>}
           </div>
