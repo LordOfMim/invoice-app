@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-28T10:46:46.161Z",
+  "capturedAt": "2026-10-28T10:54:23.517Z",
   "runtime": "Isolated synthetic-only Chromium, current production build on Linux. Browser fallback; no native bridge mocked.",
   "checks": [
     {
@@ -19,8 +19,8 @@
     "e-rechnung-aktuell.jpg",
     "datensicherung-aktuell.jpg"
   ],
-  "baseCommit": "860353884d81e8d86ea74cce5e38db4674ac37f1",
-  "sourceSha256": "ac7a7834ac243c2b9637106cf84471783dd90a13ed0d3ddc5d8d24337ddbc31a",
+  "baseCommit": "498b7452352f942990104d02af72ab9909d63844",
+  "sourceSha256": "7a480eb07cb72591cdd688adde3c85c0a9a5dc1385ee07c13427d39fb5be80b5",
   "screenshotSha256": {
     "e-rechnung.jpg": "4eca308d0f40131f873b824167d6fd15804e711ae38403a5c8e7d967039c4d3c",
     "datensicherung.jpg": "ab1cb482ac6d94555a744e38e53ecaf6c34a4feaefdcfe81b25638cec9bea73a"

@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
 import { PrintStyles } from "@/components/PrintStyles";
 import { usePersistedData } from "@/lib/storage/useStore";
+import type { StorageAdapter } from "@/lib/storage/types";
 import { STORAGE_KEY } from "@/lib/storage/keys";
 
 type FachunternehmerData = {
@@ -38,11 +39,17 @@ function getTodayDate(): string {
 }
 
 export default function FachunternehmerPage() {
-  const { adapter } = usePersistedData();
+  const { adapter, data } = usePersistedData();
+  if (!adapter || !data) return <Page><PageHeader title="Fachunternehmererklärung" /><p role="status">Standardwerte werden geladen …</p></Page>;
+  return <FachunternehmerEditor adapter={adapter} />;
+}
+
+function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
   const [data, setData] = useState<FachunternehmerData>(() => {
-    // Load initial data from storage if available
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("fachunternehmer-defaults");
+    // Mount only after adoption completes. The adapter chooses native authority
+    // on desktop and localStorage in a browser, including intentional emptiness.
+    {
+      const stored = adapter.getItem("fachunternehmer-defaults");
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
@@ -61,8 +68,12 @@ export default function FachunternehmerPage() {
 
   const saveDefaults = () => {
     if (!adapter) return;
-    adapter.setItem("fachunternehmer-defaults", JSON.stringify(data));
-    setNotice({ tone: "ok", text: "Standardwerte gespeichert." });
+    try {
+      adapter.setItem("fachunternehmer-defaults", JSON.stringify(data));
+      setNotice({ tone: "ok", text: "Standardwerte gespeichert." });
+    } catch {
+      setNotice({ tone: "info", text: "Standardwerte konnten nicht gespeichert werden. Bitte die App geöffnet lassen und freien Speicher sowie Zugriffsrechte prüfen." });
+    }
   };
 
   const loadDefaults = () => {
