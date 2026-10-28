@@ -1,12 +1,16 @@
 # Designprüfung Helferlein
 
-Stand: 27.10.2026. Folgeauftrag: linke Navigation, Eingaben und Live-Vorschau nebeneinander, zurückhaltende macOS-Anmutung. Grundlage sind die akzeptierten Humaify-/Werknetz-Primitives und die in [design-reference.md](docs/design-reference.md) verlinkten Apple-Richtlinien.
+Stand: 28.10.2026. Folgeauftrag: linke Navigation, Eingaben und Live-Vorschau nebeneinander, zurückhaltende macOS-Anmutung. Grundlage sind die akzeptierten Humaify-/Werknetz-Primitives und die in [design-reference.md](docs/design-reference.md) verlinkten Apple-Richtlinien.
 
 ## Aktueller Prüfstatus
 
-Implementierung und Funktionsprüfung sind abgeschlossen. **Neue Bildaufnahmen, visuelle Abnahme und die vom Nutzer verlangte unabhängige Claude-Abnahme stehen noch aus.** Die Bilder unter `docs/screenshots/` zeigen bislang den früheren horizontalen Entwurf; sie sind kein Nachweis für diese Iteration. Der aktuelle Stand darf nicht mit der früheren visuellen Freigabe gleichgesetzt werden.
+Implementierung, Funktionsprüfung und die unabhängige visuelle Claude-Abnahme sind abgeschlossen. **Claude Opus 5.5 im vorhandenen Team-Abo: ACCEPTED (visual/static, qualified).** Der Reviewer prüfte die korrigierten aktuellen Bilder und den Quellcode nach; es bestehen keine weiteren erforderlichen Befunde für diese Oberflächeniteration. Dies ist keine Freigabe einer produktiven Mac-Installation.
 
-Der eingebettete Browser konnte DOM, Accessibility, Eingaben und tatsächliche Layoutmaße liefern, aber keine Screenshots. Geprüft wurden die dokumentierten Aufnahmewege, ein frischer Tab, eine neue Verbindung und wirksame Viewportwechsel; die Bildaufnahme meldete weiterhin „Unable to capture screenshot“. Es wurden keine alten Bilder als aktuelle Aufnahmen ausgegeben. Die Nachprüfung soll die neuen Ansichten aufnehmen und erst danach die Ergebnisbilder ersetzen.
+Die Bilder unter `docs/screenshots/` sind neue Aufnahmen des aktuellen Produktionsbuilds vom 28.10.2026. Nach dem Ausfall der eingebetteten Screenshot-Funktion genehmigte der Nutzer ausdrücklich einen separaten lokalen Playwright-Browser. Verwendet wurden System-Chromium unter Linux, ein neuer nichtpersistenter BrowserContext und ausschließlich künstliche Testdaten; weder bestehende Browserprofile noch echte Mac-Daten wurden geöffnet. Es gab keine CSS-/DOM-Overrides oder nachgestellte Oberflächen. Mac-Systemschrift, native Fensterleiste und das vom Betriebssystem formatierte Datum sind damit nicht bildlich nachgewiesen.
+
+Die unabhängige Abnahme erfolgte über Claude Code mit `claude-opus-5-5`, `apiKeySource: none`, im bestehenden Abo. Zunächst wurden die Überlappung bei 960px, Schriftgrößen, Navigationslandmarks, Zoom-Ansagen und erste Layoutmessung korrigiert. Die anschließende Bildprüfung fand einen ungünstigen Wortumbruch im Sidebar-Eintrag. Claude korrigierte diesen durch einen gezielten weichen Trennstrich, erhielt den aktuellen Pfad bei 320px und entfernte den doppelten Vorschauhinweis im breiten Arbeitsplatz. Neue Aufnahmen wurden danach erneut unabhängig lesend geprüft und akzeptiert. Das Prüfprotokoll meldet keine Änderung durch den Reviewer.
+
+Aktuelle Bildnachweise: [Rechnungen](docs/screenshots/rechnungen.jpg), [Editor](docs/screenshots/editor.jpg), [Positionen mit rechter Vorschau](docs/screenshots/vorschau.jpg), [schmales Fenster](docs/screenshots/schmal.jpg), [Navigationsmenü](docs/screenshots/menue.jpg), [Kunden](docs/screenshots/kunden.jpg). Das [Aufnahmemanifest](docs/screenshots/manifest.json) enthält Quellbezug, Fenstergrößen und Bildprüfsummen.
 
 ## Geprüfte Abläufe
 
@@ -20,7 +24,7 @@ Produktionsbuild auf `http://127.0.0.1:3128`, ausschließlich fiktive lokale Dat
 6. **Fenstergrößen und Fokus:** Gemessene Breiten 1422, 1280, 1088 und 320 CSS-Pixel bei DPR etwa 0,9. Bei 1280 stehen beide Arbeitsspalten nebeneinander. Bei 1088 wechselt der Arbeitsplatz auf Eingaben/Vorschau. Beim Verkleinern bleibt eine fokussierte Vorschau sichtbar; beim Vergrößern wechselt der Fokus vom verschwindenden Vorschau-Umschalter in deren Scrollbereich. Bei 320 gibt es Menü und Ansichtsumschalter, ohne horizontales Seitenüberlaufen; das Papier passt sich bis ungefähr 30% an. Temporäre Viewportvorgaben wurden zurückgesetzt. Dies war kein physischer Touch-Test.
 7. **Kleines Navigationsmenü:** Das Radix-Sheet zeigt dieselben elf Ziele. Escape schließt es und gibt den Fokus an den Menüauslöser zurück; die ausblendende Animation wurde vor der Fokusprüfung abgewartet.
 8. **Bestehende lange Rechnung:** DEMO-2026-105 enthält weiterhin 18 Mengenpositionen plus zwei Überschriften, `1.150,08 €` netto, `218,52 €` Steuer und `1.368,60 €` gesamt. Hinweistext, beide Fußzeilen und `DEMO-Dokumentation.txt` mit Download-Aktion bleiben vorhanden. Der Vorschau-Scrollbereich erreicht das Ende der etwa 2532px hohen Darstellung; die Fußzeile liegt innerhalb seiner Begrenzung. Kein horizontales Seitenüberlaufen.
-9. **Browsermeldungen:** Keine Warnungen oder Fehler während der geprüften Abläufe.
+9. **Browsermeldungen:** Die frühere eingebettete Funktionsprüfung meldete keine Warnungen oder Fehler. Die neue Aufnahme-Serie enthält keine JavaScript-Ausnahme; Chromium meldete zusätzlich einen einzelnen HTTP-404-Ressourcenabruf. Das ist kein Beleg für einen fehlerhaften Rechnungsablauf, seine Ursache wurde nicht als Anwendungsfehler bestätigt.
 
 ## Technische Prüfungen
 
@@ -30,11 +34,16 @@ Das neu gebaute native Linux-Paket besteht `scripts/smoke-packaged.mjs`: ZUGFeRD
 
 Quellprüfung durch Root und zwei unabhängige Sol-Reviews: einzelne Vorschau, dauerhaft montierte Eingabepanels, lokale Containerqueries, unveränderte Speicher-/Betragslogik und vollständige Druck-Overrides für die neuen Grid-/Sticky-/Scroll-Vorfahren. Die Fokuserhaltung für beide Spalten wurde ergänzt und anschließend über die Oberfläche geprüft.
 
-## Offene Abnahme und Grenzen
+## Normaler Mehrseiten-PDF-Druck
 
-- Neue Screenshots und tatsächlicher Bildvergleich der Sidebar, des Rechnungsarbeitsplatzes und weiterer Seiten.
-- Unabhängige Abnahme durch Claude Opus 5.5 im vorhandenen Abo nach dessen Nutzungslimit-Reset am 28.10.2026 um 00:20 Uhr (Europe/Berlin). Erst danach Abschlussbericht und Telegram-Bilder.
-- Normalen mehrseitigen Druck/PDF mit dem neuen Screenlayout praktisch prüfen; die CSS-Prüfung und der separate archivfeste E-Rechnungs-Export ersetzen diesen Nachweis nicht.
-- Die Mac-Systemschrift wird unter Linux nur als korrekte Font-Fallback-Reihenfolge geprüft. Reales macOS-Look-and-Feel, Gatekeeper, Signierung/Notarisierung und Upgrade mit einer Kopie des tatsächlichen Datenordners bleiben Releaseprüfungen. Keine vollständige Barrierefreiheit oder sichere Produktionsmigration wird behauptet.
+Zusätzlich zum separaten archivfesten E-Rechnungs-Export wurden neun normale Chromium-PDFs mit den produktiven Druck-CSS-Regeln erzeugt: Classic, Modern und Minimal, jeweils eingepasst, bei 150 Prozent Bildschirmzoom und aus der 840px breiten Eingaben-Ansicht mit auf dem Bildschirm versteckter Vorschau. Die lange Schema-1-Testrechnung erhielt ausschließlich im getrennten Testbrowser ein synthetisches DEMO-Logo. Der Druck verwendet dieselben Optionen `printBackground` und `preferCSSPageSize` wie Electron; er lief über Playwright `page.pdf`, nicht über das native Electron-Druckfenster.
 
-final result: functional checks passed; visual and Claude acceptance pending
+Alle neun PDFs umfassen sechs A4-Seiten. Sämtliche 18 Mengenpositionen plus zwei Gliederungszeilen, vollständige Hinweise, `1.368,60 €` Gesamtbetrag und beide Fußzeilen sind enthalten; keine Editor-/Navigationsreste. Innerhalb jeder Vorlage sind alle sechs gerenderten Seiten zwischen Einpassen, 150 Prozent und versteckter Vorschau jeweils pixelidentisch. Alle 18 Vorlagenseiten wurden visuell geprüft: Logo, Tabellenfortsetzungen, Summen und Ende ohne abgeschnittene Inhalte oder Überlappungen. Claude sichtete zusätzlich sieben repräsentative Seiten und die vollständige Hash-/Inhaltsprüfung. Vorhandene lange Kontaktzeilen und die große Zeilenhöhe der Rechnungsvorlagen wurden nicht umgestaltet.
+
+## Verbleibende Releaseprüfungen
+
+- Reale macOS-Systemschrift, Fensterleiste, Datumsformat, Trackpad/Scrollverhalten und native Menü-Vergrößerung auf einem echten Mac prüfen.
+- Das native Electron-Druckfenster beziehungsweise der Druckdialog des Ziel-Mac ist durch die Chromium-PDF-Prüfung nicht getestet.
+- Gatekeeper, Signierung/Notarisierung und Upgrade mit einer Kopie des tatsächlichen Datenordners bleiben vor produktiver Installation erforderlich. Keine vollständige Barrierefreiheit oder sichere Produktionsmigration auf dem Zielgerät wird behauptet. Die tatsächlichen Daten des installierten Macs wurden nicht verändert.
+
+final result: functional and Chromium print checks passed; independent Claude visual/static acceptance passed (qualified); physical Mac and release acceptance pending

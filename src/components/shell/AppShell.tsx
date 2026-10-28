@@ -45,7 +45,7 @@ function SidebarLink({ item, current, exact }: { item: NavItem; current: boolean
       )}
     >
       <HugeiconsIcon icon={item.icon} size={16} className={cn("shrink-0", current ? "text-ink" : "text-ink-body")} />
-      <span className="min-w-0 hyphens-auto wrap-anywhere">{item.label}</span>
+      <span className="min-w-0 hyphens-auto break-words">{item.label}</span>
     </Link>
   );
 }
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {crumbs.map((crumb, index) => {
                     const current = index === crumbs.length - 1;
                     return (
-                      <li key={`${crumb.label}-${index}`} className={cn("flex min-w-0 items-center gap-2.5", !current && "shrink-[2]")}>
+                      <li key={`${crumb.label}-${index}`} className={cn("flex min-w-0 items-center gap-2.5", !current && "shrink-[2] max-sm:hidden")}>
                         <BreadcrumbChevron className={index === 0 ? "lg:hidden" : undefined} />
                         {crumb.href && !current
                           ? <BreadcrumbLink asChild className="max-w-60 text-lg/5"><Link href={crumb.href} title={crumb.label}>{crumb.label}</Link></BreadcrumbLink>

@@ -50,7 +50,7 @@ export function navGroups(language: Language): readonly NavGroup[] {
         { key: "credit-notes", href: "/credit-notes", icon: ReceiptDollarIcon, label: text(language, "Gutschriften und Stornos", "Credit notes"), hint: text(language, "Korrekturen zu gestellten Rechnungen", "Corrections to issued invoices") },
         { key: "recurring", href: "/recurring", icon: RepeatIcon, label: text(language, "Wiederkehrende Rechnungen", "Recurring invoices"), hint: text(language, "Rechnungen, die regelmäßig neu entstehen", "Invoices that are created on a schedule") },
         { key: "templates", href: "/templates", icon: LayoutTemplateIcon, label: text(language, "Vorlagen", "Templates"), hint: text(language, "Varianten für das Rechnungslayout", "Variants of the invoice layout") },
-        { key: "fachunternehmer", href: "/fachunternehmer", icon: Certificate01Icon, label: text(language, "Fachunternehmererklärung", "Contractor declaration"), hint: text(language, "Erklärung für Bauvorhaben drucken", "Print a contractor declaration") },
+        { key: "fachunternehmer", href: "/fachunternehmer", icon: Certificate01Icon, label: text(language, "Fachunternehmer\u00ADerklärung", "Contractor declaration"), hint: text(language, "Erklärung für Bauvorhaben drucken", "Print a contractor declaration") },
       ],
     },
     {

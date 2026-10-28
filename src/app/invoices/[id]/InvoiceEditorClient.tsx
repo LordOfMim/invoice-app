@@ -457,7 +457,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
             ))}
           </div>
         )}
-        <span className="font-sans text-base tracking-snug text-ink-body">{de ? "Änderungen erscheinen direkt in der Vorschau." : "Changes appear directly in the preview."}</span>
+        {/* The split workspace already shows the preview, so the hint only accompanies the toggle. */}
+        {!split && <span className="font-sans text-base tracking-snug text-ink-body">{de ? "Änderungen erscheinen direkt in der Vorschau." : "Changes appear directly in the preview."}</span>}
       </div>
 
       <div ref={workspace} className={cn("invoice-workspace grid min-w-0 items-start gap-6", split && "grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]")}>
