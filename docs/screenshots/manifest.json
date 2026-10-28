@@ -1,22 +1,52 @@
 {
-  "capturedAt": "2026-10-28T08:44:29.090Z",
-  "commit": "02fa185857156b150d363dbe65398abb1329b096",
-  "workingTreeDiffSha256": "2fb81da767ccc67d7aef3d589b22b7546b34bb0ee7e240b7626622b34ef9e6c3",
+  "capturedAt": "2026-10-28T09:05:37.019Z",
+  "commit": "cb70e84c9a97161ace2c9c82472a43bcb16a6402",
+  "workingTreeDiffSha256": "db33f9ee9ff79868cad2db2d355dac17757314e3026d833a5aa031fc1c701213",
   "runtime": "System Chromium on Linux, Playwright, isolated ephemeral synthetic-only BrowserContext; real current production build, no CSS or DOM edits",
+  "untrackedFiles": [
+    {
+      "file": "public/branding/helferlein-logo.png",
+      "sha256": "639842077bbf5181af589ad650f9f72e31bb4ed70834b91a14a239c69a1ef1c8"
+    },
+    {
+      "file": "src/components/shell/HelferleinLogo.tsx",
+      "sha256": "406ff19db98588b7a4a14b6807abde7d326ac3d4fa45433cb225a62f84a52bb1"
+    }
+  ],
   "screenshots": [
     {
       "file": "rechnungen.jpg",
       "width": 1440,
       "height": 900,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 0,
-      "sha256": "8192afbe51301e62b60fb4bb011b439086fff3df97a8851b7968130daab3b132"
+      "sha256": "ee59bbb5c26c41cff0a9e6f3a669383703c14b95b29cab978f8c3e8ad7c7e367"
     },
     {
       "file": "editor.jpg",
       "width": 1440,
       "height": 900,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 1,
       "preview": {
         "x": 823.796875,
@@ -28,13 +58,23 @@
         "bottom": 1006,
         "left": 823.796875
       },
-      "sha256": "1c9690572af804b737557aa0b966a9219b53131d478d1ae9dace40c1e60a8f17"
+      "sha256": "2e25a21ba362aa891a176d798eb12ff4c114e8cb5204170e6fcdfdf623469c0e"
     },
     {
       "file": "vorschau.jpg",
       "width": 1440,
       "height": 900,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 1,
       "preview": {
         "x": 823.796875,
@@ -46,13 +86,23 @@
         "bottom": 875,
         "left": 823.796875
       },
-      "sha256": "7513f3dcbcb6ed58d40078aaab6ade17a4f4934249c7d428f2855eb1fc09630d"
+      "sha256": "fba68237cf95825e123f535616227ec0c6fb69a8575f49602024175c8dad1a9b"
     },
     {
       "file": "schmal.jpg",
       "width": 1088,
       "height": 800,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 1,
       "preview": {
         "x": 264,
@@ -64,13 +114,23 @@
         "bottom": 1008,
         "left": 264
       },
-      "sha256": "e0af368309d254d10cd21b6ab709d38be9009de8cfb1791b7ac99fcf778be020"
+      "sha256": "b22806faf12e124222b150570fa004c0b1b710a08c10699017fe71eebe50bdb3"
     },
     {
       "file": "menue.jpg",
       "width": 960,
       "height": 800,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 1,
       "preview": {
         "x": 469.796875,
@@ -89,15 +149,37 @@
       "width": 1440,
       "height": 900,
       "overflow": false,
+      "logos": [
+        {
+          "href": "/invoices",
+          "width": 120,
+          "height": 40,
+          "visibleArtwork": [
+            "96 288 1498 370"
+          ]
+        }
+      ],
       "previewCount": 0,
-      "sha256": "26d3a30f24b117a65aec5eed658db4e3f6d7f0eb0ee011abb4ef05b75c3cf2aa"
+      "sha256": "ab9938141875711ca6b0f93cea380253711f9d9aba9e229bf3449105db0a6dd5"
     }
   ],
+  "branding": {
+    "asset": "/branding/helferlein-logo.png",
+    "originalPngSha256": "639842077bbf5181af589ad650f9f72e31bb4ed70834b91a14a239c69a1ef1c8",
+    "wordmarkCssPixels": [
+      120,
+      30
+    ],
+    "compactCssPixels": [
+      28,
+      28
+    ]
+  },
   "acceptance": {
     "date": "2026-10-28",
     "model": "claude-opus-5-5",
     "authentication": "existing Team subscription, apiKeySource none",
-    "verdict": "ACCEPTED (visual/static, qualified)",
+    "verdict": "ACCEPTED (smaller logo, visual/static, qualified)",
     "physicalMacAndRelease": "not tested"
   }
 }

@@ -9,6 +9,7 @@ import { cn } from "@/components/platform/lib/cn";
 import { TopBar } from "@/components/platform/top-bar";
 import { StorageStatus } from "@/components/StorageStatus";
 import { usePersistedSettings } from "@/lib/storage/useStore";
+import { HelferleinLogoLink } from "./HelferleinLogo";
 import { locate, navGroups, type NavGroup, type NavItem } from "./nav";
 import { MobileNav } from "./MobileNav";
 
@@ -18,7 +19,8 @@ import { MobileNav } from "./MobileNav";
  * the page-list recipe of Platform `line-shell-frame.tsx` (15px Hugeicons glyph + word label, active row on
  * surface-muted, semibold ink) at the readability size, on the rail surface with a hairline. It is as tall as the
  * window and scrolls by itself, so every entry stays reachable on short windows. Below lg the sidebar gives way to
- * the labelled menu row with a sheet (MobileNav). No emblem, account menu or environment badge.
+ * the labelled menu row with a sheet (MobileNav). The user's own Helferlein logo heads the sidebar (TopBar below lg);
+ * no Platform emblem, account menu or environment badge.
  */
 
 const CrumbContext = createContext<(label: string | null) => void>(() => {});
@@ -54,9 +56,7 @@ function Sidebar({ groups, active, pathname, label }: { groups: readonly NavGrou
   return (
     <aside className="no-print sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface-rail lg:flex">
       <div className="flex h-13 shrink-0 items-center border-b border-line px-5">
-        <Link href="/invoices" className="rounded-sm font-sans text-lg font-semibold tracking-snug text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-          Helferlein
-        </Link>
+        <HelferleinLogoLink />
       </div>
       <nav aria-label={label} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
         {groups.map((group) => (
@@ -103,10 +103,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="app-main-column flex min-w-0 flex-1 flex-col">
           <TopBar className="no-print h-13 px-4 sm:px-6" contentClassName="max-w-[1600px] gap-3" actions={<StorageStatus language={language} />}>
             <nav aria-label={de ? "Pfad" : "Breadcrumb"} className="flex min-w-0 items-center gap-2.5">
-              {/* The product name lives in the sidebar from lg upwards. */}
-              <Link href="/invoices" className="shrink-0 rounded-sm font-sans text-lg font-semibold tracking-snug text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:hidden">
-                Helferlein
-              </Link>
+              {/* The logo lives in the sidebar from lg upwards. */}
+              <HelferleinLogoLink className="lg:hidden" />
               {crumbs.length > 0 && (
                 <ol className="flex min-w-0 items-center gap-2.5">
                   {crumbs.map((crumb, index) => {
