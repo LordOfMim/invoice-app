@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppSettings } from "@/lib/domain";
 import { getBrowserLocalStorageAdapter } from "@/lib/storage/localStorageAdapter";
-import { clearDataCache, loadData, parsePersistedData, subscribe } from "@/lib/storage/store";
+import { clearDataCache, getCurrentData, loadData, parsePersistedData, primeDataCache, subscribe } from "@/lib/storage/store";
+import { createDataPatches, type DataPatch } from "@/lib/storage/patches";
 import type { StorageAdapter } from "@/lib/storage/types";
 import { STORAGE_KEY } from "@/lib/storage/keys";
 
@@ -11,8 +12,13 @@ type ElectronAPI = {
   store: {
     get: (key: string) => Promise<unknown>;
     set: (key: string, value: unknown) => Promise<boolean>;
+    onStatus?: (callback: (status: "saving" | "saved" | "error") => void) => () => void;
+    getCached?: (key: string) => unknown;
+    setCached?: (key: string, value: string) => boolean;
     getSync?: (key: string) => unknown;
     setSync?: (key: string, value: unknown) => boolean;
+    applyPatches?: (patches: DataPatch[]) => boolean;
+    flush?: () => Promise<boolean>;
   };
   platform?: string;
   isElectron: boolean;
@@ -31,56 +37,19 @@ function getElectronAPI(): ElectronAPI | null {
 }
 
 const RECOVERY_KEY_PREFIX = `${STORAGE_KEY}:recovery`;
+const AUX_KEY = "fachunternehmer-defaults";
 
 function recoveryKey(reason: string) {
   return `${RECOVERY_KEY_PREFIX}:${new Date().toISOString()}:${reason}`;
 }
 
-function backupLocalData(value: string | null, reason: string) {
-  if (!value || typeof window === "undefined") return;
-  try {
-    localStorage.setItem(recoveryKey(reason), value);
-  } catch (err) {
-    console.error("Failed to create local recovery copy:", err);
-  }
-}
-
 async function backupElectronData(api: ElectronAPI, value: string | null, reason: string) {
   if (!value) return;
   try {
-    await api.store.set(recoveryKey(reason), value);
+    if (await api.store.set(recoveryKey(reason), value) !== true) throw new Error("Originalsicherung nicht bestätigt.");
   } catch (err) {
-    console.error("Failed to create electron-store recovery copy:", err);
+    throw new Error("Sicherung der Desktop-Daten fehlgeschlagen", { cause: err });
   }
-}
-
-function dataIsEmpty(raw: string | null): boolean {
-  const data = parsePersistedData(raw);
-  if (!data) return true;
-  return (
-    data.invoices.length === 0 &&
-    data.customers.length === 0 &&
-    data.products.length === 0 &&
-    data.tags.length === 0 &&
-    data.creditNotes.length === 0 &&
-    data.recurringInvoices.length === 0 &&
-    data.templateVariants.length === 0
-  );
-}
-
-function dataFreshness(raw: string | null): number {
-  const data = parsePersistedData(raw);
-  if (!data) return 0;
-  const dates = [
-    data.settings.lastBackupDate,
-    ...data.invoices.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.customers.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.products.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.creditNotes.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.recurringInvoices.flatMap((item) => [item.createdAt, item.updatedAt]),
-    ...data.templateVariants.flatMap((item) => [item.createdAt, item.updatedAt]),
-  ].filter(Boolean) as string[];
-  return dates.reduce((latest, value) => Math.max(latest, Date.parse(value) || 0), 0);
 }
 
 async function writeElectronStore(value: string): Promise<boolean> {
@@ -91,70 +60,94 @@ async function writeElectronStore(value: string): Promise<boolean> {
   return synced;
 }
 
+async function adoptAuxiliaryDefaults(api: ElectronAPI) {
+  const nativeAux = await api.store.get(AUX_KEY);
+  if (nativeAux !== undefined && nativeAux !== null && typeof nativeAux !== "string") throw new Error("Unbekannte Desktop-Standardwerte; Original bleibt erhalten.");
+  if (nativeAux === undefined || nativeAux === null) {
+    const oldAux = localStorage.getItem(AUX_KEY);
+    if (oldAux !== null && await api.store.set(AUX_KEY, oldAux) !== true) throw new Error("Alte Standardwerte konnten nicht übernommen werden.");
+  }
+}
+
 // Load from electron-store on startup (only once)
 let electronStoreLoaded = false;
+let electronLoadPromise: Promise<void> | null = null;
+let storageBlocked: Error | null = null;
 let electronWriteQueue: Promise<boolean> = Promise.resolve(true);
 async function loadFromElectronStore(): Promise<void> {
   if (!isElectron() || electronStoreLoaded) return;
-  electronStoreLoaded = true;
+  if (electronLoadPromise) return electronLoadPromise;
+  electronLoadPromise = reconcileElectronStore();
+  return electronLoadPromise;
+}
+
+async function reconcileElectronStore(): Promise<void> {
 
   try {
     const api = getElectronAPI();
     if (!api) return;
 
-    const electronData = await api.store.get(STORAGE_KEY);
+    const electronData = api.store.getCached ? api.store.getCached(STORAGE_KEY) : await api.store.get(STORAGE_KEY);
+    if (electronData != null && typeof electronData !== "string") throw new Error("Unbekanntes Desktop-Datenformat; Original bleibt erhalten.");
     const electronRaw = typeof electronData === "string" ? electronData : null;
-    const localRaw = localStorage.getItem(STORAGE_KEY);
     const electronParsed = parsePersistedData(electronRaw);
-    const localParsed = parsePersistedData(localRaw);
 
-    if (electronRaw && !electronParsed) {
-      await backupElectronData(api, electronRaw, "invalid-electron");
+    if (electronData != null && !electronParsed) {
+      throw new Error("Die Desktop-Daten sind ungültig. Die Originaldaten bleiben unverändert; bitte eine Sicherung wiederherstellen.");
     }
-    if (localRaw && !localParsed) {
-      backupLocalData(localRaw, "invalid-local");
-    }
-
-    if (electronParsed && !localParsed) {
-      backupLocalData(localRaw, "before-electron-restore");
-      localStorage.setItem(STORAGE_KEY, electronRaw!);
-      clearDataCache();
-      window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
-      return;
-    }
-
-    if (!electronParsed && localParsed && localRaw) {
-      await writeElectronStore(localRaw);
-      return;
-    }
-
-    if (electronParsed && localParsed && electronRaw && localRaw && electronRaw !== localRaw) {
-      const preferElectron =
-        (dataIsEmpty(localRaw) && !dataIsEmpty(electronRaw)) ||
-        (!dataIsEmpty(electronRaw) && dataFreshness(electronRaw) > dataFreshness(localRaw));
-
-      if (preferElectron) {
-        backupLocalData(localRaw, "before-electron-newer-restore");
-        localStorage.setItem(STORAGE_KEY, electronRaw);
-        clearDataCache();
-        window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
-      } else {
-        await backupElectronData(api, electronRaw, "before-local-newer-sync");
-        await writeElectronStore(localRaw);
+    // Presence, not collection counts, determines authority. An intentionally
+    // empty desktop snapshot must never resurrect stale browser invoices.
+    if (electronParsed) {
+      // Only a cold bootstrap serializes the canonical migration once. Future
+      // keystrokes send small patches; the background worker owns disk writes.
+      if (api.store.applyPatches) {
+        const canonical = JSON.stringify(electronParsed);
+        if (canonical !== electronRaw) {
+          await backupElectronData(api, electronRaw, "before-schema-adoption");
+          if (!await writeElectronStore(canonical)) throw new Error("Migration konnte nicht sicher gespeichert werden.");
+        }
       }
+      await adoptAuxiliaryDefaults(api);
+      electronStoreLoaded = true;
+      clearDataCache();
+      primeDataCache(electronParsed);
+      return;
     }
+
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    const localParsed = parsePersistedData(localRaw);
+    if (localRaw && !localParsed) throw new Error("Die lokalen Altdaten sind ungültig. Original bleibt erhalten.");
+
+    if (electronData == null && localParsed && localRaw) {
+      await backupElectronData(api, localRaw, "before-local-migration");
+      const adopted = api.store.applyPatches ? JSON.stringify(localParsed) : localRaw;
+      if (!await writeElectronStore(adopted)) throw new Error("Übernahme der lokalen Daten wurde nicht bestätigt.");
+      if (!api.store.applyPatches) api.store.setSync?.(STORAGE_KEY, localRaw);
+    }
+    await adoptAuxiliaryDefaults(api);
+    if (electronData == null && localParsed && localRaw) {
+      clearDataCache();
+      primeDataCache(localParsed);
+    }
+    electronStoreLoaded = true;
   } catch (err) {
-    console.error("Failed to load from electron-store:", err);
+    storageBlocked = err instanceof Error ? err : new Error(String(err));
+    window.alert(`Daten konnten nicht sicher geladen werden. Es werden keine Daten überschrieben.\n${storageBlocked.message}`);
   }
 }
 
 export async function flushElectronStoreSync(value?: string): Promise<boolean> {
   if (!isElectron()) return true;
 
-  const data = value ?? localStorage.getItem(STORAGE_KEY);
+  if (storageBlocked) return false;
+  const api = getElectronAPI();
+  if (api?.store.flush) {
+    try { return await api.store.flush(); }
+    catch { return false; }
+  }
+  const data = value ?? (api?.store.getCached ? api.store.getCached(STORAGE_KEY) as string | null : localStorage.getItem(STORAGE_KEY));
   if (!data) return false;
 
-  const api = getElectronAPI();
   if (api?.store.setSync) {
     try {
       return api.store.setSync(STORAGE_KEY, data);
@@ -185,7 +178,16 @@ function createHybridAdapter(): StorageAdapter | null {
   return {
     getItem: (key: string) => {
       if (key === STORAGE_KEY && hasSyncElectronStore) {
-        const value = api!.store.getSync!(key);
+        if (storageBlocked) throw storageBlocked;
+        // This uncommon read is used for a pre-import recovery copy. Include
+        // all accepted edits, not the stale bootstrap string in preload.
+        const current = api!.store.applyPatches ? getCurrentData() : null;
+        if (current) return JSON.stringify(current);
+        const value = (api!.store.getCached ?? api!.store.getSync!)(key);
+        return typeof value === "string" ? value : null;
+      }
+      if ((key === AUX_KEY || key.startsWith(`${RECOVERY_KEY_PREFIX}:`)) && hasSyncElectronStore) {
+        const value = (api!.store.getCached ?? api!.store.getSync!)(key);
         return typeof value === "string" ? value : null;
       }
       return baseAdapter.getItem(key);
@@ -193,7 +195,9 @@ function createHybridAdapter(): StorageAdapter | null {
     setItem: (key: string, value: string) => {
       if (key === STORAGE_KEY) {
         if (hasSyncElectronStore) {
-          api!.store.setSync!(key, value);
+          if (storageBlocked) throw storageBlocked;
+          if ((api!.store.setCached ?? api!.store.setSync!)(key, value) !== true) throw new Error("Speichern wurde nicht angenommen.");
+          return;
         }
         baseAdapter.setItem(key, value);
         if (!hasSyncElectronStore) {
@@ -201,8 +205,23 @@ function createHybridAdapter(): StorageAdapter | null {
         }
         return;
       }
+      if ((key === AUX_KEY || key.startsWith(`${RECOVERY_KEY_PREFIX}:`)) && hasSyncElectronStore) {
+        if (api!.store.setSync!(key, value) !== true) throw new Error("Speichern wurde nicht bestätigt.");
+        return;
+      }
       baseAdapter.setItem(key, value);
     },
+    ...(hasSyncElectronStore && api?.store.applyPatches ? {
+      persistData: (next, previous) => {
+        if (storageBlocked) throw storageBlocked;
+        if (!previous) {
+          if ((api.store.setCached ?? api.store.setSync!)(STORAGE_KEY, JSON.stringify(next)) !== true) throw new Error("Speichern wurde nicht angenommen.");
+          return;
+        }
+        const patches = createDataPatches(previous, next);
+        if (patches.length && api.store.applyPatches!(patches) !== true) throw new Error("Änderungen konnten nicht vorgemerkt werden.");
+      },
+    } satisfies Partial<StorageAdapter> : {}),
   };
 }
 
@@ -210,8 +229,12 @@ function subscribeStorage(adapter: StorageAdapter | null, listener: () => void) 
   if (!adapter || typeof window === "undefined") return () => {};
 
   const unsubscribe = subscribe(listener);
+  const unsubscribeStatus = getElectronAPI()?.store.onStatus?.((status) => {
+    window.dispatchEvent(new CustomEvent("invoice-storage-status", { detail: { status } }));
+  });
   const onStorage = (event: StorageEvent) => {
     if (event.key !== STORAGE_KEY) return;
+    if (isElectron()) return; // A browser-origin event must never replace native authority.
     clearDataCache();
     listener();
     void flushElectronStoreSync(event.newValue ?? undefined);
@@ -220,6 +243,7 @@ function subscribeStorage(adapter: StorageAdapter | null, listener: () => void) 
   window.addEventListener("storage", onStorage);
   return () => {
     unsubscribe();
+    unsubscribeStatus?.();
     window.removeEventListener("storage", onStorage);
   };
 }

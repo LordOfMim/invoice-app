@@ -1,0 +1,321 @@
+/*
+ * Humaify Platform design tokens — synchronised from humaify-platform
+ * `packages/ui/src/styles.css` (branch `development`). Keep this file a
+ * verbatim copy of the source's @theme/base/utility blocks; Overwatch-specific
+ * additions live in `globals.css`. Removed against the source: the Tailwind
+ * imports (owned by globals.css), `@source` (no workspace package here) and the
+ * Blaak @font-face (loaded through next/font in `layout.tsx`). `--color-*` is
+ * reset so Tailwind's default palette does not exist.
+ *
+ * Helferlein copy (via humaify-overwatch `src/app/platform-theme.css`, SHA256
+ * 245d96c2…, identical in Werknetz). One deviation, documented in
+ * docs/design-reference.md: the `--color-*: initial` reset is removed because
+ * the unchanged print templates still use Tailwind's zinc palette. New UI uses
+ * only the tokens below. Blaak (`--font-serif`) is not bundled and not used.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens — Single Source of Truth: Paper flow-detail screen (artboard 2MTE-0).
+ * Values are extracted 1:1 via Paper MCP computed styles. Do not add new colors,
+ * radii, or sizes without flagging the deviation (see .cursor/rules/ui-design-source-of-truth.mdc).
+ */
+
+@theme {
+  /* Fonts */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, "SF Mono", monospace;
+  /*
+   * Display serif — auth/brand-art surfaces ONLY (AuthArtPanel copy), never
+   * product UI. Blaak is licensed and bundled via @font-face above. Flagged
+   * deviation from the two-family rule, sanctioned Jul 2026 (DESIGN.md
+   * §Typography).
+   */
+  --font-serif: var(--font-blaak), Georgia, "Times New Roman", serif;
+
+  /* Ink (text) scale — darkest to faintest */
+  --color-ink: #1c1d1f;
+  --color-ink-secondary: #505967;
+  --color-ink-body: #5b6472;
+  --color-ink-muted: #6f7988;
+  --color-ink-soft: #8f99a8;
+  --color-ink-faint: #98a1ae;
+  --color-ink-disabled: #b5bdc9;
+
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-rail: #fcfcfc;
+  --color-surface-muted: #f3f4f6;
+  --color-surface-subtle: #f7f8fa;
+
+  /* Hairlines / borders */
+  --color-line: #e4e7ec;
+  --color-line-control: #e0e3e8;
+  --color-line-input: #dfe3e9;
+  --color-line-dash: #d3d8df;
+  --color-line-strong: #c6ccd5;
+  --color-line-dot: #c7cdd6;
+
+  /* Accents */
+  --color-accent-blue: #5cabff;
+  --color-link: #2563eb;
+  --color-brand: #0096ff;
+
+  /* Step / semantic hues (flow editor) */
+  --color-step-ask: #5cabff;
+  --color-step-action: #ecaa3d;
+  --color-step-if: #c25587;
+  --color-step-tell: #887ec9;
+  --color-step-say: #1fb06a;
+
+  /* Warn / issue marker */
+  --color-warn: #ecaa3d;
+  --color-warn-ink: #8a6412;
+  --color-warn-line: #e0c075;
+
+  /*
+   * Success — semantic family (workspace overview: delta badges, active
+   * pills, live markers). Base hue equals --color-step-say; the ink/tint
+   * pair exists so text on the tint stays readable.
+   */
+  --color-success: #1fb06a;
+  --color-success-ink: #0b7a4d;
+  --color-success-tint: #e8f6ee;
+
+  /* Destructive — provisional, no red exists on the flow page yet */
+  --color-danger: #dc2626;
+
+  /* shadcn-compat semantic aliases */
+  --color-background: #ffffff;
+  --color-foreground: #1c1d1f;
+  --color-card: #ffffff;
+  --color-card-foreground: #1c1d1f;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1c1d1f;
+  --color-primary: #1c1d1f;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f3f4f6;
+  --color-secondary-foreground: #1c1d1f;
+  --color-muted: #f7f8fa;
+  --color-muted-foreground: #6f7988;
+  --color-accent: #f3f4f6;
+  --color-accent-foreground: #1c1d1f;
+  --color-destructive: #dc2626;
+  --color-border: #e4e7ec;
+  --color-input: #dfe3e9;
+  --color-ring: #5cabff;
+
+  /*
+   * Radii — exactly five values. Rule of use:
+   * micro = elements < 20px (keycaps, tiny avatars), sm = controls ≤ 26px,
+   * md = 28px controls & plates, lg = input surfaces & rail items,
+   * pill = chips, nav pills, dots.
+   */
+  --radius-micro: 4.5px;
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-card-sm: 14px;
+  --radius-card: 22px;
+  --radius-pill: 999px;
+
+  /* Type scale (px, from Paper) */
+  --text-3xs: 9px;
+  --text-3xs--line-height: 12px;
+  --text-2xs: 10px;
+  --text-2xs--line-height: 12px;
+  --text-xs: 11px;
+  --text-xs--line-height: 14px;
+  --text-sm: 12px;
+  --text-sm--line-height: 16px;
+  --text-md: 12.5px;
+  --text-md--line-height: 16px;
+  --text-base: 13px;
+  --text-base--line-height: 16px;
+  --text-lg: 14.5px;
+  --text-lg--line-height: 22px;
+  --text-xl: 15px;
+  --text-xl--line-height: 22px;
+  --text-2xl: 16px;
+  --text-2xl--line-height: 22px;
+  --text-display: 28px;
+  --text-display--line-height: 34px;
+  /*
+   * Display-XL — serif hero on auth art panels (pairs with --font-serif)
+   * and, sanctioned Aug 2026, the sans HeroStat value on overview pages
+   * (workspace overview v3). No other product-UI uses.
+   */
+  --text-display-xl: 40px;
+  --text-display-xl--line-height: 46px;
+
+  /*
+   * Tracking — exactly three values:
+   * snug for all sans UI text, caps for mono uppercase labels/badges,
+   * loose for mono code references and avatar initials.
+   */
+  --tracking-caps: 0.08em;
+  --tracking-snug: -0.01em;
+  --tracking-loose: 0.02em;
+
+  /*
+   * Motion — the built-in CSS easings are too weak for deliberate UI motion.
+   * ease-out: entrances, press feedback, anything responding to the user.
+   * ease-in-out: elements already on screen moving A→B. Never use ease-in.
+   */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+    outline-color: --alpha(var(--color-ring) / 50%);
+  }
+
+  /* The TopBar is sticky: anchor jumps and focus scrolling stop below it
+     (52–60px bar + breathing room) instead of hiding targets underneath. */
+  html {
+    scroll-padding-top: 5rem;
+  }
+
+  /* Mobile chrome adds a 44px menu row below the 52px TopBar. */
+  @media (width < 64rem) {
+    html {
+      scroll-padding-top: 7rem;
+    }
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/*
+ * Scroll-edge fade — the DS answer to "how does a scroll view meet a
+ * header/footer": a colorless mask-image (never a shadow — the DS
+ * separates via surfaces and hairlines, not elevation) that dissolves
+ * content at an edge ONLY while more content hides beyond it. Driven by
+ * a scroll-timeline (animation-timeline: scroll(self)) — no JS, no
+ * listeners; at the very start only the bottom fades, at the very end
+ * only the top, in between both. A container without overflow has an
+ * inert timeline, so the registered 0px initials render no fade at all.
+ * Where scroll-driven animations are unsupported the mask stays at its
+ * 0px initials — content simply renders crisp (progressive enhancement).
+ * The fade is scrubbed by scroll position, not time, so it needs no
+ * reduced-motion gate.
+ */
+@property --scroll-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --scroll-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-y {
+  0% {
+    --scroll-fade-top: 0px;
+    --scroll-fade-bottom: 28px;
+  }
+  15%,
+  85% {
+    --scroll-fade-top: 28px;
+    --scroll-fade-bottom: 28px;
+  }
+  100% {
+    --scroll-fade-top: 28px;
+    --scroll-fade-bottom: 0px;
+  }
+}
+
+@utility scroll-fade-y {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--scroll-fade-top),
+    black calc(100% - var(--scroll-fade-bottom)),
+    transparent 100%
+  );
+
+  @supports (animation-timeline: scroll(self)) {
+    animation: scroll-fade-y linear both;
+    animation-timeline: scroll(self block);
+  }
+}
+
+/* Horizontal twin of scroll-fade-y for row scrollers (card rails). */
+@property --scroll-fade-left {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --scroll-fade-right {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-x {
+  0% {
+    --scroll-fade-left: 0px;
+    --scroll-fade-right: 28px;
+  }
+  15%,
+  85% {
+    --scroll-fade-left: 28px;
+    --scroll-fade-right: 28px;
+  }
+  100% {
+    --scroll-fade-left: 28px;
+    --scroll-fade-right: 0px;
+  }
+}
+
+@utility scroll-fade-x {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--scroll-fade-left),
+    black calc(100% - var(--scroll-fade-right)),
+    transparent 100%
+  );
+
+  @supports (animation-timeline: scroll(self)) {
+    animation: scroll-fade-x linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+
+:root {
+  /* shadcn chart series tokens — mapped to product greys. */
+  --chart-1: var(--color-line-strong);
+  --chart-2: var(--color-ink-secondary);
+  --chart-3: var(--color-ink-muted);
+  --chart-4: var(--color-ink-faint);
+  --chart-5: var(--color-line);
+}
+
+.dark {
+  --chart-1: var(--color-line-strong);
+  --chart-2: var(--color-ink-secondary);
+  --chart-3: var(--color-ink-muted);
+  --chart-4: var(--color-ink-faint);
+  --chart-5: var(--color-line);
+}
+
+@theme inline {
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}

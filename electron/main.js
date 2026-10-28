@@ -1,12 +1,16 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
-const { spawn, execSync, execFile } = require('child_process');
+const { spawn, execFile, fork } = require('child_process');
 const http = require('http');
 const fs = require('fs');
+const { createDurableStoreClass, createSnapshotVerifier, ensurePrivateDirectory, syncDirectory } = require(path.join(__dirname, 'durable-store.cjs'));
+const { StorageClient } = require(path.join(__dirname, 'storage-client.cjs'));
+const { deliverEInvoice } = require(path.join(__dirname, 'einvoice-delivery.cjs'));
 
 const APP_DATA_KEY = 'invoice-app:v1';
 const RECOVERY_KEY_PREFIX = `${APP_DATA_KEY}:recovery`;
 const STORE_NAME = 'invoice-app-data';
+const AUX_DATA_KEY = 'fachunternehmer-defaults';
 
 function escapeAppleScriptString(value) {
   return String(value ?? "")
@@ -25,10 +29,12 @@ function encodeRfc2047(value) {
 function buildEmlWithAttachment({ to, subject, body, attachmentFilename, attachmentMime, attachmentBase64 }) {
   const boundary = `----invoice-app-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const safeTo = String(to ?? "");
+  if (/[\r\n]/.test(safeTo)) throw new Error('Die E-Mail-Adresse enthält ungültige Zeilenumbrüche.');
   const safeSubject = String(subject ?? "");
   const safeBody = String(body ?? "");
-  const filename = String(attachmentFilename ?? "Invoice.pdf");
+  const filename = String(attachmentFilename ?? "Invoice.pdf").replace(/[\r\n"\\]/g, '_');
   const mime = String(attachmentMime ?? "application/pdf");
+  if (!/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(mime)) throw new Error('Ungültiger Anlagentyp.');
 
   // 76-char wrapped base64 is typical for MIME
   const wrappedBase64 = String(attachmentBase64 ?? "").replace(/(.{1,76})/g, "$1\r\n").trimEnd();
@@ -87,37 +93,113 @@ function openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath 
 
 // electron-store is ESM, need dynamic import
 let store;
+let storageOptions;
+let storeInitPromise;
+let actorPromise;
 let nextServer = null;
+const exportWorkers = new Set();
+
+function stopExportWorker(worker) {
+  if (!worker.pid) return;
+  try {
+    if (process.platform === 'win32') execFile('taskkill', ['/pid', String(worker.pid), '/T', '/F'], () => {});
+    else process.kill(-worker.pid, 'SIGTERM');
+  } catch { worker.kill(); }
+}
+
+// Keep the encrypted bytes before this version can normalize or migrate data.
+// Publish only a complete copy, with an exclusive link so older backups survive.
+function backupStoreBeforeUpgrade(verifySnapshot) {
+  const directory = app.getPath('userData');
+  const storePath = path.join(directory, `${STORE_NAME}.json`);
+  try {
+    if (!fs.statSync(storePath).isFile()) throw new Error('Existing data path is not a regular file');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  const version = String(app.getVersion()).replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 80);
+  if (!version) throw new Error('Cannot determine version for data backup');
+  const backupPath = path.join(directory, `${STORE_NAME}.before-${version}.json`);
+  function existingBackup() {
+    try {
+      const stats = fs.lstatSync(backupPath);
+      if (!stats.isFile() || stats.isSymbolicLink() || stats.size === 0) throw new Error('Die vorhandene Upgrade-Sicherung ist unvollständig. Original bleibt unverändert.');
+      if (verifySnapshot && !verifySnapshot(fs.readFileSync(backupPath))) throw new Error('Die vorhandene Upgrade-Sicherung ist nicht vollständig lesbar. Original bleibt unverändert.');
+      return true;
+    } catch (error) {
+      if (error.code === 'ENOENT') return false;
+      throw error;
+    }
+  }
+  if (existingBackup()) return backupPath;
+  const temporary = `${backupPath}.${require('crypto').randomUUID()}.tmp`;
+  let publishedByUs = false;
+  try {
+    fs.copyFileSync(storePath, temporary, fs.constants.COPYFILE_EXCL);
+    fs.chmodSync(temporary, 0o600);
+    // Windows FlushFileBuffers requires a handle with write access.
+    const descriptor = fs.openSync(temporary, 'r+');
+    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    try {
+      fs.linkSync(temporary, backupPath);
+      publishedByUs = true;
+    } catch (error) {
+      if (error.code !== 'EEXIST' || !existingBackup()) throw error;
+    }
+    if (publishedByUs && !fs.readFileSync(storePath).equals(fs.readFileSync(backupPath))) throw new Error('Die Upgrade-Sicherung stimmt nicht mit dem Original überein.');
+    syncDirectory(directory);
+    return backupPath;
+  } catch (error) {
+    throw new Error(`Die Sicherung vor dem Upgrade konnte nicht erstellt werden. Originaldaten bleiben unverändert: ${storePath}. ${String(error)}`);
+  } finally {
+    try { fs.unlinkSync(temporary); } catch {}
+  }
+}
 
 async function initStore() {
+  if (storeInitPromise) return storeInitPromise;
+  storeInitPromise = initializeStore();
+  return storeInitPromise;
+}
+
+async function initializeStore() {
   const Store = (await import('electron-store')).default;
   const options = {
     name: STORE_NAME,
     encryptionKey: 'invoice-app-secure-key-2024',
-    defaults: {
-      windowBounds: { width: 1400, height: 900 }
-    }
+    configFileMode: 0o600,
   };
+  storageOptions = options;
 
+  // Fail closed before electron-store can write defaults or migrated data.
+  const directory = app.getPath('userData');
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  ensurePrivateDirectory(directory);
+  const verifier = typeof Store.prototype._decryptData === 'function' ? createSnapshotVerifier(Store, options, directory) : undefined;
+  backupStoreBeforeUpgrade(verifier);
   try {
-    store = new Store(options);
+    const DurableStore = createDurableStoreClass(Store);
+    store = new DurableStore(options);
   } catch (error) {
     const storePath = path.join(app.getPath('userData'), `${STORE_NAME}.json`);
-    const backupPath = path.join(
-      app.getPath('userData'),
-      `${STORE_NAME}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-    );
-    try {
-      if (fs.existsSync(storePath)) {
-        fs.renameSync(storePath, backupPath);
-        log('Moved corrupt electron-store file to:', backupPath);
-      }
-    } catch (backupError) {
-      log('Failed to move corrupt electron-store file:', backupError);
-    }
-    store = new Store(options);
-    log('Started with a fresh electron-store after recovery from:', String(error));
+    // Preserve the original encrypted file and fail closed. Never replace it
+    // with an empty store after a permission, decryption, or JSON error.
+    const backupPath = `${storePath}.recovery-${Date.now()}`;
+    if (fs.existsSync(storePath)) { fs.copyFileSync(storePath, backupPath, fs.constants.COPYFILE_EXCL); fs.chmodSync(backupPath, 0o600); }
+    throw new Error(`Lokale Daten konnten nicht geöffnet werden. Original: ${storePath}. Sicherung: ${backupPath}. ${String(error)}`);
   }
+}
+
+async function ensureStorageActor() {
+  if (!actorPromise) actorPromise = (async () => {
+    await initStore();
+    const actor = new StorageClient({ directory: app.getPath('userData'), name: STORE_NAME, encryptionKey: storageOptions.encryptionKey });
+    await actor.ready;
+    store = actor;
+    return actor;
+  })();
+  return actorPromise;
 }
 
 let mainWindow;
@@ -154,57 +236,55 @@ function log(...args) {
   } catch {}
 }
 
-// Check if Node.js is installed
-function isNodeInstalled() {
-  try {
-    execSync('node --version', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Show error dialog
-function showNodeRequiredError() {
-  dialog.showMessageBoxSync({
-    type: 'error',
-    title: 'Node.js Required',
-    message: 'Node.js is required to run this application.',
-    detail: 'Please install Node.js from https://nodejs.org and restart the application.\n\nRecommended: Download the LTS version.',
-    buttons: ['OK']
-  });
-  app.quit();
-}
-
 // Check if server is ready
-function waitForServer(url, timeout = 90000) {
+function waitForServer(url, timeout = 90000, { signal, requestTimeout = 5000, retryDelay = 500 } = {}) {
   return new Promise((resolve, reject) => {
-    const startTime = Date.now();
-    let lastError = null;
-    const check = () => {
-      http.get(url, (res) => {
-        // Treat any non-5xx response as "server is up".
-        // (Next may redirect or return 404 for some paths.)
-        const status = res.statusCode || 0;
-        res.resume();
-        if (status > 0 && status < 500) {
-          resolve();
-        } else {
-          retry();
-        }
-      }).on('error', (err) => {
-        lastError = err;
-        retry();
-      });
-    };
-    const retry = () => {
-      if (Date.now() - startTime > timeout) {
-        reject(lastError || new Error('Timeout waiting for server'));
-      } else {
-        setTimeout(check, 500);
-      }
-    };
-    check();
+    let settled = false;
+    let activeRequest;
+    let retryTimer;
+    function discardRequest() {
+      const request = activeRequest;
+      activeRequest = undefined;
+      request?.destroy();
+    }
+    function finish(error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadlineTimer);
+      clearTimeout(retryTimer);
+      signal?.removeEventListener('abort', abort);
+      discardRequest();
+      error ? reject(error) : resolve();
+    }
+    function abort() { finish(new Error('Local server startup canceled')); }
+    const deadlineTimer = setTimeout(() => finish(new Error('Timeout waiting for server')), timeout);
+    function retry() {
+      if (settled || retryTimer !== undefined) return;
+      discardRequest();
+      retryTimer = setTimeout(() => { retryTimer = undefined; check(); }, retryDelay);
+    }
+    function check() {
+      if (settled) return;
+      try {
+        const request = http.get(url, (response) => {
+          response.on('error', () => { if (activeRequest === request) retry(); });
+          response.resume();
+          if (settled || activeRequest !== request) { response.destroy(); return; }
+          const status = response.statusCode || 0;
+          if (status > 0 && status < 500) finish();
+          else retry();
+        });
+        activeRequest = request;
+        request.setTimeout(requestTimeout, () => {
+          if (activeRequest === request) request.destroy(new Error('Local server request timed out'));
+        });
+        request.on('error', () => { if (activeRequest === request) retry(); });
+        request.on('close', () => { if (activeRequest === request) retry(); });
+      } catch { retry(); }
+    }
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    else check();
   });
 }
 
@@ -223,12 +303,13 @@ function findAvailablePort(host) {
   });
 }
 
-async function startNextServer() {
-  if (isDev) return; // In dev mode, Next.js runs separately
+async function startNextServer(signal) {
+  if (isDev) return;
+  if (nextServer && nextServer.exitCode === null) return waitForServer(appOrigin, 90000, { signal }); // Reuse and check readiness on macOS
 
   // In packaged builds, prefer Electron's embedded Node mode so the app
   // does not depend on an external Node.js installation.
-  return new Promise(async (resolve) => {
+  return new Promise(async (resolve, reject) => {
     let standaloneDir, serverPath;
     const appPath = app.getAppPath();
 
@@ -255,7 +336,7 @@ async function startNextServer() {
 
     if (!fs.existsSync(serverPath)) {
       log('Standalone server not found!');
-      resolve();
+      reject(new Error('Packaged standalone server not found'));
       return;
     }
 
@@ -263,7 +344,7 @@ async function startNextServer() {
     // Installed apps often live in read-only locations (e.g. Program Files),
     // which causes startup failures and the loading screen to hang.
     // Assets should be copied into `.next/standalone` during the build step.
-    
+
     try {
       appPort = await findAvailablePort(HOST);
       appOrigin = `http://${HOST}:${appPort}`;
@@ -272,11 +353,11 @@ async function startNextServer() {
       const nodeCmd = isDev
         ? (process.platform === 'win32' ? 'node.exe' : 'node')
         : process.execPath;
-      
+
       nextServer = spawn(nodeCmd, [serverPath], {
         cwd: standaloneDir,
-        env: { 
-          ...process.env, 
+        env: {
+          ...process.env,
           NODE_ENV: 'production',
           PORT: appPort.toString(),
           HOSTNAME: HOST,
@@ -297,34 +378,50 @@ async function startNextServer() {
 
       nextServer.on('error', (err) => {
         log('Failed to start Next.js:', err);
+        reject(err);
       });
-      
+
       nextServer.on('exit', (code, signal) => {
         log('Next.js server exited with code:', code, 'signal:', signal);
+        reject(new Error(`Local server exited (${code ?? signal})`));
       });
-      
+
       // Wait for server to be ready
       log('Waiting for Next.js server on', appOrigin);
-      await waitForServer(appOrigin);
+      await waitForServer(appOrigin, 90000, { signal });
       log('Next.js server ready!');
     } catch (err) {
       log('Error starting Next.js server:', err);
+      reject(err);
+      return;
     }
-    
+
     resolve();
   });
 }
 
-async function createWindow() {
+let creatingWindow;
+function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); return Promise.resolve(); }
+  if (!creatingWindow) creatingWindow = createWindowInternal().finally(() => { creatingWindow = undefined; });
+  return creatingWindow;
+}
+
+async function createWindowInternal() {
   try {
-    await initStore();
+    await ensureStorageActor();
   } catch (error) {
     log('Failed to initialize electron-store:', error);
+    dialog.showErrorBox('Helferlein – Daten konnten nicht geladen werden', String(error));
+    app.quit();
+    return;
   }
 
-  const bounds = store?.get('windowBounds') || { width: 1400, height: 900 };
+  const previousBounds = await store.get('windowBounds');
+  const bounds = previousBounds && typeof previousBounds === 'object' ? previousBounds : { width: 1400, height: 900 };
 
-  mainWindow = new BrowserWindow({
+  const startupController = new AbortController();
+  const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
     x: bounds.x,
@@ -341,24 +438,35 @@ async function createWindow() {
     icon: path.join(__dirname, '../public/icon.png')
   });
 
+  mainWindow = win;
+
+  function showError(message) {
+    if (win.isDestroyed()) return;
+    win.loadFile(path.join(__dirname, 'server-error.html'), { query: { message } })
+      .catch((error) => { if (!win.isDestroyed()) log('Failed to show server error', String(error)); });
+  }
+
   // Show loading screen instantly
-  mainWindow.loadFile(path.join(__dirname, 'loading.html'));
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  win.loadFile(path.join(__dirname, 'loading.html')).catch((error) => {
+    if (!win.isDestroyed()) log('Failed to load loading screen', String(error));
+  });
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show();
   });
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+  win.webContents.on('will-navigate', (event, url) => {
+    try { if (new URL(url).origin !== appOrigin) event.preventDefault(); } catch { event.preventDefault(); }
+  });
+
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    if (win.isDestroyed() || errorCode === -3) return;
     log('did-fail-load', { errorCode, errorDescription, validatedURL });
-    try {
-      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-        query: { message: `Failed to load: ${validatedURL} (${errorCode}) ${errorDescription}` }
-      });
-    } catch (e) {
-      log('Failed to show server-error.html after did-fail-load', e);
-    }
+    // Do not recursively reload an error page that itself failed to load.
+    if (validatedURL.startsWith('file:')) return;
+    showError(`Failed to load: ${validatedURL} (${errorCode}) ${errorDescription}`);
   });
 
-  mainWindow.webContents.on('render-process-gone', (event, details) => {
+  win.webContents.on('render-process-gone', (event, details) => {
     log('render-process-gone', details);
   });
 
@@ -368,45 +476,43 @@ async function createWindow() {
     if (!isDev) {
       try {
         log('Starting Next.js server...');
-        await startNextServer();
-        await waitForServer(appOrigin);
+        await startNextServer(startupController.signal);
       } catch (err) {
         log('Server failed to start:', err);
         serverError = err;
       }
     }
+    if (win.isDestroyed() || startupController.signal.aborted) return;
     const url = appOrigin;
     if (!serverError) {
-      // Try to load the app
-      mainWindow.loadURL(url).catch((err) => {
-        log('Failed to load app URL:', err);
-        mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-          query: { message: `Failed to load URL: ${url}. ${String(err)}` }
-        });
+      win.loadURL(url).catch((error) => {
+        if (win.isDestroyed() || startupController.signal.aborted) return;
+        log('Failed to load app URL:', String(error));
+        showError(`Failed to load URL: ${url}. ${String(error)}`);
       });
     } else {
-      // Show error screen
-      mainWindow.loadFile(path.join(__dirname, 'server-error.html'), {
-        query: { message: String(serverError) }
-      });
+      showError(String(serverError));
     }
-    if (isDev) {
-      mainWindow.webContents.openDevTools();
-    }
-  })();
+    if (isDev && !win.isDestroyed()) win.webContents.openDevTools();
+  })().catch((error) => {
+    if (!win.isDestroyed()) { log('Window startup failed:', String(error)); showError(String(error)); }
+  });
 
-  mainWindow.on('close', () => {
-    if (store) {
-      const bounds = mainWindow.getBounds();
-      store.set('windowBounds', bounds);
+  win.on('close', () => {
+    try {
+      if (store && !win.isDestroyed()) Promise.resolve(store.set('windowBounds', win.getBounds())).catch(error => log('Could not save window bounds:', String(error)));
+    } catch (error) {
+      // Geometry is optional. A disk error must not interrupt beforeunload's data flush.
+      log('Could not save window bounds:', String(error));
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  win.on('closed', () => {
+    startupController.abort();
+    if (mainWindow === win) mainWindow = null;
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url);
       if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
@@ -417,16 +523,28 @@ async function createWindow() {
   });
 }
 
-ipcMain.handle('startup-log-get', async () => {
+ipcMain.handle('startup-log-get', async (event) => {
+  ensureTrustedSender(event, { allowFile: true });
   return startupLogBuffer.slice();
 });
 
-app.whenReady().then(createWindow);
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+    else void createWindow().catch((error) => log('Failed to reopen window:', String(error)));
+  });
+  app.whenReady().then(() => {
+    if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu' }, { role: 'fileMenu' }, { role: 'editMenu' },
+      { role: 'viewMenu' }, { role: 'windowMenu' },
+    ]));
+    return createWindow();
+  });
+}
 
 app.on('window-all-closed', () => {
-  if (nextServer) {
-    nextServer.kill();
-  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -438,13 +556,18 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
+// before-quit precedes renderer beforeunload, which can cancel quitting when
+// a save fails. Keep the server available until quitting is confirmed.
+app.on('will-quit', () => {
   if (nextServer) {
     nextServer.kill();
   }
+  for (const worker of exportWorkers) stopExportWorker(worker);
+  if (store instanceof StorageClient) void store.close().catch(() => {});
 });
 
 function isTrustedSender(event, { allowFile = false } = {}) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) return false;
   const senderUrl = event.senderFrame?.url || event.sender.getURL();
   try {
     const parsed = new URL(senderUrl);
@@ -462,26 +585,26 @@ function ensureTrustedSender(event, options) {
 }
 
 function isAllowedStoreKey(key) {
-  return key === APP_DATA_KEY || String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`);
+  return key === APP_DATA_KEY || key === AUX_DATA_KEY || String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`);
 }
 
-ipcMain.on('store-get-sync', (event, key) => {
+ipcMain.on('store-get-sync', async (event, key) => {
   try {
     ensureTrustedSender(event);
     if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-    if (!store) throw new Error('Store is not initialized');
-    event.returnValue = { ok: true, value: store.get(key) };
+    const backend = await ensureStorageActor();
+    event.returnValue = { ok: true, value: await backend.get(key) };
   } catch (error) {
     event.returnValue = { ok: false, error: String(error) };
   }
 });
 
-ipcMain.on('store-set-sync', (event, key, value) => {
+ipcMain.on('store-set-sync', async (event, key, value) => {
   try {
     ensureTrustedSender(event);
     if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-    if (!store) throw new Error('Store is not initialized');
-    store.set(key, value);
+    const backend = await ensureStorageActor();
+    await backend.set(key, value);
     event.returnValue = { ok: true };
   } catch (error) {
     event.returnValue = { ok: false, error: String(error) };
@@ -492,29 +615,57 @@ ipcMain.on('store-set-sync', (event, key, value) => {
 ipcMain.handle('store-get', async (event, key) => {
   ensureTrustedSender(event);
   if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  return store.get(key);
+  return (await ensureStorageActor()).get(key);
+});
+
+ipcMain.on('storage-write-error', (event) => {
+  ensureTrustedSender(event);
+  dialog.showErrorBox('Helferlein – Speichern fehlgeschlagen', 'Die letzten Änderungen konnten nicht gespeichert werden. Bitte die App geöffnet lassen, freien Speicher und Zugriffsrechte prüfen und eine Sicherung exportieren.');
 });
 
 ipcMain.handle('store-set', async (event, key, value) => {
   ensureTrustedSender(event);
   if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  store.set(key, value);
+  await (await ensureStorageActor()).set(key, value);
   return true;
 });
 
 ipcMain.handle('store-delete', async (event, key) => {
   ensureTrustedSender(event);
   if (!String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  store.delete(key);
+  await (await ensureStorageActor()).delete(key);
   return true;
 });
 
 ipcMain.handle('store-clear', async (event) => {
   ensureTrustedSender(event);
   throw new Error('Clearing the entire store is disabled');
+});
+
+ipcMain.handle('store-commit', async (event, batches) => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).commit(batches);
+});
+ipcMain.on('store-flush-sync', async (event, batches) => {
+  try {
+    ensureTrustedSender(event);
+    const backend = await ensureStorageActor();
+    if (batches?.length) await backend.commit(batches);
+    await backend.flush();
+    event.returnValue = { ok: true };
+  } catch (error) { event.returnValue = { ok: false, error: String(error) }; }
+});
+ipcMain.handle('store-flush', async event => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).flush();
+});
+ipcMain.handle('store-list-recoveries', async event => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).listRecoveries();
+});
+ipcMain.handle('store-get-recovery', async (event, id) => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).getRecovery(id);
 });
 
 ipcMain.handle('get-app-info', (event) => {
@@ -526,11 +677,94 @@ ipcMain.handle('get-app-info', (event) => {
   };
 });
 
+function safeDocumentFilename(value, extension) {
+  const name = String(value || 'Rechnung').replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').replace(/^\.+/, '').trim().slice(0, 160) || 'Rechnung';
+  return name.toLowerCase().endsWith(`.${extension}`) ? name : `${name}.${extension}`;
+}
+
+async function saveDocument(win, filename, bytes, extension) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: safeDocumentFilename(filename, extension),
+    filters: [{ name: extension === 'pdf' ? 'PDF-Dokument' : 'XML-Rechnung', extensions: [extension] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  const temporary = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${require('crypto').randomUUID()}.tmp`);
+  try {
+    const handle = await fs.promises.open(temporary, 'wx', 0o600);
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    if (!(await fs.promises.readFile(temporary)).equals(bytes)) throw new Error('Die gespeicherte Datei ist unvollständig.');
+    await fs.promises.rename(temporary, filePath);
+    syncDirectory(path.dirname(filePath));
+    return { ok: true };
+  } finally {
+    await fs.promises.rm(temporary, { force: true }).catch(() => {});
+  }
+}
+
+ipcMain.handle('save-document', async (event, payload) => {
+  ensureTrustedSender(event);
+  try {
+    const bytes = Buffer.from(payload?.bytes ?? []);
+    if (!bytes.length || bytes.length > 100 * 1024 * 1024 || bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('Ungültige PDF-Datei.');
+    return await saveDocument(BrowserWindow.fromWebContents(event.sender), payload.filename, bytes, 'pdf');
+  } catch (error) { return { ok: false, error: error.message }; }
+});
+
+let eInvoiceExportRunning = false;
+ipcMain.handle('export-einvoice', async (event, payload) => {
+  ensureTrustedSender(event);
+  if (eInvoiceExportRunning) return { ok: false, error: 'Es wird bereits eine E-Rechnung erstellt. Bitte warten.' };
+  if (!['zugferd', 'xrechnung'].includes(payload?.format)) return { ok: false, error: 'Unbekanntes Rechnungsformat.' };
+  if (payload.delivery !== undefined && !['download', 'email'].includes(payload.delivery)) return { ok: false, error: 'Unbekannte Übergabeart.' };
+  eInvoiceExportRunning = true;
+  try {
+    if (!payload.document || Buffer.byteLength(JSON.stringify(payload.document)) > 20 * 1024 * 1024) throw new Error('Die E-Rechnungsdaten sind zu groß oder unvollständig.');
+    const result = await new Promise((resolve, reject) => {
+      const worker = fork(path.join(__dirname, 'einvoice-worker.cjs'), [], {
+        execPath: process.execPath,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        serialization: 'advanced',
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      });
+      exportWorkers.add(worker);
+      let settled = false;
+      function finish(error, message) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        error ? reject(error) : resolve(message);
+      }
+      const timeout = setTimeout(() => { stopExportWorker(worker); finish(new Error('Die Prüfung hat das Zeitlimit überschritten. Bitte erneut versuchen.')); }, 240000);
+      worker.once('message', (message) => finish(message.ok ? null : new Error(message.error), message));
+      worker.once('error', (error) => finish(error));
+      worker.once('exit', () => {
+        exportWorkers.delete(worker);
+        finish(new Error('Die E-Rechnungsprüfung wurde unterbrochen.'));
+      });
+      worker.send({
+        format: payload.format,
+        document: payload.document,
+        runtimeDir: app.isPackaged ? path.join(process.resourcesPath, 'einvoice-runtime') : path.join(__dirname, 'einvoice-runtime'),
+        assetsDir: app.isPackaged ? path.join(process.resourcesPath, 'einvoice-assets') : path.join(__dirname, 'einvoice-assets'),
+      });
+    });
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) throw new Error('Kein aktives Fenster.');
+    return await deliverEInvoice({ artifact: result, format: payload.format, number: payload.document.number, delivery: payload.delivery ?? 'download', email: payload.email ?? {} }, {
+      saveDocument: (filename, bytes, extension) => saveDocument(win, filename, bytes, extension),
+      ...(process.platform === 'darwin' ? { composeWithAttachment: openAppleMailComposeWithAttachment } : { openPath: filename => shell.openPath(filename) }),
+      tempRoot: app.getPath('temp'),
+    });
+  } catch (error) { return { ok: false, error: error.message || 'Export fehlgeschlagen.' }; }
+  finally { eInvoiceExportRunning = false; }
+});
+
 ipcMain.handle('print-to-pdf', async (event, options) => {
   ensureTrustedSender(event);
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-  
+
   try {
     const pdfData = await win.webContents.printToPDF({
       marginsType: 0,
@@ -551,12 +785,11 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
   if (!win) return { ok: false, error: 'No active window' };
 
   const to = payload?.to ?? "";
+  if (/[\r\n]/.test(String(to))) return { ok: false, error: 'Die E-Mail-Adresse enthält ungültige Zeilenumbrüche.' };
   const subject = payload?.subject ?? "";
   const body = payload?.body ?? "";
   const requestedFilename = payload?.filename ?? "Invoice.pdf";
-  const filename = String(requestedFilename).toLowerCase().endsWith('.pdf')
-    ? String(requestedFilename)
-    : `${requestedFilename}.pdf`;
+  const filename = safeDocumentFilename(requestedFilename, 'pdf');
 
   try {
     const pdfData = await win.webContents.printToPDF({
@@ -567,11 +800,11 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
 
     const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'invoice-app-'));
     const pdfPath = path.join(tempDir, filename);
-    fs.writeFileSync(pdfPath, pdfData);
+    fs.writeFileSync(pdfPath, pdfData, { mode: 0o600 });
 
     if (process.platform === 'darwin') {
       await openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath: pdfPath });
-      return { ok: true };
+      return { ok: true, prepared: true };
     }
 
     const eml = buildEmlWithAttachment({
@@ -583,9 +816,10 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
       attachmentBase64: Buffer.from(pdfData).toString('base64'),
     });
     const emlPath = path.join(tempDir, 'invoice-email.eml');
-    fs.writeFileSync(emlPath, eml);
-    await shell.openPath(emlPath);
-    return { ok: true };
+    fs.writeFileSync(emlPath, eml, { mode: 0o600 });
+    const error = await shell.openPath(emlPath);
+    if (error) throw new Error(error);
+    return { ok: true, prepared: true };
   } catch (error) {
     return { ok: false, error: String(error) };
   }

@@ -3,163 +3,86 @@
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Field } from "@/components/ui/Field";
+import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { Surface, PageHeader, Stack, Grid, Section } from "@/components/ui/Surface";
+import { Page, PageHeader, RecordStamp, initialsOf } from "@/components/ui/Layout";
 import { ConfirmDialog } from "@/components/ui/Dialog";
+import { usePageCrumb } from "@/components/shell/AppShell";
 import { t } from "@/lib/i18n";
-import { formatTaxPercent, parseTaxPercentInput } from "@/lib/calc";
+import { roundMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { deleteProduct, upsertProduct } from "@/lib/storage/store";
 import type { Product } from "@/lib/domain";
-
-function parseNumber(input: string): number {
-  const normalized = input.replace(",", ".");
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : 0;
-}
 
 export default function ProductEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
+  const de = language === "de";
   const [showDelete, setShowDelete] = useState(false);
+  const product = useMemo(() => data?.products.find((p) => p.id === id) ?? null, [data?.products, id]);
+  usePageCrumb(product ? product.name || t(language, "common.unnamed") : null);
 
-  const product = useMemo(() => {
-    return data?.products.find((p) => p.id === id) ?? null;
-  }, [data?.products, id]);
-
-  if (!adapter) {
-    return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Surface className="p-6 text-sm text-(--color-ink-muted)">
-            {t(language, "common.loading")}
-          </Surface>
-        </div>
-      </main>
-    );
-  }
+  if (!adapter) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
   if (!product) {
     return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">{t(language, "products.notFound")}</p>
-            <Link href="/products" className="text-sm text-(--color-accent) hover:underline">
-              ← {t(language, "products.back")}
-            </Link>
-          </Stack>
-        </div>
-      </main>
+      <Page>
+        <PageHeader title={t(language, "products.notFound")} />
+        <div><Link href="/products" className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{t(language, "products.back")}</Link></div>
+      </Page>
     );
   }
 
-  const save = (next: Product) => {
-    upsertProduct(adapter, next);
-  };
-
-  const handleDelete = () => {
-    deleteProduct(adapter, id);
-    window.location.assign("/products");
-  };
+  const save = (next: Product) => upsertProduct(adapter, next);
 
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <PageHeader
-          title={product.name || t(language, "products.new")}
-          breadcrumb={
-            <Link href="/products" className="text-(--color-ink-subtle) hover:text-(--color-accent) transition-colors">
-              ← {t(language, "nav.products")}
-            </Link>
-          }
-          actions={
-            <Button variant="danger" onClick={() => setShowDelete(true)}>
-              {t(language, "actions.delete")}
-            </Button>
-          }
-        />
+    <Page>
+      <PageHeader
+        variant="entity"
+        title={product.name || t(language, "products.new")}
+        initials={initialsOf(product.name) || "P"}
+        description={de ? "Wird beim Übernehmen als Position in die Rechnung eingesetzt. Änderungen werden automatisch lokal gespeichert." : "Filled into an invoice as a line item. Changes are saved locally automatically."}
+        actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Produkt löschen …" : "Delete product …"}</Button>}
+      />
 
-        <Surface className="mt-6">
-          <Stack gap="lg" className="p-6">
-            <Section title={t(language, "products.basicInfo")}>
-              <Grid cols={2} gap="md">
-                <Field label={t(language, "products.name")}>
-                  <Input
-                    value={product.name}
-                    onChange={(e) => save({ ...product, name: e.target.value })}
-                    placeholder={language === "de" ? "Produkt- oder Leistungsname" : "Product or service name"}
-                  />
-                </Field>
+      <FormPage>
+        <FormSection title={t(language, "products.basicInfo")}>
+          <Field label={t(language, "products.name")}>
+            <Input value={product.name} onChange={(e) => save({ ...product, name: e.target.value })} placeholder={de ? "Produkt- oder Leistungsname" : "Product or service name"} />
+          </Field>
+          <Field label={`${t(language, "products.category")} ${de ? "(optional)" : "(optional)"}`}>
+            <Input value={product.category || ""} onChange={(e) => save({ ...product, category: e.target.value })} placeholder={de ? "z. B. Montage, Material" : "e.g. Consulting, Development"} />
+          </Field>
+          <Field label={t(language, "products.description")} hint={de ? "Steht so in der Rechnungsposition." : "Appears like this in the line item."} className="@md:col-span-2">
+            <Textarea rows={3} value={product.description} onChange={(e) => save({ ...product, description: e.target.value })} />
+          </Field>
+        </FormSection>
 
-                <Field label={t(language, "products.category")}>
-                  <Input
-                    value={product.category || ""}
-                    onChange={(e) => save({ ...product, category: e.target.value })}
-                    placeholder={language === "de" ? "z.B. Beratung, Entwicklung" : "e.g., Consulting, Development"}
-                  />
-                </Field>
-              </Grid>
+        <FormSection title={t(language, "products.pricing")} columns={3}>
+          <Field label={t(language, "products.unit")}>
+            <Input value={product.unit || ""} onChange={(e) => save({ ...product, unit: e.target.value })} placeholder={de ? "z. B. Stunde, Stück" : "e.g. hour, unit"} />
+          </Field>
+          <Field label={t(language, "products.unitPrice")} hint={de ? "Mit Komma, z. B. 85,50" : "e.g. 85.50"}>
+            <DecimalInput value={product.unitPrice} onValueChange={(unitPrice) => save({ ...product, unitPrice: unitPrice ?? 0 })} />
+          </Field>
+          <Field label={`${t(language, "products.taxRate")} %`} hint={de ? "z. B. 19. Leer lassen für ohne Steuer." : "e.g. 19. Leave empty for no tax."}>
+            <DecimalInput allowEmpty value={product.taxRate === undefined ? undefined : roundMoney(product.taxRate * 100)} onValueChange={(percent) => save({ ...product, taxRate: percent === undefined ? undefined : percent / 100 })} />
+          </Field>
+        </FormSection>
 
-              <Field label={t(language, "products.description")} className="mt-4">
-                <Textarea
-                  rows={3}
-                  value={product.description}
-                  onChange={(e) => save({ ...product, description: e.target.value })}
-                placeholder={language === "de" ? "Beschreibung, die auf der Rechnung erscheint..." : "Description that will appear on the invoice..."}
-                />
-              </Field>
-            </Section>
-
-            <Section title={t(language, "products.pricing")}>
-              <Grid cols={3} gap="md">
-                <Field label={t(language, "products.unit")}>
-                  <Input
-                    value={product.unit || ""}
-                    onChange={(e) => save({ ...product, unit: e.target.value })}
-                    placeholder={language === "de" ? "z.B. Stunde, Stück, Pauschal" : "e.g., hour, unit, flat rate"}
-                  />
-                </Field>
-
-                <Field label={t(language, "products.unitPrice")}>
-                  <Input
-                    inputMode="decimal"
-                    value={String(product.unitPrice)}
-                    onChange={(e) => save({ ...product, unitPrice: parseNumber(e.target.value) })}
-                    placeholder="0.00"
-                  />
-                </Field>
-
-                <Field label={t(language, "products.taxRate")} hint={language === "de" ? "z.B. 19 für 19%" : "e.g., 19 for 19%"}>
-                  <Input
-                    inputMode="decimal"
-                    value={formatTaxPercent(product.taxRate)}
-                    onChange={(e) => {
-                      const nextRate = parseTaxPercentInput(e.target.value);
-                      save({ ...product, taxRate: nextRate });
-                    }}
-                    placeholder="19"
-                  />
-                </Field>
-              </Grid>
-            </Section>
-
-            <div className="text-xs text-(--color-ink-subtle) pt-2 border-t border-(--glass-border)">
-              {t(language, "common.created")}: {new Date(product.createdAt).toLocaleString()}
-              {" · "}
-              {t(language, "common.updated")}: {new Date(product.updatedAt).toLocaleString()}
-            </div>
-          </Stack>
-        </Surface>
-      </div>
+        <RecordStamp>
+          {t(language, "common.created")}: {new Date(product.createdAt).toLocaleString(de ? "de-DE" : "en-US")} · {t(language, "common.updated")}: {new Date(product.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
+        </RecordStamp>
+      </FormPage>
 
       <ConfirmDialog
         open={showDelete}
         onClose={() => setShowDelete(false)}
-        onConfirm={handleDelete}
+        onConfirm={() => { deleteProduct(adapter, id); window.location.assign("/products"); }}
         title={t(language, "products.deleteTitle")}
         description={t(language, "products.deleteDescriptionLong")}
         confirmLabel={t(language, "actions.delete")}
@@ -167,6 +90,6 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

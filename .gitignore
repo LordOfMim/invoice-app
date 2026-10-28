@@ -5,6 +5,8 @@
 /.next
 /out
 dist-electron
+/electron/einvoice-runtime/
+/electron/einvoice-assets/
 # misc
 .DS_Store
 *.pem

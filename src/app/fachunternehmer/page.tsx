@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
+import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
 import { PrintStyles } from "@/components/PrintStyles";
 import { usePersistedData } from "@/lib/storage/useStore";
+import type { StorageAdapter } from "@/lib/storage/types";
 import { STORAGE_KEY } from "@/lib/storage/keys";
 
 type FachunternehmerData = {
@@ -37,11 +39,17 @@ function getTodayDate(): string {
 }
 
 export default function FachunternehmerPage() {
-  const { adapter } = usePersistedData();
+  const { adapter, data } = usePersistedData();
+  if (!adapter || !data) return <Page><PageHeader title="Fachunternehmererklärung" /><p role="status">Standardwerte werden geladen …</p></Page>;
+  return <FachunternehmerEditor adapter={adapter} />;
+}
+
+function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
   const [data, setData] = useState<FachunternehmerData>(() => {
-    // Load initial data from storage if available
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("fachunternehmer-defaults");
+    // Mount only after adoption completes. The adapter chooses native authority
+    // on desktop and localStorage in a browser, including intentional emptiness.
+    {
+      const stored = adapter.getItem("fachunternehmer-defaults");
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
@@ -55,12 +63,17 @@ export default function FachunternehmerPage() {
   });
   const [currentDate] = useState(getTodayDate());
   const [isEditing, setIsEditing] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "ok" | "info"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const saveDefaults = () => {
     if (!adapter) return;
-    adapter.setItem("fachunternehmer-defaults", JSON.stringify(data));
-    alert("Standardwerte gespeichert!");
+    try {
+      adapter.setItem("fachunternehmer-defaults", JSON.stringify(data));
+      setNotice({ tone: "ok", text: "Standardwerte gespeichert." });
+    } catch {
+      setNotice({ tone: "info", text: "Standardwerte konnten nicht gespeichert werden. Bitte die App geöffnet lassen und freien Speicher sowie Zugriffsrechte prüfen." });
+    }
   };
 
   const loadDefaults = () => {
@@ -70,12 +83,12 @@ export default function FachunternehmerPage() {
       try {
         const parsed = JSON.parse(stored);
         setData({ ...DEFAULT_DATA, ...parsed });
-        alert("Standardwerte geladen!");
+        setNotice({ tone: "ok", text: "Standardwerte geladen." });
       } catch {
-        alert("Keine gespeicherten Standardwerte gefunden.");
+        setNotice({ tone: "info", text: "Keine gespeicherten Standardwerte gefunden." });
       }
     } else {
-      alert("Keine gespeicherten Standardwerte gefunden.");
+      setNotice({ tone: "info", text: "Keine gespeicherten Standardwerte gefunden." });
     }
   };
 
@@ -108,39 +121,24 @@ export default function FachunternehmerPage() {
   };
 
   return (
-    <main className="flex-1 overflow-auto">
+    <Page>
       <PrintStyles />
-      <div className="mx-auto max-w-(--content-max-width) p-6 lg:p-10">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between no-print">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-              Fachunternehmererklärung
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              Übereinstimmungs- / Fachunternehmererklärung erstellen
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setIsEditing(!isEditing)}>
-              {isEditing ? "Vorschau" : "Bearbeiten"}
-            </Button>
-            <Button variant="ghost" onClick={loadDefaults}>
-              Laden
-            </Button>
-            <Button variant="ghost" onClick={saveDefaults}>
-              Speichern
-            </Button>
-            <Button variant="ghost" onClick={resetToDefaults}>
-              Zurücksetzen
-            </Button>
-            <Button onClick={handlePrint}>PDF / Drucken</Button>
-          </div>
-        </div>
+      <PageHeader
+        title="Fachunternehmererklärung"
+        description="Übereinstimmungs- und Fachunternehmererklärung für ein Bauvorhaben ausfüllen und drucken. Die Angaben lassen sich als Standardwerte merken."
+        actions={<>
+          <Button variant="primary" onClick={handlePrint}>PDF / Drucken</Button>
+          <Button aria-pressed={isEditing} onClick={() => setIsEditing(!isEditing)}>{isEditing ? "Fertig, Vorschau zeigen" : "Angaben bearbeiten"}</Button>
+          <Button variant="ghost" onClick={saveDefaults}>Als Standard speichern</Button>
+          <Button variant="ghost" onClick={loadDefaults}>Standard laden</Button>
+          <Button variant="quiet" onClick={resetToDefaults}>Zurücksetzen</Button>
+        </>}
+      />
+      {notice && <StatusNote tone={notice.tone} className="no-print">{notice.text}</StatusNote>}
 
-        {/* Document */}
-        <div className="print-area">
-          <div className="invoice-paper rounded-xl bg-white p-10 shadow-lg ring-1 ring-zinc-200">
+      {/* Document: inner print layout unchanged; the screen frame is a ring (box-shadow), which print removes. */}
+      <div className="print-area">
+          <div className="invoice-paper mx-auto max-w-[210mm] rounded-card-sm bg-white p-10 ring-1 ring-line">
             <div className="flex min-h-[270mm] flex-col text-sm leading-relaxed text-zinc-800">
               {/* Sender */}
               <div className="mb-8">
@@ -284,7 +282,6 @@ export default function FachunternehmerPage() {
             </div>
           </div>
         </div>
-      </div>
-    </main>
+    </Page>
   );
 }

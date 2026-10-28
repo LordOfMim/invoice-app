@@ -2,184 +2,100 @@
 
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
+import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Field } from "@/components/ui/Field";
+import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { Surface, PageHeader, Stack, Section, Grid } from "@/components/ui/Surface";
-import { Badge } from "@/components/ui/DataDisplay";
+import { KeyValueList, Page, PageHeader, RecordStamp, Section } from "@/components/ui/Layout";
+import { KindBadge } from "@/components/ui/Status";
 import { ConfirmDialog } from "@/components/ui/Dialog";
+import { usePageCrumb } from "@/components/shell/AppShell";
 import { t } from "@/lib/i18n";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { deleteCreditNote, upsertCreditNote } from "@/lib/storage/store";
 import type { CreditNote } from "@/lib/domain";
 
-function parseNumber(input: string): number {
-  const normalized = input.replace(",", ".");
-  const n = Number(normalized);
-  return Number.isFinite(n) ? Math.max(0, n) : 0;
-}
-
 export default function CreditNoteEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
+  const de = language === "de";
   const [showDelete, setShowDelete] = useState(false);
+  const creditNote = useMemo(() => data?.creditNotes.find((cn) => cn.id === id) ?? null, [data?.creditNotes, id]);
+  usePageCrumb(creditNote ? creditNote.creditNoteNumber || t(language, "common.noNumber") : null);
 
-  const creditNote = useMemo(() => {
-    return data?.creditNotes.find((cn) => cn.id === id) ?? null;
-  }, [data?.creditNotes, id]);
-
-  if (!adapter) {
-    return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Surface className="p-6 text-sm text-(--color-ink-muted)">
-            {t(language, "common.loading")}
-          </Surface>
-        </div>
-      </main>
-    );
-  }
+  if (!adapter) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
   if (!creditNote) {
     return (
-      <main className="p-6 lg:p-8">
-        <div className="mx-auto max-w-(--content-max-width)">
-          <Stack gap="sm">
-            <p className="text-sm text-(--color-ink-muted)">{t(language, "creditNotes.notFound")}</p>
-            <Link href="/credit-notes" className="text-sm text-(--color-accent) hover:underline">
-              ← {t(language, "creditNotes.back")}
-            </Link>
-          </Stack>
-        </div>
-      </main>
+      <Page>
+        <PageHeader title={t(language, "creditNotes.notFound")} />
+        <div><Link href="/credit-notes" className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{t(language, "creditNotes.back")}</Link></div>
+      </Page>
     );
   }
 
-  const save = (next: CreditNote) => {
-    upsertCreditNote(adapter, next);
-  };
-
-  const handleDelete = () => {
-    deleteCreditNote(adapter, id);
-    window.location.assign("/credit-notes");
-  };
+  const save = (next: CreditNote) => upsertCreditNote(adapter, next);
+  const kind = creditNote.type === "storno" ? t(language, "creditNotes.storno") : t(language, "creditNotes.gutschrift");
 
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <PageHeader
-          title={creditNote.texts.documentTitle}
-          breadcrumb={
-            <Link href="/credit-notes" className="text-(--color-ink-subtle) hover:text-(--color-accent) transition-colors">
-              ← {t(language, "nav.creditNotes")}
-            </Link>
-          }
-          actions={
-            <div className="flex items-center gap-2">
-              <Link href={`/invoices/${creditNote.linkedInvoiceId}`}>
-                <Button variant="secondary">{t(language, "actions.viewOriginalInvoice")}</Button>
-              </Link>
-              <Button variant="danger" onClick={() => setShowDelete(true)}>
-                {t(language, "actions.delete")}
-              </Button>
-            </div>
-          }
-        />
+    <Page>
+      <PageHeader
+        variant="entity"
+        title={`${creditNote.texts.documentTitle} ${creditNote.creditNoteNumber}`.trim()}
+        initials={creditNote.type === "storno" ? "ST" : "GS"}
+        status={<KindBadge>{kind}</KindBadge>}
+        description={`${t(language, "creditNotes.linkedInvoice")}: ${creditNote.linkedInvoiceNumber || t(language, "common.unknown")}`}
+        actions={<>
+          <LinkButton href={`/invoices/${creditNote.linkedInvoiceId}`}>{t(language, "actions.viewOriginalInvoice")}</LinkButton>
+          <Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Löschen …" : "Delete …"}</Button>
+        </>}
+      />
 
-        <Stack gap="md" className="mt-6">
-          <Surface>
-            <Stack gap="md" className="p-5">
-              <div className="flex items-center gap-3">
-                <Badge variant={creditNote.type === "storno" ? "danger" : "info"}>
-                  {creditNote.type === "storno" ? t(language, "creditNotes.storno") : t(language, "creditNotes.gutschrift")}
-                </Badge>
-                <span className="text-sm text-(--color-ink-subtle)">
-                  {t(language, "creditNotes.linkedInvoice")}: {" "}
-                  <Link href={`/invoices/${creditNote.linkedInvoiceId}`} className="text-(--color-accent) hover:underline">
-                    {creditNote.linkedInvoiceNumber || t(language, "common.unknown")}
-                  </Link>
-                </span>
-              </div>
+      <FormPage>
+        <FormSection title={t(language, "creditNotes.details")} description={de ? "Änderungen werden automatisch lokal gespeichert." : "Changes are saved locally automatically."} columns={3}>
+          <Field label={creditNote.texts.creditNoteNumberLabel}>
+            <Input value={creditNote.creditNoteNumber} onChange={(e) => save({ ...creditNote, creditNoteNumber: e.target.value })} placeholder="GS-2026-001" />
+          </Field>
+          <Field label={creditNote.texts.creditNoteDateLabel}>
+            <Input type="date" value={creditNote.creditNoteDate} onChange={(e) => save({ ...creditNote, creditNoteDate: e.target.value })} />
+          </Field>
+          <Field label={creditNote.texts.amountLabel} hint={de ? "Mit Komma, z. B. 120,50" : "e.g. 120.50"}>
+            <DecimalInput value={creditNote.amount} onValueChange={(amount) => save({ ...creditNote, amount: Math.max(0, amount ?? 0) })} />
+          </Field>
+          <Field label={creditNote.texts.reasonLabel} className="@md:col-span-2 @2xl:col-span-3">
+            <Textarea rows={3} value={creditNote.reason} onChange={(e) => save({ ...creditNote, reason: e.target.value })} placeholder={de ? "Grund für diese Gutschrift oder diesen Storno" : "Reason for this credit note or cancellation"} />
+          </Field>
+        </FormSection>
 
-              <Section title={t(language, "creditNotes.details")}>
-                <Grid cols={2} gap="md">
-                  <Field label={creditNote.texts.creditNoteNumberLabel}>
-                    <Input
-                      value={creditNote.creditNoteNumber}
-                      onChange={(e) => save({ ...creditNote, creditNoteNumber: e.target.value })}
-                      placeholder="GS-2024-001"
-                    />
-                  </Field>
+        <Section title={t(language, "creditNotes.recipientFromInvoice")} summary={de ? "Aus der ursprünglichen Rechnung übernommen." : "Taken from the original invoice."}>
+          <KeyValueList
+            variant="leader"
+            items={[
+              { label: de ? "Name" : "Name", value: creditNote.recipient.name || "–" },
+              { label: de ? "Adresse" : "Address", value: <span className="whitespace-pre-line">{creditNote.recipient.address || "–"}</span> },
+              { label: de ? "Kontakt" : "Contact", value: <span className="whitespace-pre-line">{creditNote.recipient.contact || "–"}</span> },
+            ]}
+          />
+        </Section>
 
-                  <Field label={creditNote.texts.creditNoteDateLabel}>
-                    <Input
-                      type="date"
-                      value={creditNote.creditNoteDate}
-                      onChange={(e) => save({ ...creditNote, creditNoteDate: e.target.value })}
-                    />
-                  </Field>
+        <FormSection title={creditNote.texts.footerHeading} columns={1}>
+          <Field label={creditNote.texts.footerHeading} hideLabel>
+            <Textarea rows={4} value={creditNote.footerText} onChange={(e) => save({ ...creditNote, footerText: e.target.value })} />
+          </Field>
+        </FormSection>
 
-                  <Field label={creditNote.texts.amountLabel}>
-                    <Input
-                      inputMode="decimal"
-                      value={String(creditNote.amount)}
-                      onChange={(e) => save({ ...creditNote, amount: parseNumber(e.target.value) })}
-                      placeholder="0.00"
-                    />
-                  </Field>
-                </Grid>
-
-                <Field label={creditNote.texts.reasonLabel} className="mt-4">
-                  <Textarea
-                    rows={3}
-                    value={creditNote.reason}
-                    onChange={(e) => save({ ...creditNote, reason: e.target.value })}
-                    placeholder={language === "de" ? "Grund für diese Gutschrift / diesen Storno..." : "Reason for this credit note / cancellation..."}
-                  />
-                </Field>
-              </Section>
-            </Stack>
-          </Surface>
-
-          {/* Recipient (read-only reference) */}
-          <Surface variant="soft">
-            <Stack gap="sm" className="p-5">
-              <h2 className="text-sm font-semibold text-(--color-ink-muted)">{t(language, "creditNotes.recipientFromInvoice")}</h2>
-              <div className="text-sm">
-                <div className="font-medium text-(--color-ink)">{creditNote.recipient.name}</div>
-                <div className="whitespace-pre-line text-(--color-ink-muted)">{creditNote.recipient.address}</div>
-                <div className="text-(--color-ink-subtle)">{creditNote.recipient.contact}</div>
-              </div>
-            </Stack>
-          </Surface>
-
-          {/* Footer */}
-          <Surface>
-            <Stack gap="md" className="p-5">
-              <Section title={creditNote.texts.footerHeading}>
-                <Textarea
-                  rows={4}
-                  value={creditNote.footerText}
-                  onChange={(e) => save({ ...creditNote, footerText: e.target.value })}
-                />
-              </Section>
-            </Stack>
-          </Surface>
-
-          <div className="text-xs text-(--color-ink-subtle)">
-            {t(language, "common.created")}: {new Date(creditNote.createdAt).toLocaleString()}
-            {" · "}
-            {t(language, "common.updated")}: {new Date(creditNote.updatedAt).toLocaleString()}
-          </div>
-        </Stack>
-      </div>
+        <RecordStamp>
+          {t(language, "common.created")}: {new Date(creditNote.createdAt).toLocaleString(de ? "de-DE" : "en-US")} · {t(language, "common.updated")}: {new Date(creditNote.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
+        </RecordStamp>
+      </FormPage>
 
       <ConfirmDialog
         open={showDelete}
         onClose={() => setShowDelete(false)}
-        onConfirm={handleDelete}
+        onConfirm={() => { deleteCreditNote(adapter, id); window.location.assign("/credit-notes"); }}
         title={t(language, "creditNotes.deleteTitle")}
         description={t(language, "creditNotes.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
@@ -187,6 +103,6 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

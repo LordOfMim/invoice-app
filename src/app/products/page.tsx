@@ -1,21 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Field";
+import { SearchInput } from "@/components/ui/Input";
+import { DataTable, PrimaryCell, type DataTableColumn } from "@/components/ui/DataTable";
+import { FilterBar, FilterControl } from "@/components/ui/FormLayout";
+import { EmptyState, Page, PageHeader } from "@/components/ui/Layout";
+import { OverflowMenu } from "@/components/ui/Menu";
+import { KindBadge } from "@/components/ui/Status";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { formatTaxPercent } from "@/lib/calc";
+import type { Product } from "@/lib/domain";
 import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { createProduct, deleteProduct } from "@/lib/storage/store";
-import { Surface, PageHeader, Stack } from "@/components/ui/Surface";
-import { Badge, EmptyState } from "@/components/ui/DataDisplay";
-import { ConfirmDialog } from "@/components/ui/Dialog";
 
 export default function ProductsPage() {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
-  const locale = language === "de" ? "de-DE" : "en-US";
+  const de = language === "de";
+  const locale = de ? "de-DE" : "en-US";
   const currency = data?.settings.currency ?? "EUR";
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -24,12 +30,7 @@ export default function ProductsPage() {
     const all = data?.products ?? [];
     if (!search.trim()) return all;
     const q = search.toLowerCase();
-    return all.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q)
-    );
+    return all.filter((p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.category?.toLowerCase().includes(q));
   }, [data?.products, search]);
 
   const handleCreate = () => {
@@ -38,109 +39,76 @@ export default function ProductsPage() {
     window.location.assign(`/products/${product.id}`);
   };
 
+  const columns: DataTableColumn<Product>[] = [
+    {
+      key: "name",
+      header: de ? "Produkt oder Leistung" : "Product or service",
+      render: (product) => (
+        <PrimaryCell
+          title={product.name || t(language, "common.unnamed")}
+          href={`/products/${product.id}`}
+          sub={product.description || undefined}
+          aside={product.category ? <KindBadge>{product.category}</KindBadge> : undefined}
+        />
+      ),
+    },
+    { key: "unit", header: de ? "Einheit" : "Unit", width: "9rem", render: (product) => product.unit || "–" },
+    {
+      key: "tax",
+      header: de ? "MwSt." : "Tax",
+      width: "7rem",
+      numeric: true,
+      render: (product) => (product.taxRate !== undefined ? `${formatTaxPercent(product.taxRate).replace(".", de ? "," : ".")} %` : t(language, "products.noTax")),
+    },
+    { key: "price", header: de ? "Preis" : "Price", numeric: true, width: "9rem", render: (product) => <span className="font-semibold text-ink">{formatMoney(product.unitPrice, currency, locale)}</span> },
+    {
+      key: "actions",
+      header: de ? "Aktionen" : "Actions",
+      hideHeader: true,
+      width: "4.5rem",
+      className: "text-right",
+      render: (product) => (
+        <OverflowMenu
+          label={`${de ? "Aktionen für" : "Actions for"} ${product.name || t(language, "common.unnamed")}`}
+          items={[
+            { kind: "link", label: t(language, "actions.edit"), href: `/products/${product.id}` },
+            { kind: "separator" },
+            { label: de ? "Produkt löschen …" : "Delete product …", tone: "danger", onSelect: () => setDeleteConfirm(product.id) },
+          ]}
+        />
+      ),
+    },
+  ];
+
+  const total = data?.products.length ?? 0;
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <Stack gap="lg">
-          <PageHeader
-            title={t(language, "products.title")}
-            description={t(language, "products.descriptionText")}
-            actions={
-              <Button variant="primary" onClick={handleCreate}>
-                {t(language, "products.new")}
-              </Button>
-            }
-          />
-
-          <div>
-            <Input
-              type="search"
-              placeholder={t(language, "actions.search") + "..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            {products.length === 0 ? (
-              <Surface variant="solid" padding="lg">
-                <EmptyState
-                  title={search ? t(language, "common.noResults") : t(language, "products.empty")}
-                  description={search ? t(language, "common.tryDifferentSearch") : t(language, "common.addFirstProduct")}
-                  icon={
-                    <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                    </svg>
-                  }
-                  action={
-                    !search && (
-                      <Button variant="primary" onClick={handleCreate}>
-                        {t(language, "products.new")}
-                      </Button>
-                    )
-                  }
-                />
-              </Surface>
-            ) : null}
-
-            {products.map((product) => (
-              <Surface
-                key={product.id}
-                variant="solid"
-                padding="md"
-                className="flex flex-wrap items-center justify-between gap-4"
-              >
-                <div className="min-w-50 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-[var(--color-ink)]">{product.name || t(language, "common.unnamed")}</span>
-                    {product.category && (
-                      <Badge>{product.category}</Badge>
-                    )}
-                  </div>
-                  {product.description && (
-                    <div className="mt-1.5 text-sm text-[var(--color-ink-subtle)] line-clamp-1">
-                      {product.description}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="font-medium text-[var(--color-ink)]">
-                      {formatMoney(product.unitPrice, currency, locale)}
-                    </div>
-                    <div className="text-xs text-[var(--color-ink-subtle)]">
-                      {product.unit && `${t(language, "products.per")} ${product.unit} · `}
-                      {product.taxRate !== undefined
-                        ? `${(product.taxRate * 100).toFixed(0)}% ${t(language, "products.tax")}`
-                        : t(language, "products.noTax")}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Link href={`/products/${product.id}`}>
-                      <Button size="sm" variant="secondary">{t(language, "actions.edit")}</Button>
-                    </Link>
-                    <Button size="sm" variant="danger" onClick={() => setDeleteConfirm(product.id)}>
-                      {t(language, "actions.delete")}
-                    </Button>
-                  </div>
-                </div>
-              </Surface>
-            ))}
-          </div>
-        </Stack>
-      </div>
+    <Page>
+      <PageHeader
+        title={de ? "Produkte und Leistungen" : "Products and services"}
+        description={de ? "Wiederkehrende Positionen mit Preis und Steuersatz. In der Rechnung übernehmen Sie sie unter „Positionen“." : "Reusable line items with price and tax rate. Add them to an invoice under “Line items”."}
+        actions={<Button variant="primary" onClick={handleCreate}>{t(language, "products.new")}</Button>}
+      />
+      {total === 0 && data ? (
+        <EmptyState title={t(language, "products.empty")} description={t(language, "common.addFirstProduct")} action={<Button onClick={handleCreate}>{t(language, "products.new")}</Button>} />
+      ) : (
+        <section className="flex min-w-0 flex-col gap-4" aria-label={de ? "Verzeichnis" : "Directory"}>
+          <FilterBar label={de ? "Produkte filtern" : "Filter products"} aside={<span>{products.length} {de ? "Einträge" : "entries"}</span>}>
+            <FilterControl width="grow">
+              <Field label={de ? "Suchen" : "Search"}>
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={de ? "Name, Beschreibung oder Kategorie" : "Name, description or category"} />
+              </Field>
+            </FilterControl>
+            {search && <Button variant="quiet" onClick={() => setSearch("")}>{de ? "Zurücksetzen" : "Reset"}</Button>}
+          </FilterBar>
+          <DataTable caption={de ? "Produkte und Leistungen" : "Products and services"} columns={columns} rows={products} rowKey={(product) => product.id} empty={t(language, "common.tryDifferentSearch")} />
+        </section>
+      )}
 
       <ConfirmDialog
         open={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => {
-          if (adapter && deleteConfirm) {
-            deleteProduct(adapter, deleteConfirm);
-          }
-        }}
+        onConfirm={() => { if (adapter && deleteConfirm) deleteProduct(adapter, deleteConfirm); }}
+        returnFocusSelector="#inhalt"
         title={t(language, "products.deleteTitle")}
         description={t(language, "products.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
@@ -148,6 +116,6 @@ export default function ProductsPage() {
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

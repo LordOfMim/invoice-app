@@ -1,12 +1,10 @@
 import type { TextareaHTMLAttributes } from "react";
+import { cn } from "@/components/platform/lib/cn";
+import { controlClasses } from "./Input";
 
 type Props = TextareaHTMLAttributes<HTMLTextAreaElement>;
 
-export function Textarea({ className = "", ...props }: Props) {
-  return (
-    <textarea
-      className={`w-full rounded-xl bg-[var(--glass-bg)] backdrop-blur-sm px-3.5 py-2.5 text-sm text-[var(--color-ink)] border border-[var(--glass-border)] placeholder:text-[var(--color-ink-subtle)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20 transition-all duration-200 resize-none ${className}`}
-      {...props}
-    />
-  );
+/** Textarea in the Platform Input recipe (Overwatch `ui/forms.tsx`), at the readability size. */
+export function Textarea({ className, rows = 3, ...props }: Props) {
+  return <textarea rows={rows} className={cn(controlClasses, "resize-y py-2 text-lg/6 touch:text-2xl", className)} {...props} />;
 }
