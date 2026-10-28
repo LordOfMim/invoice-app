@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function fixture(http) {
+function fixture(http, timers = { setTimeout, clearTimeout }) {
   const windows = [];
   const app = {
     isPackaged: true, on() {}, requestSingleInstanceLock: () => true,
@@ -34,7 +34,7 @@ function fixture(http) {
       if (name === 'fs') return { ...fs, appendFileSync() {} };
       return require(name);
     },
-    process, console: { log() {} }, URL, AbortController, setTimeout, clearTimeout,
+    process, console: { log() {} }, URL, AbortController, ...timers,
     __dirname: path.resolve('electron'),
   };
   vm.runInNewContext(fs.readFileSync('electron/main.js', 'utf8') + `
@@ -48,15 +48,15 @@ function fixture(http) {
 }
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function mockHttp() {
+function mockHttp(timers = { setTimeout, clearTimeout }) {
   const requests = [];
   return { requests, get(_url, onResponse) {
     const request = new EventEmitter();
     request.destroyed = false;
-    request.setTimeout = (ms, callback) => { request.timer = setTimeout(callback, ms); };
+    request.setTimeout = (ms, callback) => { request.timer = timers.setTimeout(callback, ms); };
     request.destroy = error => {
       if (request.destroyed) return;
-      request.destroyed = true; clearTimeout(request.timer);
+      request.destroyed = true; timers.clearTimeout(request.timer);
       if (error) request.emit('error', error);
       request.emit('close');
     };
@@ -66,14 +66,48 @@ function mockHttp() {
   } };
 }
 
+function fakeClock() {
+  let now = 0, nextId = 0;
+  const pending = new Map();
+  return {
+    setTimeout(callback, delay) { const id = ++nextId; pending.set(id, { at: now + delay, callback }); return id; },
+    clearTimeout(id) { pending.delete(id); },
+    advance(ms) {
+      const end = now + ms;
+      for (;;) {
+        const entry = [...pending.entries()].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+        if (!entry) break;
+        const [id, timer] = entry;
+        pending.delete(id); now = timer.at; timer.callback();
+      }
+      now = end;
+    },
+    get pendingCount() { return pending.size; },
+  };
+}
+
 test('a server accepting connections without responding cannot outlive the overall deadline', async () => {
-  const http = mockHttp(); const runtime = fixture(http);
-  await assert.rejects(runtime.waitForServer('http://local', 45, { requestTimeout: 10, retryDelay: 2 }), /Timeout waiting for server/);
-  assert.ok(http.requests.length >= 2, 'per-request timeout should permit retries');
+  // Real 10/45 ms timers cannot assert a retry count on a busy Windows runner:
+  // both may be overdue before the event loop resumes. Drive the unchanged
+  // production function and the mock socket with the same deterministic clock.
+  const clock = fakeClock();
+  const http = mockHttp(clock); const runtime = fixture(http, clock);
+  const rejected = assert.rejects(runtime.waitForServer('http://local', 45, { requestTimeout: 10, retryDelay: 2 }), /Timeout waiting for server/);
+  clock.advance(9);
+  assert.equal(http.requests.length, 1);
+  assert.equal(http.requests[0].destroyed, false);
+  clock.advance(1);
+  assert.equal(http.requests[0].destroyed, true, 'request timeout destroys the stalled request');
+  clock.advance(2);
+  assert.equal(http.requests.length, 2, 'request timeout retries after the configured delay');
+  clock.advance(33);
+  await rejected;
+  assert.equal(http.requests.length, 4, 'per-request deadlines permit retries before the overall deadline');
   assert.ok(http.requests.every(request => request.destroyed));
   const count = http.requests.length;
-  await new Promise(resolve => setTimeout(resolve, 20));
+  clock.advance(1000);
   assert.equal(http.requests.length, count, 'deadline must stop all retries');
+  assert.equal(clock.pendingCount, 0, 'deadline clears request and retry timers');
 });
 
 test('successful readiness destroys the request and cancels its timers', async () => {
