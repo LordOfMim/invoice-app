@@ -1,3 +1,4 @@
+import { isValidPersistedData } from "../../../electron/storage-validation.cjs";
 import type { 
   AppSettings, 
   Attachment,
@@ -45,8 +46,7 @@ let cachedData: PersistedDataV1 | null = null;
 const MANUAL_PAID_METHOD = "manual_paid";
 
 export function flushPendingPersist() {
-  // Kept for existing callers. Saves are synchronous now, so there is no local
-  // write queue to drain.
+  // Compatibility hook: adapters accept edits synchronously and own their durable flush barrier.
 }
 
 function emitChange() {
@@ -64,25 +64,14 @@ export function parsePersistedData(json: string | null): PersistedDataV1 | null 
   if (!json) return null;
   try {
     const parsed = JSON.parse(json) as unknown;
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!isValidPersistedData(parsed)) return null;
     const data = parsed as Record<string, unknown>;
-    if (data.schemaVersion !== 1) return null;
-    if (!isRecord(data.settings) || !Array.isArray(data.invoices)) return null;
-    for (const key of ["invoices", "customers", "products", "tags", "creditNotes", "recurringInvoices", "templateVariants"]) {
-      if (data[key] !== undefined && (!Array.isArray(data[key]) || !(data[key] as unknown[]).every(isRecord))) return null;
-    }
-    for (const invoice of data.invoices as Record<string, unknown>[]) {
-      for (const key of ["lineItems", "payments", "attachments"]) {
-        const collection = invoice[key];
-        if (collection !== undefined && (!Array.isArray(collection) || !collection.every(isRecord))) return null;
-      }
-    }
     // Preserve unknown additive fields for compatibility with newer exports.
     return {
       ...data,
       schemaVersion: 1,
       settings: migrateSettings(data.settings),
-      invoices: data.invoices.map(migrateInvoice),
+      invoices: asArray(data.invoices).map(migrateInvoice),
       customers: asArray(data.customers).map(migrateCustomer),
       products: asArray(data.products).map(migrateProduct),
       tags: asArray(data.tags).map(migrateTag),
@@ -111,13 +100,26 @@ function asNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
+function asString(value: unknown, fallback: string | (() => string) = ""): string {
+  return typeof value === "string" ? value : typeof fallback === "function" ? fallback() : fallback;
 }
 
+function nowIso() { return new Date().toISOString(); }
+
+const migrationSettings = { ...createDefaultSettings(), defaultTaxRate: undefined };
+const migrationInvoice = createInvoiceFromDefaults(migrationSettings);
+const migrationCustomer = createDefaultCustomer();
+const migrationProduct = createDefaultProduct();
+const migrationTag = createDefaultTag();
+const migrationCreditNote = createCreditNoteFromInvoice(migrationInvoice, "gutschrift");
+const migrationRecurring = createDefaultRecurringInvoice(migrationSettings);
+const migrationTemplate = createDefaultTemplateVariant();
+const migrationCustomization = createDefaultTemplateCustomization();
+
 function migratePartyDetails(value: unknown, fallback = { name: "", address: "", contact: "" }) {
-  if (!isRecord(value)) return fallback;
+  if (!isRecord(value)) return { ...fallback };
   return {
+    ...value,
     salutation: typeof value.salutation === "string" ? value.salutation : undefined,
     name: asString(value.name, fallback.name),
     address: asString(value.address, fallback.address),
@@ -125,11 +127,11 @@ function migratePartyDetails(value: unknown, fallback = { name: "", address: "",
   };
 }
 
-function migrateInvoiceTexts(value: unknown, fallback = createDefaultSettings().defaultTexts) {
-  return isRecord(value) ? { ...fallback, ...value } : fallback;
+function migrateInvoiceTexts(value: unknown, fallback = migrationSettings.defaultTexts) {
+  return isRecord(value) ? { ...fallback, ...value } : { ...fallback };
 }
 
-function migrateLayout(value: unknown, fallback = createInvoiceFromDefaults(createDefaultSettings()).layout) {
+function migrateLayout(value: unknown, fallback = migrationInvoice.layout) {
   const source = isRecord(value) ? value : {};
   return {
     ...fallback,
@@ -149,8 +151,8 @@ function migrateLayout(value: unknown, fallback = createInvoiceFromDefaults(crea
 }
 
 function migrateSettings(settings: unknown): AppSettings {
-  const defaults = createDefaultSettings();
-  if (!isRecord(settings)) return defaults;
+  const defaults = migrationSettings;
+  if (!isRecord(settings)) return { ...defaults };
   const defaultLayout = isRecord(settings.defaultLayout) ? settings.defaultLayout : {};
   return {
     ...defaults,
@@ -160,7 +162,7 @@ function migrateSettings(settings: unknown): AppSettings {
     defaultTaxRate:
       typeof settings.defaultTaxRate === "number" && Number.isFinite(settings.defaultTaxRate)
         ? settings.defaultTaxRate
-        : defaults.defaultTaxRate,
+        : undefined,
     defaultSender: migratePartyDetails(settings.defaultSender, defaults.defaultSender),
     defaultFooterText: asString(settings.defaultFooterText, defaults.defaultFooterText),
     defaultTexts: migrateInvoiceTexts(settings.defaultTexts, defaults.defaultTexts),
@@ -198,78 +200,68 @@ function migrateSettings(settings: unknown): AppSettings {
 }
 
 function migrateLineItem(value: unknown): Invoice["lineItems"][0] {
-  const base = createDefaultInvoiceLineItem();
+  const base = migrationInvoice.lineItems[0];
   if (!isRecord(value)) return base;
   const type = value.type === "header" || value.type === "subheader" ? value.type : "item";
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     type,
     positionNumber: typeof value.positionNumber === "string" ? value.positionNumber : "",
     description: asString(value.description),
-    quantity: type === "item" ? asNumber(value.quantity, 1) : 0,
+    quantity: asNumber(value.quantity, type === "item" ? 1 : 0),
     unit: typeof value.unit === "string" ? value.unit : undefined,
-    unitPrice: type === "item" ? asNumber(value.unitPrice, 0) : 0,
-    taxRate: type === "item" && typeof value.taxRate === "number" && Number.isFinite(value.taxRate) ? value.taxRate : undefined,
+    unitPrice: asNumber(value.unitPrice, 0),
+    taxRate: typeof value.taxRate === "number" ? value.taxRate : undefined,
     productId: typeof value.productId === "string" ? value.productId : undefined,
   };
 }
 
-function createDefaultInvoiceLineItem(): Invoice["lineItems"][0] {
-  return createInvoiceFromDefaults(createDefaultSettings()).lineItems[0];
-}
-
 function migratePayment(value: unknown): Payment {
-  const now = new Date().toISOString();
-  if (!isRecord(value)) {
-    return { id: newId(), amount: 0, date: todayLocalISO(), createdAt: now };
-  }
+  if (!isRecord(value)) return { id: newId(), amount: 0, date: todayLocalISO(), createdAt: nowIso() };
   return {
     ...value,
-    id: asString(value.id, newId()),
-    amount: Math.max(0, asNumber(value.amount, 0)),
+    id: asString(value.id, newId),
+    amount: asNumber(value.amount, 0),
     currency: typeof value.currency === "string" ? value.currency : undefined,
-    date: asString(value.date, todayLocalISO()),
+    date: asString(value.date, todayLocalISO),
     method: typeof value.method === "string" ? value.method : undefined,
     reference: typeof value.reference === "string" ? value.reference : undefined,
     notes: typeof value.notes === "string" ? value.notes : undefined,
-    createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
+    createdAt: asString(value.createdAt, nowIso),
   };
 }
 
 function migrateAttachment(value: unknown): Attachment {
-  const now = new Date().toISOString();
-  if (!isRecord(value)) {
-    return { id: newId(), name: "Attachment", type: "", size: 0, dataUrl: "", createdAt: now };
-  }
+  if (!isRecord(value)) return { id: newId(), name: "Attachment", type: "", size: 0, dataUrl: "", createdAt: nowIso() };
   return {
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name, "Attachment"),
     type: asString(value.type),
-    size: Math.max(0, asNumber(value.size, 0)),
+    size: asNumber(value.size, 0),
     dataUrl: asString(value.dataUrl),
-    createdAt: asString(value.createdAt, now),
+    createdAt: asString(value.createdAt, nowIso),
   };
 }
 
 function migrateInvoice(invoice: unknown): Invoice {
-  const base = createInvoiceFromDefaults(createDefaultSettings());
+  const base = migrationInvoice;
   if (!isRecord(invoice)) return base;
   const lineItems = asArray(invoice.lineItems).map(migrateLineItem);
   return {
     ...base,
     ...invoice,
     schemaVersion: 1,
-    id: asString(invoice.id, newId()),
+    id: asString(invoice.id, newId),
     invoiceNumber: asString(invoice.invoiceNumber),
-    invoiceDate: asString(invoice.invoiceDate, todayLocalISO()),
-    dueDate: asString(invoice.dueDate, todayLocalISO()),
+    invoiceDate: asString(invoice.invoiceDate, todayLocalISO),
+    dueDate: asString(invoice.dueDate, todayLocalISO),
     sender: migratePartyDetails(invoice.sender, base.sender),
     recipient: migratePartyDetails(invoice.recipient, base.recipient),
     customerId: typeof invoice.customerId === "string" ? invoice.customerId : undefined,
-    lineItems: lineItems.length > 0 ? lineItems : base.lineItems,
+    lineItems: invoice.lineItems === undefined ? [{ ...base.lineItems[0], id: newId() }] : lineItems,
     payments: asArray(invoice.payments).map(migratePayment),
     tagIds: asStringArray(invoice.tagIds),
     currency: asString(invoice.currency, "EUR").toUpperCase(),
@@ -277,18 +269,18 @@ function migrateInvoice(invoice: unknown): Invoice {
     texts: migrateInvoiceTexts(invoice.texts, base.texts),
     layout: migrateLayout(invoice.layout, base.layout),
     creditNoteIds: asStringArray(invoice.creditNoteIds),
-    createdAt: asString(invoice.createdAt, new Date().toISOString()),
-    updatedAt: asString(invoice.updatedAt, new Date().toISOString()),
+    createdAt: asString(invoice.createdAt, nowIso),
+    updatedAt: asString(invoice.updatedAt, nowIso),
   };
 }
 
 function migrateCustomer(value: unknown): Customer {
-  const base = createDefaultCustomer();
+  const base = migrationCustomer;
   if (!isRecord(value)) return base;
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name),
     address: asString(value.address),
     contact: asString(value.contact),
@@ -297,108 +289,107 @@ function migrateCustomer(value: unknown): Customer {
     phone: typeof value.phone === "string" ? value.phone : undefined,
     taxId: typeof value.taxId === "string" ? value.taxId : undefined,
     notes: typeof value.notes === "string" ? value.notes : undefined,
-    createdAt: asString(value.createdAt, base.createdAt),
-    updatedAt: asString(value.updatedAt, base.updatedAt),
+    createdAt: asString(value.createdAt, nowIso),
+    updatedAt: asString(value.updatedAt, nowIso),
   };
 }
 
 function migrateProduct(value: unknown): Product {
-  const base = createDefaultProduct();
+  const base = migrationProduct;
   if (!isRecord(value)) return base;
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name),
     description: asString(value.description),
     unit: typeof value.unit === "string" ? value.unit : undefined,
     unitPrice: asNumber(value.unitPrice, 0),
     taxRate: typeof value.taxRate === "number" && Number.isFinite(value.taxRate) ? value.taxRate : undefined,
     category: typeof value.category === "string" ? value.category : undefined,
-    createdAt: asString(value.createdAt, base.createdAt),
-    updatedAt: asString(value.updatedAt, base.updatedAt),
+    createdAt: asString(value.createdAt, nowIso),
+    updatedAt: asString(value.updatedAt, nowIso),
   };
 }
 
 function migrateTag(value: unknown): Tag {
-  const base = createDefaultTag();
+  const base = migrationTag;
   if (!isRecord(value)) return base;
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name),
     color: asString(value.color, base.color),
-    createdAt: asString(value.createdAt, base.createdAt),
+    createdAt: asString(value.createdAt, nowIso),
   };
 }
 
 function migrateCreditNote(value: unknown): CreditNote {
-  const invoice = createInvoiceFromDefaults(createDefaultSettings());
-  const base = createCreditNoteFromInvoice(invoice, "gutschrift");
+  const base = migrationCreditNote;
   if (!isRecord(value)) return base;
   const type = value.type === "storno" ? "storno" : "gutschrift";
   return {
     ...base,
     ...value,
     schemaVersion: 1,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     type,
     creditNoteNumber: asString(value.creditNoteNumber),
-    creditNoteDate: asString(value.creditNoteDate, todayLocalISO()),
+    creditNoteDate: asString(value.creditNoteDate, todayLocalISO),
     linkedInvoiceId: asString(value.linkedInvoiceId),
     linkedInvoiceNumber: asString(value.linkedInvoiceNumber),
     reason: asString(value.reason),
-    amount: Math.max(0, asNumber(value.amount, 0)),
+    amount: asNumber(value.amount, 0),
     sender: migratePartyDetails(value.sender, base.sender),
     recipient: migratePartyDetails(value.recipient, base.recipient),
     footerText: asString(value.footerText, base.footerText),
-    texts: isRecord(value.texts) ? { ...base.texts, ...value.texts } : base.texts,
-    createdAt: asString(value.createdAt, base.createdAt),
-    updatedAt: asString(value.updatedAt, base.updatedAt),
+    texts: isRecord(value.texts) ? { ...base.texts, ...value.texts } : { ...base.texts },
+    createdAt: asString(value.createdAt, nowIso),
+    updatedAt: asString(value.updatedAt, nowIso),
   };
 }
 
 function migrateRecurringInvoice(value: unknown): RecurringInvoice {
-  const base = createDefaultRecurringInvoice(createDefaultSettings());
+  const base = migrationRecurring;
   if (!isRecord(value)) return base;
   const lineItems = asArray(value.lineItems).map(migrateLineItem);
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name),
     frequency:
       value.frequency === "quarterly" || value.frequency === "yearly" || value.frequency === "monthly"
         ? value.frequency
         : "monthly",
-    nextRunDate: asString(value.nextRunDate, base.nextRunDate),
+    nextRunDate: asString(value.nextRunDate, () => { const now = new Date(); return dateToLocalISO(new Date(now.getFullYear(), now.getMonth() + 1, 1)); }),
     lastRunDate: typeof value.lastRunDate === "string" ? value.lastRunDate : undefined,
     customerId: typeof value.customerId === "string" ? value.customerId : undefined,
     sender: migratePartyDetails(value.sender, base.sender),
     recipient: migratePartyDetails(value.recipient, base.recipient),
-    lineItems: lineItems.length > 0 ? lineItems : base.lineItems,
+    lineItems: value.lineItems === undefined ? [{ ...base.lineItems[0], id: newId() }] : lineItems,
     footerText: asString(value.footerText, base.footerText),
     texts: migrateInvoiceTexts(value.texts, base.texts),
     layout: migrateLayout(value.layout, base.layout),
     currency: asString(value.currency, base.currency).toUpperCase(),
     active: typeof value.active === "boolean" ? value.active : base.active,
-    reminderDays: Math.max(0, asNumber(value.reminderDays, base.reminderDays)),
+    reminderDays: asNumber(value.reminderDays, base.reminderDays),
     autoGenerate: typeof value.autoGenerate === "boolean" ? value.autoGenerate : base.autoGenerate,
-    createdAt: asString(value.createdAt, base.createdAt),
-    updatedAt: asString(value.updatedAt, base.updatedAt),
+    createdAt: asString(value.createdAt, nowIso),
+    updatedAt: asString(value.updatedAt, nowIso),
   };
 }
 
 function migrateTemplateVariant(value: unknown): TemplateVariant {
-  const base = createDefaultTemplateVariant();
-  const baseCustomization = createDefaultTemplateCustomization();
+  const base = migrationTemplate;
+  const baseCustomization = migrationCustomization;
   if (!isRecord(value)) return base;
   const customization = isRecord(value.customization) ? value.customization : {};
   return {
     ...base,
     ...value,
-    id: asString(value.id, newId()),
+    id: asString(value.id, newId),
     name: asString(value.name),
     baseTemplateId:
       value.baseTemplateId === "modern" || value.baseTemplateId === "minimal" || value.baseTemplateId === "classic"
@@ -431,8 +422,8 @@ function migrateTemplateVariant(value: unknown): TemplateVariant {
           : "simple",
       accentColor: typeof customization.accentColor === "string" ? customization.accentColor : undefined,
     },
-    createdAt: asString(value.createdAt, base.createdAt),
-    updatedAt: asString(value.updatedAt, base.updatedAt),
+    createdAt: asString(value.createdAt, nowIso),
+    updatedAt: asString(value.updatedAt, nowIso),
   };
 }
 
@@ -468,14 +459,26 @@ export function loadData(adapter: StorageAdapter): PersistedDataV1 {
 }
 
 export function saveData(adapter: StorageAdapter, data: PersistedDataV1): void {
-  adapter.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (data === cachedData) return;
+  // Queue acceptance must succeed before publishing an edit. Legacy adapters
+  // retain their synchronous full-snapshot write and failure behavior.
+  if (adapter.persistData) adapter.persistData(data, cachedData);
+  else adapter.setItem(STORAGE_KEY, JSON.stringify(data));
   cachedData = data;
   emitChange();
+}
+
+/** Seed an already validated authoritative startup snapshot without a write. */
+export function primeDataCache(data: PersistedDataV1): void {
+  cachedData = data;
 }
 
 export function clearDataCache(): void {
   cachedData = null;
 }
+
+/** Current accepted renderer state, including edits still awaiting disk acknowledgement. */
+export function getCurrentData(): PersistedDataV1 | null { return cachedData; }
 
 export function replaceData(adapter: StorageAdapter, data: PersistedDataV1): void {
   adapter.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -487,9 +490,20 @@ export function getSettings(adapter: StorageAdapter): AppSettings {
   return loadData(adapter).settings;
 }
 
+function sameValue(previous: unknown, next: unknown): boolean {
+  if (Object.is(previous, next)) return true;
+  if (Array.isArray(previous) && Array.isArray(next)) {
+    return previous.length === next.length && previous.every((value, index) => sameValue(value, next[index]));
+  }
+  if (!isRecord(previous) || !isRecord(next)) return false;
+  const keys = Object.keys(previous);
+  return keys.length === Object.keys(next).length && keys.every((key) => Object.hasOwn(next, key) && sameValue(previous[key], next[key]));
+}
+
 export function updateSettings(adapter: StorageAdapter, updater: (prev: AppSettings) => AppSettings): AppSettings {
   const data = loadData(adapter);
   const nextSettings = updater(data.settings);
+  if (sameValue(data.settings, nextSettings)) return data.settings;
   const next: PersistedDataV1 = {
     ...data,
     settings: nextSettings,
@@ -508,14 +522,12 @@ export function getInvoice(adapter: StorageAdapter, id: string): Invoice | null 
 
 export function upsertInvoice(adapter: StorageAdapter, invoice: Invoice): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const nextInvoice: Invoice = { ...invoice, updatedAt: nowIso };
-
   const idx = data.invoices.findIndex((inv) => inv.id === invoice.id);
+  if (idx >= 0 && sameValue(data.invoices[idx], invoice)) return;
+  const nextInvoice: Invoice = { ...invoice, updatedAt: nowIso() };
   const invoices = [...data.invoices];
   if (idx >= 0) invoices[idx] = nextInvoice;
   else invoices.unshift(nextInvoice);
-
   saveData(adapter, { ...data, invoices });
 }
 
@@ -528,8 +540,9 @@ export function updateInvoice(
   const idx = data.invoices.findIndex((inv) => inv.id === id);
   if (idx < 0) return null;
 
-  const nowIso = new Date().toISOString();
-  const nextInvoice = { ...updater(data.invoices[idx]), updatedAt: nowIso };
+  const updated = updater(data.invoices[idx]);
+  if (sameValue(data.invoices[idx], updated)) return data.invoices[idx];
+  const nextInvoice = { ...updated, updatedAt: nowIso() };
   const invoices = [...data.invoices];
   invoices[idx] = nextInvoice;
   saveData(adapter, { ...data, invoices });
@@ -702,9 +715,9 @@ export function createCustomer(adapter: StorageAdapter): Customer {
 
 export function upsertCustomer(adapter: StorageAdapter, customer: Customer): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const nextCustomer: Customer = { ...customer, updatedAt: nowIso };
   const idx = data.customers.findIndex((c) => c.id === customer.id);
+  if (idx >= 0 && sameValue(data.customers[idx], customer)) return;
+  const nextCustomer: Customer = { ...customer, updatedAt: nowIso() };
   const customers = [...data.customers];
   if (idx >= 0) customers[idx] = nextCustomer;
   else customers.unshift(nextCustomer);
@@ -748,9 +761,9 @@ export function createProduct(adapter: StorageAdapter, defaultTaxRate?: number):
 
 export function upsertProduct(adapter: StorageAdapter, product: Product): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const nextProduct: Product = { ...product, updatedAt: nowIso };
   const idx = data.products.findIndex((p) => p.id === product.id);
+  if (idx >= 0 && sameValue(data.products[idx], product)) return;
+  const nextProduct: Product = { ...product, updatedAt: nowIso() };
   const products = [...data.products];
   if (idx >= 0) products[idx] = nextProduct;
   else products.unshift(nextProduct);
@@ -797,6 +810,7 @@ export function createTag(adapter: StorageAdapter): Tag {
 export function upsertTag(adapter: StorageAdapter, tag: Tag): void {
   const data = loadData(adapter);
   const idx = data.tags.findIndex((t) => t.id === tag.id);
+  if (idx >= 0 && sameValue(data.tags[idx], tag)) return;
   const tags = [...data.tags];
   if (idx >= 0) tags[idx] = tag;
   else tags.unshift(tag);
@@ -872,9 +886,9 @@ export function createCreditNote(
 
 export function upsertCreditNote(adapter: StorageAdapter, creditNote: CreditNote): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const next: CreditNote = { ...creditNote, updatedAt: nowIso };
   const idx = data.creditNotes.findIndex((cn) => cn.id === creditNote.id);
+  if (idx >= 0 && sameValue(data.creditNotes[idx], creditNote)) return;
+  const next: CreditNote = { ...creditNote, updatedAt: nowIso() };
   const creditNotes = [...data.creditNotes];
   if (idx >= 0) creditNotes[idx] = next;
   else creditNotes.unshift(next);
@@ -923,9 +937,9 @@ export function createRecurringInvoice(adapter: StorageAdapter): RecurringInvoic
 
 export function upsertRecurringInvoice(adapter: StorageAdapter, recurring: RecurringInvoice): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const next: RecurringInvoice = { ...recurring, updatedAt: nowIso };
   const idx = data.recurringInvoices.findIndex((ri) => ri.id === recurring.id);
+  if (idx >= 0 && sameValue(data.recurringInvoices[idx], recurring)) return;
+  const next: RecurringInvoice = { ...recurring, updatedAt: nowIso() };
   const recurringInvoices = [...data.recurringInvoices];
   if (idx >= 0) recurringInvoices[idx] = next;
   else recurringInvoices.unshift(next);
@@ -1065,9 +1079,9 @@ export function createTemplateVariant(adapter: StorageAdapter, baseTemplateId?: 
 
 export function upsertTemplateVariant(adapter: StorageAdapter, variant: TemplateVariant): void {
   const data = loadData(adapter);
-  const nowIso = new Date().toISOString();
-  const next: TemplateVariant = { ...variant, updatedAt: nowIso };
   const idx = data.templateVariants.findIndex((tv) => tv.id === variant.id);
+  if (idx >= 0 && sameValue(data.templateVariants[idx], variant)) return;
+  const next: TemplateVariant = { ...variant, updatedAt: nowIso() };
   const templateVariants = [...data.templateVariants];
   if (idx >= 0) templateVariants[idx] = next;
   else templateVariants.unshift(next);
@@ -1226,6 +1240,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   
   const revenueMap = new Map<string, number>();
   const creditNotesByInvoiceId = new Map<string, CreditNote[]>();
+  const invoicesById = new Map<string, Invoice>();
   const statusCounts: DashboardStats["statusCounts"] = {
     paid: 0,
     partial: 0,
@@ -1247,6 +1262,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   }
   
   for (const inv of data.invoices) {
+    invoicesById.set(inv.id, inv);
     const linkedCreditNotes = creditNotesByInvoiceId.get(inv.id) ?? [];
     const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
     const remaining = convertInvoiceAmountToCurrency(balance.remainingAmount, inv, baseCurrency);
@@ -1325,7 +1341,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   }
 
   for (const creditNote of data.creditNotes) {
-    const invoice = data.invoices.find((inv) => inv.id === creditNote.linkedInvoiceId);
+    const invoice = invoicesById.get(creditNote.linkedInvoiceId);
     const month = monthKey(creditNote.creditNoteDate);
     if (!invoice || !month) continue;
     const creditAmount = convertInvoiceAmountToCurrency(Math.max(0, creditNote.amount), invoice, baseCurrency);
@@ -1387,7 +1403,7 @@ export function importData(adapter: StorageAdapter, json: string): boolean {
     if (previous !== null) {
       adapter.setItem(`${STORAGE_KEY}:recovery:${new Date().toISOString()}:before-import`, previous);
     }
-    saveData(adapter, fullData);
+    replaceData(adapter, fullData);
     return true;
   } catch {
     return false;

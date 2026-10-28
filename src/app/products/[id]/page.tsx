@@ -45,7 +45,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
         variant="entity"
         title={product.name || t(language, "products.new")}
         initials={initialsOf(product.name) || "P"}
-        description={de ? "Wird beim Übernehmen als Position in die Rechnung eingesetzt. Jede Änderung wird sofort gespeichert." : "Filled into an invoice as a line item. Every change is saved immediately."}
+        description={de ? "Wird beim Übernehmen als Position in die Rechnung eingesetzt. Änderungen werden automatisch lokal gespeichert." : "Filled into an invoice as a line item. Changes are saved locally automatically."}
         actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Produkt löschen …" : "Delete product …"}</Button>}
       />
 

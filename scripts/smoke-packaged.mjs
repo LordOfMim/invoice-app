@@ -140,9 +140,18 @@ async function checkWeb(app) {
     console.log(`PASS packaged /invoices and CSS (${content.length} characters).`);
   } finally { await stop(child); }
 }
+async function checkStorage(app) {
+  await new Promise((resolve, reject) => {
+    execFile(app.executable, [path.join(root, 'tests/native/packaged-storage.cjs'), app.appDir], { env: childEnv, cwd: app.appDir, timeout: 60000, windowsHide: true }, (error, stdout, stderr) => {
+      if (error) reject(new Error(`Packaged storage failed: ${stdout}\n${stderr}\n${error.message}`));
+      else { console.log(stdout.trim()); resolve(); }
+    });
+  });
+}
 try {
   const app = await findApp();
   console.log(`Packaged smoke: ${app.executable}`);
+  await checkStorage(app);
   await exportFixture(app, 'zugferd');
   await exportFixture(app, 'xrechnung');
   if (!argv.includes('--skip-web')) await checkWeb(app);

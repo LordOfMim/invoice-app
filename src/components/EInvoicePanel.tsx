@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { EInvoiceDetails, EInvoiceParty, Invoice } from "@/lib/domain";
 import { prepareEInvoice, type EInvoiceError, type EInvoiceFormat } from "@/lib/einvoice";
 import { Button } from "@/components/ui/Button";
@@ -75,6 +75,8 @@ function filled(values: (string | undefined)[]) {
 export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErrors, onJump, fieldId, editTabLabel }: Props) {
   const details = invoice.einvoice ?? {};
   const [busy, setBusy] = useState<EInvoiceFormat | null>(null);
+  const exportInFlight = useRef(false);
+  const [busyDelivery, setBusyDelivery] = useState<"download" | "email">("download");
   const [success, setSuccess] = useState("");
   const [defaultsSaved, setDefaultsSaved] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<Group>>(() => new Set(errors.map((error) => groupOf(error.field)).filter((group): group is Group => group !== null)));
@@ -117,7 +119,8 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
     requestAnimationFrame(() => document.getElementById("einvoice-messages")?.focus());
   }
 
-  async function exportInvoice(format: EInvoiceFormat) {
+  async function exportInvoice(format: EInvoiceFormat, delivery: "download" | "email" = "download") {
+    if (exportInFlight.current) return;
     setSuccess("");
     const result = prepareEInvoice(invoice, format);
     if (!result.ok || !result.document) {
@@ -125,21 +128,39 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
       return;
     }
     const api = window.electronAPI as typeof window.electronAPI & {
-      exportEInvoice?: (payload: object) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+      exportEInvoice?: (payload: object) => Promise<{ ok: boolean; prepared?: boolean; canceled?: boolean; error?: string }>;
     };
     if (!api?.exportEInvoice) {
       showErrors([{ field: "", message: "Der geprüfte E-Rechnungsexport ist in der installierten Desktop-App verfügbar." }]);
       return;
     }
+    exportInFlight.current = true;
     setBusy(format);
+    setBusyDelivery(delivery);
     onErrors([]);
     try {
-      const exported = await api.exportEInvoice({ format, document: result.document });
-      if (exported.ok) setSuccess(`${format === "zugferd" ? "ZUGFeRD-PDF" : "XRechnung-XML"} geprüft und gespeichert.`);
+      const exported = await api.exportEInvoice({
+        format,
+        document: result.document,
+        delivery,
+        email: delivery === "email" ? {
+          to: details.buyer?.email || (details.buyer?.electronicAddressScheme === "EM" ? details.buyer.electronicAddress : "") || "",
+          subject: `${invoice.texts.documentTitle || "Rechnung"} ${invoice.invoiceNumber}`.trim(),
+          body: `Anbei erhalten Sie die E-Rechnung ${invoice.invoiceNumber}.\n\n${invoice.sender.name}`,
+        } : undefined,
+      });
+      if (delivery === "email" && exported.ok && exported.prepared !== true) {
+        showErrors([{ field: "", message: "Diese App-Version hat keinen E-Mailentwurf bestätigt. Bitte die aktuelle Desktop-App verwenden." }]);
+        return;
+      }
+      if (exported.ok) setSuccess(delivery === "email"
+        ? `${format === "zugferd" ? "ZUGFeRD-PDF" : "XRechnung-XML"} geprüft und als E-Mailentwurf vorbereitet. Bitte im E-Mailprogramm prüfen und selbst senden.`
+        : `${format === "zugferd" ? "ZUGFeRD-PDF" : "XRechnung-XML"} geprüft und gespeichert.`);
       else if (!exported.canceled) showErrors([{ field: "", message: exported.error || "Die Datei konnte nicht erstellt werden." }]);
     } catch (error) {
       showErrors([{ field: "", message: error instanceof Error ? error.message : "Export fehlgeschlagen. Bitte erneut versuchen." }]);
     } finally {
+      exportInFlight.current = false;
       setBusy(null);
     }
   }
@@ -212,12 +233,14 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
         <Card className="@container">
           <CardZone className="grid gap-4 @lg:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <Button className="w-full" loading={busy === "zugferd"} disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
+              <Button className="w-full" loading={busy === "zugferd" && busyDelivery === "download"} disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" && busyDelivery === "download" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
               <p className="font-sans text-base tracking-snug text-ink-muted">Lesbares PDF mit eingebetteten Rechnungsdaten.</p>
+              <Button className="w-full" loading={busy === "zugferd" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("zugferd", "email")}>ZUGFeRD-PDF per E-Mail vorbereiten</Button>
             </div>
             <div className="flex flex-col gap-2">
-              <Button className="w-full" loading={busy === "xrechnung"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung")}>{busy === "xrechnung" ? "Wird geprüft …" : "XRechnung-XML speichern"}</Button>
+              <Button className="w-full" loading={busy === "xrechnung" && busyDelivery === "download"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung")}>{busy === "xrechnung" && busyDelivery === "download" ? "Wird geprüft …" : "XRechnung-XML speichern"}</Button>
               <p className="font-sans text-base tracking-snug text-ink-muted">Eigenständige XML-Datei mit Käuferreferenz, bei Behörden meist die Leitweg-ID.</p>
+              <Button className="w-full" loading={busy === "xrechnung" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung", "email")}>XRechnung-XML per E-Mail vorbereiten</Button>
             </div>
           </CardZone>
         </Card>

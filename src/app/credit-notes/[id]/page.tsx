@@ -55,7 +55,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
       />
 
       <FormPage>
-        <FormSection title={t(language, "creditNotes.details")} description={de ? "Jede Änderung wird sofort gespeichert." : "Every change is saved immediately."} columns={3}>
+        <FormSection title={t(language, "creditNotes.details")} description={de ? "Änderungen werden automatisch lokal gespeichert." : "Changes are saved locally automatically."} columns={3}>
           <Field label={creditNote.texts.creditNoteNumberLabel}>
             <Input value={creditNote.creditNoteNumber} onChange={(e) => save({ ...creditNote, creditNoteNumber: e.target.value })} placeholder="GS-2026-001" />
           </Field>

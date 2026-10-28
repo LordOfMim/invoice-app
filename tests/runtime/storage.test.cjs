@@ -14,7 +14,7 @@ function load(relative) {
   mod.filename = filename;
   mod.paths = module.paths;
   mod.require = request => request.startsWith('@/')
-    ? load(`src/${request.slice(2)}.ts`) : require(request);
+    ? load(`src/${request.slice(2)}.ts`) : Module.prototype.require.call(mod, request);
   const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

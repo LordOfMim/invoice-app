@@ -24,6 +24,7 @@ function fixture(http) {
     loadFile(file) { this.files.push(file); return Promise.resolve(); }
     loadURL(url) { this.urls.push(url); return this.urlResult ?? Promise.resolve(); }
     show() { this.shows++; }
+    focus() { this.focuses = (this.focuses ?? 0) + 1; }
     closeNow() { this.destroyed = true; this.emit('closed'); }
   }
   const context = {
@@ -38,11 +39,11 @@ function fixture(http) {
   };
   vm.runInNewContext(fs.readFileSync('electron/main.js', 'utf8') + `
     globalThis.runtime = { waitForServer, createWindow,
-      setStore(value) { store = value; },
+      setStore(value) { store = value; actorPromise = Promise.resolve(value); },
       setStart(value) { startNextServer = value; },
       getWindow() { return mainWindow; }
     };`, context);
-  context.runtime.setStore({ get: () => undefined, set() {} });
+  context.runtime.setStore({ async get() { return undefined; }, async set() { return true; }, async flush() { return true; } });
   return { ...context.runtime, windows };
 }
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
@@ -97,6 +98,8 @@ test('closing an older loading window cannot clear or load a replacement window'
   const runtime = fixture(); const starts = [];
   runtime.setStart(() => { const start = deferred(); starts.push(start); return start.promise; });
   await runtime.createWindow(); const first = runtime.windows[0];
+  // Native destruction may precede delivery of the old closed event.
+  first.destroyed = true;
   await runtime.createWindow(); const second = runtime.windows[1];
   first.closeNow();
   assert.equal(runtime.getWindow(), second);
@@ -128,4 +131,18 @@ test('failure to persist optional window geometry cannot interrupt closing data 
   await runtime.createWindow(); const win = runtime.windows[0];
   assert.doesNotThrow(() => win.emit('close'));
   win.closeNow(); await tick();
+});
+
+test('concurrent creation shares one window and later requests focus the existing window', async () => {
+  const runtime = fixture(); const startup = deferred();
+  runtime.setStart(() => startup.promise);
+  await Promise.all([runtime.createWindow(), runtime.createWindow()]);
+  assert.equal(runtime.windows.length, 1);
+  const win = runtime.windows[0];
+  await runtime.createWindow();
+  assert.equal(runtime.windows.length, 1);
+  assert.equal(win.focuses, 1);
+  startup.resolve(); await tick();
+  assert.equal(win.urls.length, 1);
+  win.closeNow();
 });

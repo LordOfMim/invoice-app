@@ -3,10 +3,14 @@ const path = require('path');
 const { spawn, execFile, fork } = require('child_process');
 const http = require('http');
 const fs = require('fs');
+const { createDurableStoreClass, createSnapshotVerifier, ensurePrivateDirectory, syncDirectory } = require(path.join(__dirname, 'durable-store.cjs'));
+const { StorageClient } = require(path.join(__dirname, 'storage-client.cjs'));
+const { deliverEInvoice } = require(path.join(__dirname, 'einvoice-delivery.cjs'));
 
 const APP_DATA_KEY = 'invoice-app:v1';
 const RECOVERY_KEY_PREFIX = `${APP_DATA_KEY}:recovery`;
 const STORE_NAME = 'invoice-app-data';
+const AUX_DATA_KEY = 'fachunternehmer-defaults';
 
 function escapeAppleScriptString(value) {
   return String(value ?? "")
@@ -25,10 +29,12 @@ function encodeRfc2047(value) {
 function buildEmlWithAttachment({ to, subject, body, attachmentFilename, attachmentMime, attachmentBase64 }) {
   const boundary = `----invoice-app-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const safeTo = String(to ?? "");
+  if (/[\r\n]/.test(safeTo)) throw new Error('Die E-Mail-Adresse enthält ungültige Zeilenumbrüche.');
   const safeSubject = String(subject ?? "");
   const safeBody = String(body ?? "");
-  const filename = String(attachmentFilename ?? "Invoice.pdf");
+  const filename = String(attachmentFilename ?? "Invoice.pdf").replace(/[\r\n"\\]/g, '_');
   const mime = String(attachmentMime ?? "application/pdf");
+  if (!/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(mime)) throw new Error('Ungültiger Anlagentyp.');
 
   // 76-char wrapped base64 is typical for MIME
   const wrappedBase64 = String(attachmentBase64 ?? "").replace(/(.{1,76})/g, "$1\r\n").trimEnd();
@@ -87,6 +93,9 @@ function openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath 
 
 // electron-store is ESM, need dynamic import
 let store;
+let storageOptions;
+let storeInitPromise;
+let actorPromise;
 let nextServer = null;
 const exportWorkers = new Set();
 
@@ -100,7 +109,7 @@ function stopExportWorker(worker) {
 
 // Keep the encrypted bytes before this version can normalize or migrate data.
 // Publish only a complete copy, with an exclusive link so older backups survive.
-function backupStoreBeforeUpgrade() {
+function backupStoreBeforeUpgrade(verifySnapshot) {
   const directory = app.getPath('userData');
   const storePath = path.join(directory, `${STORE_NAME}.json`);
   try {
@@ -114,7 +123,9 @@ function backupStoreBeforeUpgrade() {
   const backupPath = path.join(directory, `${STORE_NAME}.before-${version}.json`);
   function existingBackup() {
     try {
-      if (!fs.lstatSync(backupPath).isFile()) throw new Error('Upgrade backup path is not a regular file');
+      const stats = fs.lstatSync(backupPath);
+      if (!stats.isFile() || stats.isSymbolicLink() || stats.size === 0) throw new Error('Die vorhandene Upgrade-Sicherung ist unvollständig. Original bleibt unverändert.');
+      if (verifySnapshot && !verifySnapshot(fs.readFileSync(backupPath))) throw new Error('Die vorhandene Upgrade-Sicherung ist nicht vollständig lesbar. Original bleibt unverändert.');
       return true;
     } catch (error) {
       if (error.code === 'ENOENT') return false;
@@ -123,6 +134,7 @@ function backupStoreBeforeUpgrade() {
   }
   if (existingBackup()) return backupPath;
   const temporary = `${backupPath}.${require('crypto').randomUUID()}.tmp`;
+  let publishedByUs = false;
   try {
     fs.copyFileSync(storePath, temporary, fs.constants.COPYFILE_EXCL);
     fs.chmodSync(temporary, 0o600);
@@ -131,9 +143,12 @@ function backupStoreBeforeUpgrade() {
     try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     try {
       fs.linkSync(temporary, backupPath);
+      publishedByUs = true;
     } catch (error) {
       if (error.code !== 'EEXIST' || !existingBackup()) throw error;
     }
+    if (publishedByUs && !fs.readFileSync(storePath).equals(fs.readFileSync(backupPath))) throw new Error('Die Upgrade-Sicherung stimmt nicht mit dem Original überein.');
+    syncDirectory(directory);
     return backupPath;
   } catch (error) {
     throw new Error(`Die Sicherung vor dem Upgrade konnte nicht erstellt werden. Originaldaten bleiben unverändert: ${storePath}. ${String(error)}`);
@@ -143,27 +158,48 @@ function backupStoreBeforeUpgrade() {
 }
 
 async function initStore() {
+  if (storeInitPromise) return storeInitPromise;
+  storeInitPromise = initializeStore();
+  return storeInitPromise;
+}
+
+async function initializeStore() {
   const Store = (await import('electron-store')).default;
   const options = {
     name: STORE_NAME,
     encryptionKey: 'invoice-app-secure-key-2024',
-    defaults: {
-      windowBounds: { width: 1400, height: 900 }
-    }
+    configFileMode: 0o600,
   };
+  storageOptions = options;
 
   // Fail closed before electron-store can write defaults or migrated data.
-  backupStoreBeforeUpgrade();
+  const directory = app.getPath('userData');
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  ensurePrivateDirectory(directory);
+  const verifier = typeof Store.prototype._decryptData === 'function' ? createSnapshotVerifier(Store, options, directory) : undefined;
+  backupStoreBeforeUpgrade(verifier);
   try {
-    store = new Store(options);
+    const DurableStore = createDurableStoreClass(Store);
+    store = new DurableStore(options);
   } catch (error) {
     const storePath = path.join(app.getPath('userData'), `${STORE_NAME}.json`);
     // Preserve the original encrypted file and fail closed. Never replace it
     // with an empty store after a permission, decryption, or JSON error.
     const backupPath = `${storePath}.recovery-${Date.now()}`;
-    if (fs.existsSync(storePath)) fs.copyFileSync(storePath, backupPath, fs.constants.COPYFILE_EXCL);
+    if (fs.existsSync(storePath)) { fs.copyFileSync(storePath, backupPath, fs.constants.COPYFILE_EXCL); fs.chmodSync(backupPath, 0o600); }
     throw new Error(`Lokale Daten konnten nicht geöffnet werden. Original: ${storePath}. Sicherung: ${backupPath}. ${String(error)}`);
   }
+}
+
+async function ensureStorageActor() {
+  if (!actorPromise) actorPromise = (async () => {
+    await initStore();
+    const actor = new StorageClient({ directory: app.getPath('userData'), name: STORE_NAME, encryptionKey: storageOptions.encryptionKey });
+    await actor.ready;
+    store = actor;
+    return actor;
+  })();
+  return actorPromise;
 }
 
 let mainWindow;
@@ -364,9 +400,16 @@ async function startNextServer(signal) {
   });
 }
 
-async function createWindow() {
+let creatingWindow;
+function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); return Promise.resolve(); }
+  if (!creatingWindow) creatingWindow = createWindowInternal().finally(() => { creatingWindow = undefined; });
+  return creatingWindow;
+}
+
+async function createWindowInternal() {
   try {
-    if (!store) await initStore();
+    await ensureStorageActor();
   } catch (error) {
     log('Failed to initialize electron-store:', error);
     dialog.showErrorBox('Helferlein – Daten konnten nicht geladen werden', String(error));
@@ -374,7 +417,8 @@ async function createWindow() {
     return;
   }
 
-  const bounds = store?.get('windowBounds') || { width: 1400, height: 900 };
+  const previousBounds = await store.get('windowBounds');
+  const bounds = previousBounds && typeof previousBounds === 'object' ? previousBounds : { width: 1400, height: 900 };
 
   const startupController = new AbortController();
   const win = new BrowserWindow({
@@ -456,7 +500,7 @@ async function createWindow() {
 
   win.on('close', () => {
     try {
-      if (store && !win.isDestroyed()) store.set('windowBounds', win.getBounds());
+      if (store && !win.isDestroyed()) Promise.resolve(store.set('windowBounds', win.getBounds())).catch(error => log('Could not save window bounds:', String(error)));
     } catch (error) {
       // Geometry is optional. A disk error must not interrupt beforeunload's data flush.
       log('Could not save window bounds:', String(error));
@@ -519,6 +563,7 @@ app.on('will-quit', () => {
     nextServer.kill();
   }
   for (const worker of exportWorkers) stopExportWorker(worker);
+  if (store instanceof StorageClient) void store.close().catch(() => {});
 });
 
 function isTrustedSender(event, { allowFile = false } = {}) {
@@ -540,26 +585,26 @@ function ensureTrustedSender(event, options) {
 }
 
 function isAllowedStoreKey(key) {
-  return key === APP_DATA_KEY || String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`);
+  return key === APP_DATA_KEY || key === AUX_DATA_KEY || String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`);
 }
 
-ipcMain.on('store-get-sync', (event, key) => {
+ipcMain.on('store-get-sync', async (event, key) => {
   try {
     ensureTrustedSender(event);
     if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-    if (!store) throw new Error('Store is not initialized');
-    event.returnValue = { ok: true, value: store.get(key) };
+    const backend = await ensureStorageActor();
+    event.returnValue = { ok: true, value: await backend.get(key) };
   } catch (error) {
     event.returnValue = { ok: false, error: String(error) };
   }
 });
 
-ipcMain.on('store-set-sync', (event, key, value) => {
+ipcMain.on('store-set-sync', async (event, key, value) => {
   try {
     ensureTrustedSender(event);
     if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-    if (!store) throw new Error('Store is not initialized');
-    store.set(key, value);
+    const backend = await ensureStorageActor();
+    await backend.set(key, value);
     event.returnValue = { ok: true };
   } catch (error) {
     event.returnValue = { ok: false, error: String(error) };
@@ -570,8 +615,7 @@ ipcMain.on('store-set-sync', (event, key, value) => {
 ipcMain.handle('store-get', async (event, key) => {
   ensureTrustedSender(event);
   if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  return store.get(key);
+  return (await ensureStorageActor()).get(key);
 });
 
 ipcMain.on('storage-write-error', (event) => {
@@ -582,22 +626,46 @@ ipcMain.on('storage-write-error', (event) => {
 ipcMain.handle('store-set', async (event, key, value) => {
   ensureTrustedSender(event);
   if (!isAllowedStoreKey(key)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  store.set(key, value);
+  await (await ensureStorageActor()).set(key, value);
   return true;
 });
 
 ipcMain.handle('store-delete', async (event, key) => {
   ensureTrustedSender(event);
   if (!String(key).startsWith(`${RECOVERY_KEY_PREFIX}:`)) throw new Error('Blocked store key');
-  if (!store) await initStore();
-  store.delete(key);
+  await (await ensureStorageActor()).delete(key);
   return true;
 });
 
 ipcMain.handle('store-clear', async (event) => {
   ensureTrustedSender(event);
   throw new Error('Clearing the entire store is disabled');
+});
+
+ipcMain.handle('store-commit', async (event, batches) => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).commit(batches);
+});
+ipcMain.on('store-flush-sync', async (event, batches) => {
+  try {
+    ensureTrustedSender(event);
+    const backend = await ensureStorageActor();
+    if (batches?.length) await backend.commit(batches);
+    await backend.flush();
+    event.returnValue = { ok: true };
+  } catch (error) { event.returnValue = { ok: false, error: String(error) }; }
+});
+ipcMain.handle('store-flush', async event => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).flush();
+});
+ipcMain.handle('store-list-recoveries', async event => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).listRecoveries();
+});
+ipcMain.handle('store-get-recovery', async (event, id) => {
+  ensureTrustedSender(event);
+  return (await ensureStorageActor()).getRecovery(id);
 });
 
 ipcMain.handle('get-app-info', (event) => {
@@ -622,8 +690,11 @@ async function saveDocument(win, filename, bytes, extension) {
   if (canceled || !filePath) return { ok: false, canceled: true };
   const temporary = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${require('crypto').randomUUID()}.tmp`);
   try {
-    await fs.promises.writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+    const handle = await fs.promises.open(temporary, 'wx', 0o600);
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    if (!(await fs.promises.readFile(temporary)).equals(bytes)) throw new Error('Die gespeicherte Datei ist unvollständig.');
     await fs.promises.rename(temporary, filePath);
+    syncDirectory(path.dirname(filePath));
     return { ok: true };
   } finally {
     await fs.promises.rm(temporary, { force: true }).catch(() => {});
@@ -644,6 +715,7 @@ ipcMain.handle('export-einvoice', async (event, payload) => {
   ensureTrustedSender(event);
   if (eInvoiceExportRunning) return { ok: false, error: 'Es wird bereits eine E-Rechnung erstellt. Bitte warten.' };
   if (!['zugferd', 'xrechnung'].includes(payload?.format)) return { ok: false, error: 'Unbekanntes Rechnungsformat.' };
+  if (payload.delivery !== undefined && !['download', 'email'].includes(payload.delivery)) return { ok: false, error: 'Unbekannte Übergabeart.' };
   eInvoiceExportRunning = true;
   try {
     if (!payload.document || Buffer.byteLength(JSON.stringify(payload.document)) > 20 * 1024 * 1024) throw new Error('Die E-Rechnungsdaten sind zu groß oder unvollständig.');
@@ -663,7 +735,7 @@ ipcMain.handle('export-einvoice', async (event, payload) => {
         clearTimeout(timeout);
         error ? reject(error) : resolve(message);
       }
-      const timeout = setTimeout(() => { stopExportWorker(worker); finish(new Error('Die Prüfung hat das Zeitlimit überschritten. Bitte erneut versuchen.')); }, 120000);
+      const timeout = setTimeout(() => { stopExportWorker(worker); finish(new Error('Die Prüfung hat das Zeitlimit überschritten. Bitte erneut versuchen.')); }, 240000);
       worker.once('message', (message) => finish(message.ok ? null : new Error(message.error), message));
       worker.once('error', (error) => finish(error));
       worker.once('exit', () => {
@@ -677,8 +749,13 @@ ipcMain.handle('export-einvoice', async (event, payload) => {
         assetsDir: app.isPackaged ? path.join(process.resourcesPath, 'einvoice-assets') : path.join(__dirname, 'einvoice-assets'),
       });
     });
-    const filename = `${payload.document?.number || 'Rechnung'}-${payload.format}`;
-    return await saveDocument(BrowserWindow.fromWebContents(event.sender), filename, Buffer.from(result.bytes), result.extension);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) throw new Error('Kein aktives Fenster.');
+    return await deliverEInvoice({ artifact: result, format: payload.format, number: payload.document.number, delivery: payload.delivery ?? 'download', email: payload.email ?? {} }, {
+      saveDocument: (filename, bytes, extension) => saveDocument(win, filename, bytes, extension),
+      ...(process.platform === 'darwin' ? { composeWithAttachment: openAppleMailComposeWithAttachment } : { openPath: filename => shell.openPath(filename) }),
+      tempRoot: app.getPath('temp'),
+    });
   } catch (error) { return { ok: false, error: error.message || 'Export fehlgeschlagen.' }; }
   finally { eInvoiceExportRunning = false; }
 });
@@ -708,6 +785,7 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
   if (!win) return { ok: false, error: 'No active window' };
 
   const to = payload?.to ?? "";
+  if (/[\r\n]/.test(String(to))) return { ok: false, error: 'Die E-Mail-Adresse enthält ungültige Zeilenumbrüche.' };
   const subject = payload?.subject ?? "";
   const body = payload?.body ?? "";
   const requestedFilename = payload?.filename ?? "Invoice.pdf";
@@ -722,11 +800,11 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
 
     const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'invoice-app-'));
     const pdfPath = path.join(tempDir, filename);
-    fs.writeFileSync(pdfPath, pdfData);
+    fs.writeFileSync(pdfPath, pdfData, { mode: 0o600 });
 
     if (process.platform === 'darwin') {
       await openAppleMailComposeWithAttachment({ to, subject, body, attachmentPath: pdfPath });
-      return { ok: true };
+      return { ok: true, prepared: true };
     }
 
     const eml = buildEmlWithAttachment({
@@ -738,9 +816,10 @@ ipcMain.handle('email-invoice-with-pdf', async (event, payload) => {
       attachmentBase64: Buffer.from(pdfData).toString('base64'),
     });
     const emlPath = path.join(tempDir, 'invoice-email.eml');
-    fs.writeFileSync(emlPath, eml);
-    await shell.openPath(emlPath);
-    return { ok: true };
+    fs.writeFileSync(emlPath, eml, { mode: 0o600 });
+    const error = await shell.openPath(emlPath);
+    if (error) throw new Error(error);
+    return { ok: true, prepared: true };
   } catch (error) {
     return { ok: false, error: String(error) };
   }

@@ -6,6 +6,8 @@ import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createRequire } from 'node:module';
+const { pins: kositPins, verifyKosit } = createRequire(import.meta.url)('../electron/einvoice-kosit.cjs');
 const run = promisify(execFile);
 const args = process.argv.slice(2);
 const arg = (key, fallback) => { const i = args.indexOf(key); return i < 0 ? fallback : args[i + 1]; };
@@ -29,6 +31,36 @@ const fonts = [
   ['NotoSans-Bold.ttf', `${fontBase}/hinted/ttf/NotoSans/NotoSans-Bold.ttf`, 'c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a'],
   ['OFL.txt', `${fontBase}/LICENSE`, '0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb'],
 ];
+async function prepareKosit() {
+  try { await verifyKosit(out); return; } catch { /* Install only this missing rule bundle, preserving the JRE. */ }
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'helferlein-kosit-prepare-'));
+  try {
+    const jarPath = path.join(temporary, 'validator.jar');
+    const zipPath = path.join(temporary, 'configuration.zip');
+    async function cachedOrDownload(cachePath, pin, destination) {
+      try {
+        const bytes = await fs.readFile(cachePath);
+        if (sha(bytes) !== pin.sha256) throw new Error('Untrusted cache');
+        await fs.writeFile(destination, bytes);
+      } catch { await download(pin.url, pin.sha256, destination); }
+    }
+    await cachedOrDownload('/tmp/einvoice-kosit.jar', kositPins.jar, jarPath);
+    await cachedOrDownload('/tmp/einvoice-kosit-config.zip', kositPins.configuration, zipPath);
+    const configuration = path.join(temporary, 'configuration');
+    await fs.mkdir(configuration);
+    const entries = (await run(process.platform === 'win32' ? 'tar' : 'unzip', process.platform === 'win32' ? ['-tf', zipPath] : ['-Z1', zipPath], { maxBuffer: 4 * 1024 * 1024 })).stdout.split('\n').filter(Boolean);
+    if (entries.some(entry => entry.startsWith('/') || /^[A-Za-z]:/.test(entry) || entry.split(/[\\/]/).includes('..'))) throw new Error('Unsicherer KoSIT-Archivpfad.');
+    await run(process.platform === 'win32' ? 'tar' : 'unzip', process.platform === 'win32' ? ['-xf', zipPath, '-C', configuration] : ['-q', zipPath, '-d', configuration]);
+    const target = path.join(out, 'kosit');
+    await fs.mkdir(target, { recursive: true });
+    await fs.copyFile(jarPath, path.join(target, 'validator.jar'));
+    await fs.rm(path.join(target, 'configuration'), { recursive: true, force: true });
+    await fs.cp(configuration, path.join(target, 'configuration'), { recursive: true });
+    await verifyKosit(out);
+    await fs.writeFile(path.join(target, 'manifest.json'), JSON.stringify(kositPins, null, 2));
+    await fs.writeFile(path.join(target, 'THIRD-PARTY-NOTICES.txt'), 'KoSIT Validator and XRechnung configuration: Apache-2.0; see https://github.com/itplr-kosit/validator and https://github.com/itplr-kosit/validator-configuration-xrechnung. Bundled configuration includes upstream notices in configuration/README.md.\n');
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+}
 async function verify() {
   const manifest = JSON.parse(await fs.readFile(path.join(out, 'manifest.json'), 'utf8'));
   if (manifest.platform !== platform || manifest.arch !== arch || manifest.mustangVersion !== '2.26.0' || manifest.javaVersion !== javaVersion) throw new Error('E-Rechnungs-Laufzeit stimmt nicht mit der Build-Architektur überein.');
@@ -42,9 +74,12 @@ async function verify() {
   await fs.access(java);
   console.log(`E-Rechnung: ${platform}/${arch}, Mustang 2.26.0, Temurin ${javaVersion} und Fonts geprüft.`);
 }
-if (args.includes('--check')) { await verify(); process.exit(0); }
+if (args.includes('--check')) { await verify(); await verifyKosit(out); process.exit(0); }
 // Reuse an intact pinned runtime, but never silently use one for another architecture.
-try { await verify(); process.exit(0); } catch { /* prepare a fresh bundle */ }
+let runtimePresent = false;
+try { await verify(); runtimePresent = true; } catch { /* Prepare missing Java/Mustang bundle below. */ }
+if (runtimePresent) { await prepareKosit(); process.exit(0); }
+
 async function download(url, expected, file) {
   const response = await fetch(url, { signal: AbortSignal.timeout(180_000) });
   if (!response.ok) throw new Error(`Download fehlgeschlagen (${response.status}): ${url}`);
@@ -76,4 +111,5 @@ try {
   await fs.mkdir(path.dirname(out), { recursive: true });
   await fs.rm(out, { recursive: true, force: true }); await fs.cp(stage, out, { recursive: true });
   await verify();
+  await prepareKosit();
 } finally { await fs.rm(temp, { recursive: true, force: true }); }

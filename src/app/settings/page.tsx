@@ -34,7 +34,7 @@ export default function SettingsPage() {
     <Page>
       <PageHeader
         title={t(language, "settings.title")}
-        description={de ? "Ihre Absenderdaten und Vorgaben für Rechnungen. Jede Änderung wird sofort gespeichert." : "Your sender details and invoice defaults. Every change is saved immediately."}
+        description={de ? "Ihre Absenderdaten und Vorgaben für Rechnungen. Änderungen werden automatisch lokal gespeichert." : "Your sender details and invoice defaults. Changes are saved locally automatically."}
       />
 
       <FormPage>

@@ -47,7 +47,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
         variant="entity"
         title={variant.name || t(language, "templates.new")}
         initials={initialsOf(variant.name) || "V"}
-        description={de ? `Variante der Vorlage ${variant.baseTemplateId}. Jede Änderung wird sofort gespeichert.` : `Variant of the ${variant.baseTemplateId} template. Every change is saved immediately.`}
+        description={de ? `Variante der Vorlage ${variant.baseTemplateId}. Änderungen werden automatisch lokal gespeichert.` : `Variant of the ${variant.baseTemplateId} template. Changes are saved locally automatically.`}
         actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Variante löschen …" : "Delete variant …"}</Button>}
       />
 

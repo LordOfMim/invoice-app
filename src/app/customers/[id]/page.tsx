@@ -43,7 +43,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
         variant="entity"
         title={customer.name || t(language, "customers.new")}
         initials={initialsOf(customer.name) || "K"}
-        description={de ? "Kundendaten werden beim Übernehmen in neue Rechnungen eingesetzt. Jede Änderung wird sofort gespeichert." : "Customer details are filled into new invoices. Every change is saved immediately."}
+        description={de ? "Kundendaten werden beim Übernehmen in neue Rechnungen eingesetzt. Änderungen werden automatisch lokal gespeichert." : "Customer details are filled into new invoices. Changes are saved locally automatically."}
         actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Kunde löschen …" : "Delete customer …"}</Button>}
       />
 

@@ -11,9 +11,9 @@ import { EmptyState, Page, PageHeader } from "@/components/ui/Layout";
 import { OverflowMenu } from "@/components/ui/Menu";
 import { DashedBadge, StatusPill } from "@/components/ui/Status";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { formatDay, invoiceStatus } from "@/components/invoiceStatus";
 import { t } from "@/lib/i18n";
-import { computeInvoiceBalance } from "@/lib/calc";
+import { createInvoiceDirectory } from "@/lib/invoiceDirectory";
+import { todayLocalISO } from "@/lib/date";
 import { formatMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { createInvoice, deleteInvoice, duplicateInvoiceById, togglePaid } from "@/lib/storage/store";
@@ -36,28 +36,9 @@ export default function InvoicesPage() {
   const [filterKey, setFilterKey] = useState<FilterKey>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const rows = useMemo(() => {
-    const all = data?.invoices ?? [];
-    const creditNotes = data?.creditNotes ?? [];
-    const creditNotesByInvoiceId = new Map<string, typeof creditNotes>();
-    for (const creditNote of creditNotes) {
-      const linked = creditNotesByInvoiceId.get(creditNote.linkedInvoiceId);
-      if (linked) linked.push(creditNote);
-      else creditNotesByInvoiceId.set(creditNote.linkedInvoiceId, [creditNote]);
-    }
-    return all.map((invoice) => {
-      const dateLabel = formatDay(invoice.invoiceDate, locale);
-      const balance = computeInvoiceBalance(invoice, creditNotesByInvoiceId.get(invoice.id) ?? []);
-      return {
-        invoice,
-        dateLabel,
-        dueLabel: formatDay(invoice.dueDate, locale),
-        balance,
-        status: invoiceStatus(invoice, balance, language),
-        searchText: `${invoice.invoiceNumber} ${invoice.recipient.name} ${invoice.invoiceDate} ${dateLabel}`.toLocaleLowerCase(locale),
-      };
-    });
-  }, [data?.invoices, data?.creditNotes, locale, language]);
+  const directory = useMemo(() => createInvoiceDirectory(), []);
+  const today = todayLocalISO();
+  const rows = useMemo(() => directory.rows(data?.invoices ?? [], data?.creditNotes ?? [], locale, language, today), [directory, data?.invoices, data?.creditNotes, locale, language, today]);
 
   type Row = (typeof rows)[number];
 

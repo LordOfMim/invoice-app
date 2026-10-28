@@ -1,0 +1,28 @@
+{
+  "capturedAt": "2026-10-28T10:46:46.161Z",
+  "runtime": "Isolated synthetic-only Chromium, current production build on Linux. Browser fallback; no native bridge mocked.",
+  "checks": [
+    {
+      "name": "four-explicit-actions-and-missing-fields-block-email",
+      "message": "Bitte diese Angaben prüfen. Ihre Eingaben bleiben erhalten.\n\nRechnungssteller: Straße und Hausnummer fehlt.\nRechnungssteller: Postleitzahl fehlt.\nRechnungssteller: Ort fehlt.\nRechnungssteller: Ländercode fehlt.\nRechnungssteller: elektronische Adresse fehlt (z. B. E-Mail).\nRechnungssteller: Schema der elektronischen Adresse fehlt (für E-Mail: EM).\nRechnungsempfänger: Name fehlt.\nRechnungsempfänger: Straße und Hausnummer fehlt.\nRechnungsempfänger: Postleitzahl fehlt.\nRechnungsempfänger: Ort fehlt.\nRechnungsempfänger: Ländercode fehlt.\nRechnungsempfänger: elektronische Adresse fehlt (z. B. E-Mail).\nRechnungsempfänger: Schema der elektronischen Adresse fehlt (für E-Mail: EM).\nRechnungssteller: Umsatzsteuer-ID oder Steuernummer fehlt.\nKäuferreferenz fehlt; bei Behörden die mitgeteilte Leitweg-ID eintragen.\nRechnungssteller: Kontaktperson fehlt für XRechnung.\nRechnungssteller: Kontakttelefon fehlt für XRechnung.\nRechnungssteller: Kontakt-E-Mail fehlt für XRechnung.\nRechnungsnummer fehlt.\nBankverbindung: IBAN fehlt."
+    },
+    {
+      "name": "backup-download-preserves-all-collections",
+      "invoices": 6
+    },
+    {
+      "name": "rejected-future-schema-import-leaves-primary-unchanged"
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "e-rechnung-aktuell.jpg",
+    "datensicherung-aktuell.jpg"
+  ],
+  "baseCommit": "860353884d81e8d86ea74cce5e38db4674ac37f1",
+  "sourceSha256": "ac7a7834ac243c2b9637106cf84471783dd90a13ed0d3ddc5d8d24337ddbc31a",
+  "screenshotSha256": {
+    "e-rechnung.jpg": "4eca308d0f40131f873b824167d6fd15804e711ae38403a5c8e7d967039c4d3c",
+    "datensicherung.jpg": "ab1cb482ac6d94555a744e38e53ecaf6c34a4feaefdcfe81b25638cec9bea73a"
+  }
+}

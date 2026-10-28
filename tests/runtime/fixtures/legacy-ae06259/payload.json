@@ -1,0 +1,318 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "schemaVersion": 1,
+    "language": "de",
+    "currency": "EUR",
+    "defaultTaxRate": 0.19,
+    "defaultSender": {
+      "name": "",
+      "address": "",
+      "contact": ""
+    },
+    "defaultFooterText": "",
+    "defaultTemplateId": "classic",
+    "defaultLayout": {
+      "showLogo": true,
+      "logoPosition": "left",
+      "logoSize": "medium",
+      "logoMaxHeight": 80,
+      "logoFitMode": "contain",
+      "showFooter": true,
+      "senderPosition": "left",
+      "recipientPosition": "right"
+    },
+    "pdfFilenamePattern": "Rechnung-{invoiceNumber}.pdf",
+    "defaultTexts": {
+      "documentTitle": "Rechnung",
+      "senderHeading": "Absender",
+      "recipientHeading": "Empfänger",
+      "invoiceNumberLabel": "Rechnungsnummer",
+      "invoiceDateLabel": "Rechnungsdatum",
+      "dueDateLabel": "Fällig am",
+      "itemsDescriptionLabel": "Beschreibung",
+      "itemsQuantityLabel": "Menge",
+      "itemsUnitPriceLabel": "Einzelpreis",
+      "itemsTaxRateLabel": "MwSt.",
+      "itemsLineTotalLabel": "Summe",
+      "subtotalLabel": "Zwischensumme",
+      "taxTotalLabel": "Steuer",
+      "totalLabel": "Gesamt",
+      "notesHeading": "Hinweise",
+      "footerHeading": ""
+    },
+    "backupEnabled": false,
+    "dashboardPeriod": "month",
+    "backgroundChoice": "auto",
+    "defaultInvoiceId": "stable-invoice",
+    "futureSetting": {
+      "x": 1
+    }
+  },
+  "invoices": [
+    {
+      "schemaVersion": 1,
+      "id": "stable-invoice",
+      "invoiceNumber": "",
+      "invoiceDate": "2026-10-28",
+      "dueDate": "2026-10-28",
+      "sender": {
+        "name": "",
+        "address": "",
+        "contact": "",
+        "futureParty": "keep?"
+      },
+      "recipient": {
+        "name": "",
+        "address": "",
+        "contact": ""
+      },
+      "lineItems": [
+        {
+          "id": "stable-line",
+          "type": "item",
+          "positionNumber": "",
+          "description": "",
+          "quantity": 0,
+          "unitPrice": 1.005,
+          "taxRate": 0.19,
+          "unit": "m² indiv.",
+          "futureLine": 9
+        }
+      ],
+      "notesText": "",
+      "footerText": "",
+      "footerLeftText": "",
+      "footerRightText": "",
+      "paid": true,
+      "payments": [
+        {
+          "id": "p-id",
+          "amount": 12.345,
+          "date": "2025-01-01",
+          "createdAt": "2025-01-01",
+          "reference": "x",
+          "futurePayment": 1
+        }
+      ],
+      "tagIds": [],
+      "currency": "EUR",
+      "attachments": [
+        {
+          "id": "attach-id",
+          "name": "x.pdf",
+          "type": "application/pdf",
+          "size": 1,
+          "dataUrl": "data:application/pdf;base64,AA==",
+          "createdAt": "2025-01-01"
+        }
+      ],
+      "creditNoteIds": [],
+      "texts": {
+        "documentTitle": "Rechnung",
+        "senderHeading": "Absender",
+        "recipientHeading": "Empfänger",
+        "invoiceNumberLabel": "Rechnungsnummer",
+        "invoiceDateLabel": "Rechnungsdatum",
+        "dueDateLabel": "Fällig am",
+        "itemsDescriptionLabel": "Beschreibung",
+        "itemsQuantityLabel": "Menge",
+        "itemsUnitPriceLabel": "Einzelpreis",
+        "itemsTaxRateLabel": "MwSt.",
+        "itemsLineTotalLabel": "Summe",
+        "subtotalLabel": "Zwischensumme",
+        "taxTotalLabel": "Steuer",
+        "totalLabel": "Gesamt",
+        "notesHeading": "Hinweise",
+        "footerHeading": ""
+      },
+      "layout": {
+        "templateId": "classic",
+        "showLogo": true,
+        "logoPosition": "left",
+        "logoSize": "medium",
+        "logoMaxHeight": 80,
+        "logoFitMode": "contain",
+        "showFooter": true,
+        "senderPosition": "left",
+        "recipientPosition": "right"
+      },
+      "logoDataUrl": "data:image/png;base64,AA==",
+      "createdAt": "2026-10-28T09:43:03.550Z",
+      "updatedAt": "2026-10-28T09:43:03.550Z",
+      "futureInvoice": {
+        "x": 1
+      }
+    }
+  ],
+  "customers": [
+    {
+      "id": "6558ae4d-aac9-4957-91aa-7d6db89cf32d",
+      "name": "",
+      "address": "",
+      "contact": "",
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "updatedAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "products": [
+    {
+      "id": "8484fd5c-c8ff-4f0f-bef5-54e3332853f6",
+      "name": "",
+      "description": "",
+      "unitPrice": 0,
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "updatedAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "tags": [
+    {
+      "id": "bb6d7b54-4813-41d3-9747-0460a814c8eb",
+      "name": "",
+      "color": "#3b82f6",
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "creditNotes": [
+    {
+      "schemaVersion": 1,
+      "id": "afa88008-470e-4560-8ef5-423b349d71e1",
+      "type": "gutschrift",
+      "creditNoteNumber": "",
+      "creditNoteDate": "2026-10-28",
+      "linkedInvoiceId": "stable-invoice",
+      "linkedInvoiceNumber": "",
+      "reason": "",
+      "amount": 0,
+      "sender": {
+        "name": "",
+        "address": "",
+        "contact": "",
+        "futureParty": "keep?"
+      },
+      "recipient": {
+        "name": "",
+        "address": "",
+        "contact": ""
+      },
+      "footerText": "",
+      "texts": {
+        "documentTitle": "Gutschrift",
+        "creditNoteNumberLabel": "Gutschriftnummer",
+        "creditNoteDateLabel": "Datum",
+        "linkedInvoiceLabel": "Zu Rechnung",
+        "reasonLabel": "Grund",
+        "amountLabel": "Betrag",
+        "footerHeading": "Hinweise"
+      },
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "updatedAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "recurringInvoices": [
+    {
+      "id": "b765b67e-640b-4914-aa11-6e380fc2c522",
+      "name": "",
+      "frequency": "monthly",
+      "nextRunDate": "2026-11-01",
+      "sender": {
+        "name": "",
+        "address": "",
+        "contact": ""
+      },
+      "recipient": {
+        "name": "",
+        "address": "",
+        "contact": ""
+      },
+      "lineItems": [
+        {
+          "id": "b7cbb13c-173a-4c86-bd33-80f4bb1439dc",
+          "type": "item",
+          "positionNumber": "",
+          "description": "",
+          "quantity": 0,
+          "unitPrice": 0,
+          "taxRate": 0.19,
+          "unit": "Sondermaß"
+        }
+      ],
+      "footerText": "",
+      "texts": {
+        "documentTitle": "Rechnung",
+        "senderHeading": "Absender",
+        "recipientHeading": "Empfänger",
+        "invoiceNumberLabel": "Rechnungsnummer",
+        "invoiceDateLabel": "Rechnungsdatum",
+        "dueDateLabel": "Fällig am",
+        "itemsDescriptionLabel": "Beschreibung",
+        "itemsQuantityLabel": "Menge",
+        "itemsUnitPriceLabel": "Einzelpreis",
+        "itemsTaxRateLabel": "MwSt.",
+        "itemsLineTotalLabel": "Summe",
+        "subtotalLabel": "Zwischensumme",
+        "taxTotalLabel": "Steuer",
+        "totalLabel": "Gesamt",
+        "notesHeading": "Hinweise",
+        "footerHeading": ""
+      },
+      "layout": {
+        "templateId": "classic",
+        "showLogo": true,
+        "logoPosition": "left",
+        "logoSize": "medium",
+        "logoMaxHeight": 80,
+        "logoFitMode": "contain",
+        "showFooter": true,
+        "senderPosition": "left",
+        "recipientPosition": "right"
+      },
+      "currency": "EUR",
+      "active": true,
+      "reminderDays": 7,
+      "autoGenerate": false,
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "updatedAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "templateVariants": [
+    {
+      "id": "a21ed7ec-be08-428e-a593-0a965f912c3f",
+      "name": "",
+      "baseTemplateId": "classic",
+      "customization": {
+        "fontSizeScale": 1,
+        "lineSpacing": 1.4,
+        "tablePadding": "normal",
+        "showTaxColumn": true,
+        "showQuantityColumn": true,
+        "showUnitPriceColumn": true,
+        "footerColumns": 1,
+        "headerStyle": "simple"
+      },
+      "createdAt": "2026-10-28T09:43:03.560Z",
+      "updatedAt": "2026-10-28T09:43:03.560Z",
+      "futureEntity": {
+        "x": 1
+      }
+    }
+  ],
+  "futureRoot": {
+    "x": 1
+  }
+}

@@ -293,7 +293,7 @@ const de = {
   "backup.description": "Speichern Sie eine Sicherung oder stellen Sie einen früheren Datenbestand wieder her.",
   "backup.downloadDescription": "Die Sicherung enthält Rechnungen, Kunden, Produkte, Einstellungen und Anhänge. Bewahren Sie die Datei sicher auf.",
   "backup.restoreDescription": "Wählen Sie eine zuvor gespeicherte Sicherung aus.",
-  "backup.replaceWarning": "Warnung: Dadurch werden alle aktuellen Daten ersetzt!",
+  "backup.replaceWarning": "Achtung: Dadurch werden alle aktuellen Daten ersetzt!",
   "backup.importSuccess": "Import erfolgreich. Seite wird neu geladen...",
   "backup.importError": "Import fehlgeschlagen. Bitte Dateiformat prüfen und erneut versuchen.",
   "backup.autoBackupElectron": "Auto-Backup (Electron)",

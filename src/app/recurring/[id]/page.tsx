@@ -73,7 +73,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
       />
 
       <FormPage>
-        <FormSection title={t(language, "recurring.settings")} description={de ? "Wann und wie oft eine neue Rechnung entsteht. Jede Änderung wird sofort gespeichert." : "When and how often a new invoice is created. Every change is saved immediately."}>
+        <FormSection title={t(language, "recurring.settings")} description={de ? "Wann und wie oft eine neue Rechnung entsteht. Änderungen werden automatisch lokal gespeichert." : "When and how often a new invoice is created. Changes are saved locally automatically."}>
           <Field label={t(language, "recurring.name")}>
             <Input value={recurring.name} onChange={(e) => save({ ...recurring, name: e.target.value })} placeholder={de ? "z. B. Monatliche Wartung, Kunde A" : "e.g. Monthly retainer, client A"} />
           </Field>

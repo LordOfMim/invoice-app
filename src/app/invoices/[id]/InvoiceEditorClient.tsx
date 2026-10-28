@@ -326,19 +326,14 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     setPreviewImmediate(true);
     try {
       await waitForInvoicePrintReady();
-      // Desktop compose includes the checked, fully rendered PDF.
-      if (window.electronAPI?.emailInvoiceWithPdf) {
-        const result = await window.electronAPI.emailInvoiceWithPdf({ to, subject: subjectText, body: bodyText, filename });
-        if (result?.ok) return;
-        setPdfError(true);
-        setPdfMessage(`${result?.error || "Die E-Mail mit PDF konnte nicht vorbereitet werden."} Der E-Mailentwurf wird ohne Anhang geöffnet. Bitte die PDF separat anhängen.`);
+      // This is explicitly the ordinary PDF; validated E-invoice attachments
+      // are prepared separately from the E-Rechnung area.
+      if (!window.electronAPI?.emailInvoiceWithPdf) {
+        throw new Error("Ein E-Mailentwurf mit normaler PDF ist in der installierten Desktop-App verfügbar.");
       }
-      // Browser mailto cannot attach files.
-      const subject = encodeURIComponent(subjectText);
-      const body = encodeURIComponent(bodyText);
-      window.location.href = to
-        ? `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`
-        : `mailto:?subject=${subject}&body=${body}`;
+      const result = await window.electronAPI.emailInvoiceWithPdf({ to, subject: subjectText, body: bodyText, filename });
+      if (!result?.ok) throw new Error(result?.error || "Der E-Mailentwurf mit normaler PDF konnte nicht vorbereitet werden.");
+      setPdfMessage("E-Mailentwurf mit normaler PDF vorbereitet. Bitte im E-Mailprogramm prüfen und selbst senden.");
     } catch (error) {
       setPdfError(true);
       setPdfMessage(error instanceof Error ? error.message : "Die E-Mail mit PDF konnte nicht vorbereitet werden.");
@@ -399,7 +394,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
           </span>
         )}
         description={description}
-        meta={[de ? "Jede Änderung wird sofort gespeichert." : "Every change is saved immediately."]}
+        meta={[de ? "Änderungen werden automatisch lokal gespeichert." : "Changes are saved locally automatically."]}
         actions={(
           <>
             <Button variant="primary" loading={pdfBusy} onClick={onPrint}>{pdfBusy ? (de ? "PDF wird erstellt …" : "Creating PDF …") : (de ? "PDF speichern" : "Save PDF")}</Button>
@@ -408,7 +403,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               label={de ? "Weitere Aktionen" : "More actions"}
               trigger={de ? "Weitere Aktionen" : "More actions"}
               items={[
-                { label: t(language, "actions.email"), onSelect: () => { void handleEmailInvoice(); } },
+                { label: de ? "Normale PDF per E-Mail vorbereiten" : "Prepare email with ordinary PDF", onSelect: () => { void handleEmailInvoice(); } },
                 !balance.isFullyPaid && { label: t(language, "actions.addPayment"), onSelect: () => selectTab("payments", PAYMENT_AMOUNT_ID) },
                 {
                   label: t(language, "actions.duplicate"),

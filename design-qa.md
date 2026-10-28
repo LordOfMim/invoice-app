@@ -4,7 +4,9 @@ Stand: 28.10.2026. Folgeauftrag: linke Navigation, Eingaben und Live-Vorschau ne
 
 ## Aktueller Prüfstatus
 
-Implementierung, Funktionsprüfung und die unabhängige visuelle Claude-Abnahme sind abgeschlossen. **Claude Opus 5.5 im vorhandenen Team-Abo: ACCEPTED (visual/static, qualified).** Der Reviewer prüfte die korrigierten aktuellen Bilder und den Quellcode nach; es bestehen keine weiteren erforderlichen Befunde für diese Oberflächeniteration. Dies ist keine Freigabe einer produktiven Mac-Installation.
+Die folgenden Abschnitte dokumentieren die bereits abgeschlossene Oberflächeniteration bis `8603538`. Die anschließende Speicher-/Migration-/E-Rechnungsprüfung vom 28.10.2026 wird durch Codex durchgeführt; nach dem Nutzerwiderruf wurde Claude nicht mehr beauftragt. Neue Nachweise stehen in [offline-performance.md](docs/offline-performance.md), [macOS-upgrade.md](docs/macOS-upgrade.md) und [einvoice.md](docs/einvoice.md). Die ältere Claude-Abnahme erstreckt sich nicht auf diese neuen Laufzeitänderungen.
+
+Implementierung, Funktionsprüfung und die unabhängige visuelle Claude-Abnahme der vorherigen Oberfläche sind abgeschlossen. **Claude Opus 5.5 im vorhandenen Team-Abo: ACCEPTED (visual/static, qualified).** Der Reviewer prüfte die korrigierten damaligen Bilder und den Quellcode nach; es bestanden keine weiteren erforderlichen Befunde für diese Oberflächeniteration. Dies ist keine Freigabe einer produktiven Mac-Installation.
 
 Die Bilder unter `docs/screenshots/` sind neue Aufnahmen des aktuellen Produktionsbuilds vom 28.10.2026. Nach dem Ausfall der eingebetteten Screenshot-Funktion genehmigte der Nutzer ausdrücklich einen separaten lokalen Playwright-Browser. Verwendet wurden System-Chromium unter Linux, ein neuer nichtpersistenter BrowserContext und ausschließlich künstliche Testdaten; weder bestehende Browserprofile noch echte Mac-Daten wurden geöffnet. Es gab keine CSS-/DOM-Overrides oder nachgestellte Oberflächen. Mac-Systemschrift, native Fensterleiste und das vom Betriebssystem formatierte Datum sind damit nicht bildlich nachgewiesen.
 
@@ -49,3 +51,11 @@ Alle neun PDFs umfassen sechs A4-Seiten. Sämtliche 18 Mengenpositionen plus zwe
 - Gatekeeper, Signierung/Notarisierung und Upgrade mit einer Kopie des tatsächlichen Datenordners bleiben vor produktiver Installation erforderlich. Keine vollständige Barrierefreiheit oder sichere Produktionsmigration auf dem Zielgerät wird behauptet. Die tatsächlichen Daten des installierten Macs wurden nicht verändert.
 
 final result: functional and Chromium print checks passed; independent Claude visual/static acceptance passed (qualified); physical Mac and release acceptance pending
+
+## Anschließende Codex-Prüfung: lokaler Speicher und E-Rechnungsübergabe
+
+Der aktuelle Produktionsbuild wurde erneut mit einem getrennten, ausschließlich synthetisch befüllten Chromium-Kontext geprüft. Die [E-Rechnungsansicht](docs/screenshots/e-rechnung.jpg) enthält vier eindeutig beschriftete Aktionen: ZUGFeRD-PDF beziehungsweise XRechnung-XML speichern oder als E-Mailentwurf vorbereiten. Fehlende Pflichtangaben blockieren die Ausgabe und verändern die vorhandene Rechnung nicht. Die [Datensicherung](docs/screenshots/datensicherung.jpg) lädt eine vollständige JSON-Sicherung aller sieben Sammlungen; ein nicht unterstütztes Schema wird ohne Änderung des ursprünglichen Browserbestands abgewiesen. Keine JavaScript-Ausnahme. Herkunft und Bildprüfsummen stehen im separaten [Aufnahmemanifest](docs/screenshots/offline-audit-manifest.json).
+
+Diese zwei Bilder zeigen den Browser-Fallback. Die ausschließlich native Liste lokaler Wiederherstellungspunkte ist darin nicht dargestellt und wird nicht durch diese Bilder als visuell geprüft behauptet. Echte Worker-/Verschlüsselungs-/Close-IPC-Prüfungen sowie Speicher- und Skalierungsgrenzen stehen im [Speicherprüfbericht](docs/offline-performance.md). E-Rechnungsdateien bestehen die aktuelle Offline-Prüfung vor jeder Übergabe; SHA256-/MIME-/IPC-Tests prüfen die unveränderten Bytes bei Speicherung und Entwurf. Es wurde keine echte E-Mail versendet und kein Mac-Datenordner geöffnet.
+
+Codex prüfte den finalen Quellstand und die beiden neuen Aufnahmen; Claude wurde für diese Erweiterung nicht mehr eingesetzt. Der letzte Gesamtcheck besteht Typprüfung, ESLint und 124 Tests ohne Überspringen sowie Produktionsbuild und natives Linux-Paket einschließlich eigener Electron-/Java-/KoSIT-Ressourcen.
