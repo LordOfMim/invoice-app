@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -98,6 +99,7 @@ function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow choosing the same file again after removing it
     if (!file) return;
 
     const reader = new FileReader();
@@ -113,6 +115,9 @@ function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
   };
 
   const handlePrint = () => {
+    if (!isEditing) return window.print();
+    // Form fields must not end up on paper: show the document first, then print.
+    flushSync(() => setIsEditing(false));
     window.print();
   };
 
@@ -210,19 +215,18 @@ function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
               {/* Title */}
               <div className="mb-6">
                 <h2 className="text-lg font-semibold">
-                  Übereistimmungs / Fachunternehmererklärung
+                  Übereinstimmungs- / Fachunternehmererklärung
                 </h2>
               </div>
 
               {/* Body */}
               <div className="mb-8 space-y-4">
-                <p>Sehr geehrte Damen und Herren</p>
+                <p>Sehr geehrte Damen und Herren,</p>
                 <p>
                   Die von uns ausgeführten Arbeiten an den oben genannten Bauvorhaben wurden
                   nach den anerkannten Regeln der Technik, sowie nach den DIN-Normen und
                   Herstellervorschrift fachgerecht eingebaut.
                 </p>
-                <p>Siehe Anhang Datenblätter</p>
               </div>
 
               {/* Signature area - grows to push content down */}

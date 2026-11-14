@@ -128,7 +128,7 @@ export function PaymentsTab({
                   <div className="min-w-0">
                     <div className="font-sans text-lg font-semibold tracking-snug text-ink tabular-nums">{value}</div>
                     <div className="font-sans text-base tracking-snug text-ink-muted">
-                      {when} · {(payment.method && methodLabel[payment.method]) || payment.method}{payment.reference ? ` · ${payment.reference}` : ""}
+                      {when} · {payment.method === "manual_paid" ? (de ? "Als bezahlt markiert" : "Marked as paid") : <>{(payment.method && methodLabel[payment.method]) || payment.method}{payment.reference ? ` · ${payment.reference}` : ""}</>}
                     </div>
                     {payment.notes && <div className="font-sans text-base tracking-snug text-ink-muted">{payment.notes}</div>}
                   </div>

@@ -57,7 +57,7 @@ const dashboardLabels: Record<Language, {
     unnamedRecurring: "Unbenannte wiederkehrende Rechnung",
     unnamedCustomer: "Unbenannter Kunde",
     remaining: "offen",
-    daysOverdue: (days) => `${days} Tage überfällig`,
+    daysOverdue: (days) => `${days} ${days === 1 ? "Tag" : "Tage"} überfällig`,
     next: "Nächste",
     noRevenue: "Noch keine Umsätze",
     noRevenueDescription: "Sobald Zahlungen erfasst werden, erscheinen sie hier.",
@@ -397,7 +397,7 @@ export default function DashboardPage() {
               {stats.topCustomers.map((customer) => (
                 <CardZone key={customer.key} padding="sm" className="flex items-center justify-between gap-4">
                   <span className="min-w-0">
-                    <span className="block truncate font-sans text-lg font-semibold tracking-snug text-ink">{customer.name}</span>
+                    <span className="block truncate font-sans text-lg font-semibold tracking-snug text-ink">{customer.name || labels.unnamedCustomer}</span>
                     <span className="block font-sans text-base tracking-snug text-ink-muted">{labels.invoicesSuffix(customer.invoiceCount)}</span>
                   </span>
                   <span className="shrink-0 text-right font-sans tracking-snug tabular-nums">

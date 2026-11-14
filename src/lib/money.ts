@@ -8,13 +8,19 @@ export function formatMoney(amount: number, currency: string, locale: string): s
   const key = `${locale}:${currency}`;
   let formatter = formatters.get(key);
   if (!formatter) {
-    formatter = new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-      currencyDisplay: "symbol",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    try {
+      formatter = new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency,
+        currencyDisplay: "symbol",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    } catch {
+      // A half-typed or unknown currency code must not take every money-rendering page down.
+      const plain = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return `${plain.format(amount)} ${currency}`.trimEnd();
+    }
     if (formatters.size >= 32) formatters.delete(formatters.keys().next().value!);
     formatters.set(key, formatter);
   }

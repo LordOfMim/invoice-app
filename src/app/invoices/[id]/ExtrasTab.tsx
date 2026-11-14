@@ -105,7 +105,7 @@ export function ExtrasTab({
     <FormPage>
       <FormSection id="layout" title={de ? "Vorlage und Logo" : "Template and logo"} description={de ? "So sieht das Dokument aus. Die Änderung ist sofort in der Vorschau zu sehen." : "How the document looks. Changes show in the preview right away."}>
         <Field label={t(language, "settings.defaultTemplate")}>
-          <Select value={invoice.layout.templateId} onChange={(e) => setLayout({ templateId: e.target.value as InvoiceTemplateId, templateVariantId: undefined })}>
+          <Select value={invoice.layout.templateId} onChange={(e) => setLayout({ templateId: e.target.value as InvoiceTemplateId, templateVariantId: undefined, customization: undefined })}>
             <option value="classic">Classic</option>
             <option value="modern">Modern</option>
             <option value="minimal">Minimal</option>
@@ -166,6 +166,7 @@ export function ExtrasTab({
             accept="image/*"
             onChange={(e) => {
               const file = e.target.files?.[0];
+              e.target.value = ""; // allow choosing the same file again after removing it
               if (!file) return;
               const reader = new FileReader();
               reader.onload = () => {

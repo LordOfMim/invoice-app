@@ -38,7 +38,8 @@ export function daysBetweenDateOnly(from: string, to: string): number {
   const toDate = parseDateOnly(to);
   if (!fromDate || !toDate) return 0;
   const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.floor((toDate.getTime() - fromDate.getTime()) / msPerDay);
+  // Local midnights are 23 or 25 hours apart across a clock change; round, don't floor.
+  return Math.round((toDate.getTime() - fromDate.getTime()) / msPerDay);
 }
 
 export function addMonthsClamped(dateOnly: string, months: number): string {

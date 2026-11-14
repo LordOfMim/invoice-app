@@ -21,6 +21,7 @@ function fixture(http, timers = { setTimeout, clearTimeout }) {
     }
     isDestroyed() { return this.destroyed; }
     getBounds() { return { width: 1400, height: 900 }; }
+    getNormalBounds() { return { width: 1400, height: 900 }; }
     loadFile(file) { this.files.push(file); return Promise.resolve(); }
     loadURL(url) { this.urls.push(url); return this.urlResult ?? Promise.resolve(); }
     show() { this.shows++; }

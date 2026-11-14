@@ -146,7 +146,7 @@ export default function InvoicesPage() {
                     if (dup) window.location.assign(`/invoices/${dup.id}`);
                   },
                 },
-                !isDraft && row.balance.isFullyPaid && { label: t(language, "actions.markUnpaid"), onSelect: () => adapter && togglePaid(adapter, row.invoice.id) },
+                !isDraft && row.balance.isFullyPaid && (row.invoice.paid || (row.invoice.payments ?? []).some((payment) => payment.method === "manual_paid")) && { label: t(language, "actions.markUnpaid"), onSelect: () => adapter && togglePaid(adapter, row.invoice.id) },
                 { kind: "separator" },
                 { label: de ? "Rechnung löschen …" : "Delete invoice …", tone: "danger", onSelect: () => setDeleteConfirm(row.invoice.id) },
               ]}

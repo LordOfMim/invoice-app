@@ -1004,7 +1004,7 @@ export function generateInvoiceFromRecurring(
   };
 
   // Calculate next run date
-  const nextRunDate = calculateNextRunDate(recurring.nextRunDate, recurring.frequency);
+  const nextRunDate = calculateNextRunDate(scheduledDate, recurring.frequency);
   
   // Update recurring invoice
   const updatedRecurring: RecurringInvoice = {
@@ -1272,7 +1272,8 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
 
     totalBilled += effectiveTotal;
     totalPaid += Math.min(paidAmount, effectiveTotal);
-    statusCounts[balance.status]++;
+    // A blank, unnumbered draft has a zero balance but is not a paid invoice (see invoiceStatus).
+    if (inv.invoiceNumber || balance.invoiceTotal !== 0) statusCounts[balance.status]++;
 
     if (invoiceMonth === currentMonth) {
       issuedThisMonthCount++;
@@ -1315,7 +1316,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     }
 
     const customerKey = inv.customerId || inv.recipient.name.trim().toLowerCase() || inv.recipient.name || inv.id;
-    const customerName = inv.recipient.name.trim() || "Unnamed customer";
+    const customerName = inv.recipient.name.trim();
     const existingCustomer = customers.get(customerKey);
     if (existingCustomer) {
       existingCustomer.invoiceCount++;

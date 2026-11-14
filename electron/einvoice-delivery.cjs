@@ -34,7 +34,7 @@ function buildEInvoiceEml({ to, subject, body, filename, mimeType, bytes }) {
   const base64 = value => Buffer.from(value).toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '';
   const encodedName = encodeURIComponent(filename).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
   return [
-    'MIME-Version: 1.0', `To: ${header(to)}`, `Subject: ${encodedHeader(subject)}`,
+    'MIME-Version: 1.0', 'X-Unsent: 1', `To: ${header(to)}`, `Subject: ${encodedHeader(subject)}`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
     `--${boundary}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', base64(String(body ?? '')), '',
     `--${boundary}`, `Content-Type: ${mimeType}`, 'Content-Transfer-Encoding: base64',

@@ -113,6 +113,7 @@ export default function SettingsPage() {
               accept="image/*"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                e.target.value = ""; // allow choosing the same file again after removing it
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = () => {

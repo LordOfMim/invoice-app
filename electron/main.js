@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu, screen } = require('electron');
 const path = require('path');
 const { spawn, execFile, fork } = require('child_process');
 const http = require('http');
@@ -42,6 +42,7 @@ function buildEmlWithAttachment({ to, subject, body, attachmentFilename, attachm
   return [
     `To: ${safeTo}`,
     `Subject: ${encodeRfc2047(safeSubject)}`,
+    `X-Unsent: 1`, // opens as an editable draft in Outlook instead of a received message
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
     "",
@@ -145,7 +146,11 @@ function backupStoreBeforeUpgrade(verifySnapshot) {
       fs.linkSync(temporary, backupPath);
       publishedByUs = true;
     } catch (error) {
-      if (error.code !== 'EEXIST' || !existingBackup()) throw error;
+      if (['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS', 'EMLINK'].includes(error.code)) {
+        // No hard links on this filesystem (exFAT, some network shares): exclusive copy instead.
+        fs.copyFileSync(temporary, backupPath, fs.constants.COPYFILE_EXCL);
+        publishedByUs = true;
+      } else if (error.code !== 'EEXIST' || !existingBackup()) throw error;
     }
     if (publishedByUs && !fs.readFileSync(storePath).equals(fs.readFileSync(backupPath))) throw new Error('Die Upgrade-Sicherung stimmt nicht mit dem Original überein.');
     syncDirectory(directory);
@@ -204,7 +209,23 @@ async function ensureStorageActor() {
 
 let mainWindow;
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+// Saved geometry is optional: ignore anything malformed, and drop a position that
+// no connected display covers (e.g. the app was last closed on an unplugged monitor).
+function restorableBounds(saved) {
+  const fallback = { width: 1400, height: 900 };
+  if (!saved || typeof saved !== 'object') return fallback;
+  const finite = value => typeof value === 'number' && Number.isFinite(value);
+  if (!finite(saved.width) || !finite(saved.height) || saved.width < 200 || saved.height < 200) return fallback;
+  const size = { width: Math.round(saved.width), height: Math.round(saved.height) };
+  if (!finite(saved.x) || !finite(saved.y)) return size;
+  const visible = (screen?.getAllDisplays?.() ?? []).some(({ workArea }) =>
+    saved.x < workArea.x + workArea.width - 100 && saved.x + size.width > workArea.x + 100 &&
+    saved.y < workArea.y + workArea.height - 100 && saved.y >= workArea.y - 20);
+  return visible ? { ...size, x: Math.round(saved.x), y: Math.round(saved.y) } : size;
+}
+
+// An installed app must never trust a stray NODE_ENV and attach to whatever listens on port 3000.
+const isDev = !app.isPackaged;
 const HOST = '127.0.0.1';
 let appPort = isDev ? 3000 : null;
 let appOrigin = `http://${HOST}:${appPort ?? 0}`;
@@ -305,7 +326,7 @@ function findAvailablePort(host) {
 
 async function startNextServer(signal) {
   if (isDev) return;
-  if (nextServer && nextServer.exitCode === null) return waitForServer(appOrigin, 90000, { signal }); // Reuse and check readiness on macOS
+  if (nextServer && nextServer.exitCode === null && nextServer.signalCode === null) return waitForServer(appOrigin, 90000, { signal }); // Reuse and check readiness on macOS
 
   // In packaged builds, prefer Electron's embedded Node mode so the app
   // does not depend on an external Node.js installation.
@@ -418,7 +439,7 @@ async function createWindowInternal() {
   }
 
   const previousBounds = await store.get('windowBounds');
-  const bounds = previousBounds && typeof previousBounds === 'object' ? previousBounds : { width: 1400, height: 900 };
+  const bounds = restorableBounds(previousBounds);
 
   const startupController = new AbortController();
   const win = new BrowserWindow({
@@ -500,7 +521,7 @@ async function createWindowInternal() {
 
   win.on('close', () => {
     try {
-      if (store && !win.isDestroyed()) Promise.resolve(store.set('windowBounds', win.getBounds())).catch(error => log('Could not save window bounds:', String(error)));
+      if (store && !win.isDestroyed()) Promise.resolve(store.set('windowBounds', win.getNormalBounds())).catch(error => log('Could not save window bounds:', String(error)));
     } catch (error) {
       // Geometry is optional. A disk error must not interrupt beforeunload's data flush.
       log('Could not save window bounds:', String(error));
