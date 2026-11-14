@@ -1,50 +1,48 @@
-# invoice-app
+# Helferlein
 
-Local-first invoice creation and management app built with Next.js (intended to be Electron-packaged later).
+Lokale Rechnungsverwaltung für macOS, mit Kunden, Produkten, Vorlagen, Zahlungen, Gutschriften und JSON-Sicherungen. Daten bleiben auf dem Gerät; die installierte App und ihre E-Rechnungsexporte funktionieren offline.
 
-## Getting Started
+## Entwickeln und prüfen
 
-- Install dependencies: `npm install`
-- Run dev server: `npm run dev`
+Node.js ab 22.12 verwenden. Abhängigkeiten sind exakt gepinnt.
 
-Open:
-- Home: http://localhost:3000
-- Invoices: http://localhost:3000/invoices
-- Settings: http://localhost:3000/settings
+```sh
+npm ci
+npm run dev
+```
 
-## Scripts
+Die Webansicht öffnet die Rechnungsliste unter `http://localhost:3000`. Für die Desktop-App `npm run electron:dev` verwenden. Die geprüften E-Rechnungsexporte benötigen die einmalige Vorbereitung mit `npm run einvoice:prepare`; gewöhnlicher Druck/PDF bleibt davon unabhängig.
 
-- `npm run dev` – local dev server
-- `npm run build` – production build
-- `npm run start` – run production server (after build)
-- `npm run lint` – ESLint
+```sh
+npm run einvoice:prepare
+npm run check
+npm run build:app
+```
 
-## Electron (Desktop)
+`EINVOICE_REQUIRE_INTEGRATION=1` verhindert, dass ein fehlender lokaler Validator in Release-Prüfungen als übersprungener Test durchgeht. Die CI verwendet diese Einstellung und prüft XML sowie echte mehrseitige PDF/A-Dateien.
 
-This repo can be packaged as an Electron desktop app.
+## Desktop-Pakete
 
-- Dev (Electron + Next): `npm run electron:dev`
-- Build (Electron installers):
-	- Windows: `npm run electron:build:win`
-	- macOS: `npm run electron:build:mac`
-	- Linux: `npm run electron:build:linux`
+```sh
+npm run electron:build:mac -- --arm64 --publish never
+npm run electron:build:mac -- --x64 --publish never
+npm run electron:build:win -- --x64 --publish never
+npm run electron:build:linux -- --x64 --publish never
+```
 
-Note: The Electron build scripts run `scripts/prepare-electron-standalone.mjs` to copy Next.js assets into the standalone server output. If you run `electron-builder --mac` directly without the prepare step, the packaged app may load with missing CSS ("unstyled/scuffed").
+Intel und Apple Silicon werden getrennt gebaut. Der Build lädt die passende Java-Laufzeit, den Rechnungsvalidator und eingebettete Schriftdateien aus gepinnten offiziellen Quellen, prüft ihre SHA256-Prüfsummen und packt sie mit ein. Auf dem Rechner des Nutzers ist keine Java- oder Node-Installation nötig. Die Quellen unter `electron/einvoice-runtime` und `electron/einvoice-assets` sind generierte, ignorierte Buildressourcen.
 
-### macOS troubleshooting ("layout is scuffed")
+Die macOS-Mindestversion bleibt mit Electron 43 bei macOS 12. Ein neuer Electron-Hauptversionssprung muss gegen die tatsächlich eingesetzte macOS-Version geprüft werden. Abhängigkeiten und E-Rechnungsregeln brauchen regelmäßige Wartung; eine unbegrenzt unveränderte Installation kann nicht für zukünftige Betriebssysteme zugesichert werden.
 
-If the macOS installer/app looks unstyled:
+Die CI erzeugt getrennte Mac-DMGs und Windows-Installer als Prüfartefakte. Ein Build ohne Apple-Zertifikat ist nicht signiert oder notarisiert. Veröffentlichungen bleiben Entwürfe; vor der Freigabe sind Signierung, Gatekeeper und der Upgrade-Test auf echten Macs erforderlich.
 
-- Ensure you built with `npm run electron:build:mac` (not a bare `electron-builder --mac`).
-- Build with lockfile installs for consistent versions: `npm ci`.
-- Check the startup log shown in the loading screen and the persisted log at `~/Library/Application Support/Helferlein/main.log` for 404s to `/_next/static/*` or server startup errors.
+## Bestandsdaten und Upgrade
 
-## Data & Offline
+Anwendungs-ID, Produktname „Helferlein“, Speicherschlüssel und bisherige Verschlüsselung bleiben erhalten. Daten liegen auf macOS weiterhin unter `~/Library/Application Support/Helferlein`. Das neue optionale E-Rechnungsmodell erfordert keine Umwandlung alter Rechnungen. Beim ersten Start einer neuen Version sichert Helferlein die vorhandene verschlüsselte Datei zusätzlich unverändert. Vor dem Installationswechsel trotzdem den vollständigen Datenordner kopieren und eine JSON-Sicherung aus der alten App exportieren.
 
-- Data is stored locally in the browser via `localStorage` (no backend).
-- Settings + invoices persist across restarts.
-- The storage layer is intentionally isolated so it can be swapped for filesystem/SQLite when moving to Electron.
+Eine vorhandene gültige Desktop-Sicherung ist immer maßgeblich, auch wenn sie bewusst leer ist. Ungültige Daten werden nicht durch einen leeren Bestand ersetzt. Vor einem JSON-Import wird der bisherige Stand zusätzlich gesichert. Bei nicht lesbaren Daten bietet die Oberfläche Originalexport und Wiederherstellung an. Alte browserbasierte Daten eines anderen historischen localhost-Ports müssen aus der alten App als JSON exportiert werden.
 
-## Requirements
-
-See [REQUIREMENTS.md](REQUIREMENTS.md).
+- [Upgrade- und Mac-Prüfung](docs/macOS-upgrade.md)
+- [E-Rechnungen, unterstützte Fälle und technische Prüfung](docs/einvoice.md)
+- [Umsetzung, Prüfstand und Freigabe](docs/modernization.md)
+- [Bisherige Produktanforderungen](REQUIREMENTS.md)

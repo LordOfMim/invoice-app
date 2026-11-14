@@ -8,8 +8,15 @@ declare global {
       store: {
         get: (key: string) => Promise<string | null>;
         set: (key: string, value: string) => Promise<boolean>;
+        onStatus?: (callback: (status: "saving" | "saved" | "error") => void) => () => void;
+        getCached?: (key: string) => string | null;
+        setCached?: (key: string, value: string) => boolean;
         getSync?: (key: string) => string | null;
         setSync?: (key: string, value: string) => boolean;
+        applyPatches?: (patches: import("./patches").DataPatch[]) => boolean;
+        flush?: () => Promise<boolean>;
+        listRecoveries?: () => Promise<Array<{ id: string; label: string; createdAt: string; size: number; kind: "upgrade" | "last-good" | "recovery" | "automatic" }>>;
+        getRecovery?: (id: string) => Promise<string>;
         delete: (key: string) => Promise<boolean>;
         clear: () => Promise<boolean>;
       };

@@ -1,66 +1,29 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Field";
+import { Input, SearchInput } from "@/components/ui/Input";
+import { FilterBar, FilterControl } from "@/components/ui/FormLayout";
+import { Card, CardZone, EmptyState, Page, PageHeader } from "@/components/ui/Layout";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { cn } from "@/components/platform/lib/cn";
 import { t } from "@/lib/i18n";
+import type { Tag } from "@/lib/domain";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { createTag, deleteTag, upsertTag } from "@/lib/storage/store";
-import type { Tag } from "@/lib/domain";
-import { Surface, PageHeader, Stack, Section } from "@/components/ui/Surface";
-import { EmptyState } from "@/components/ui/DataDisplay";
-import { ConfirmDialog } from "@/components/ui/Dialog";
 
-const PRESET_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e",
-  "#14b8a6", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
-  "#a855f7", "#d946ef", "#ec4899", "#f43f5e",
+/* Stored tag colours (user data); not UI tokens. Kept exactly as before. */
+const PRESET_COLORS: Array<[string, string]> = [
+  ["#ef4444", "Rot"], ["#f97316", "Orange"], ["#f59e0b", "Bernstein"], ["#84cc16", "Limette"], ["#22c55e", "Grün"],
+  ["#14b8a6", "Petrol"], ["#06b6d4", "Cyan"], ["#3b82f6", "Blau"], ["#6366f1", "Indigo"], ["#8b5cf6", "Violett"],
+  ["#a855f7", "Lila"], ["#d946ef", "Fuchsia"], ["#ec4899", "Pink"], ["#f43f5e", "Rosé"],
 ];
-
-function TagEditor({ tag, onSave, onDelete, namePlaceholder }: { 
-  tag: Tag; 
-  onSave: (tag: Tag) => void;
-  onDelete: () => void;
-  namePlaceholder: string;
-}) {
-  return (
-    <Surface variant="solid" padding="md" className="flex flex-wrap items-center gap-3">
-      <div
-        className="h-8 w-8 rounded-full shadow-sm"
-        style={{ backgroundColor: tag.color }}
-      />
-      
-      <Input
-        value={tag.name}
-        onChange={(e) => onSave({ ...tag, name: e.target.value })}
-        placeholder={namePlaceholder}
-        className="flex-1 min-w-[150px]"
-      />
-      
-      <div className="flex flex-wrap gap-1.5">
-        {PRESET_COLORS.map((color) => (
-          <button
-            key={color}
-            type="button"
-            onClick={() => onSave({ ...tag, color })}
-            className={`h-6 w-6 rounded-full transition-transform hover:scale-110 ${
-              tag.color === color ? "ring-2 ring-[var(--color-ink)] ring-offset-2" : ""
-            }`}
-            style={{ backgroundColor: color }}
-          />
-        ))}
-      </div>
-      
-      <Button size="sm" variant="danger" onClick={onDelete}>
-        ×
-      </Button>
-    </Surface>
-  );
-}
 
 export default function TagsPage() {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
+  const de = language === "de";
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; count: number } | null>(null);
 
@@ -68,145 +31,91 @@ export default function TagsPage() {
     const all = data?.tags ?? [];
     if (!search.trim()) return all;
     const q = search.toLowerCase();
-    return all.filter((t) => t.name.toLowerCase().includes(q));
+    return all.filter((tag) => tag.name.toLowerCase().includes(q));
   }, [data?.tags, search]);
 
-  // Count invoices per tag
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const inv of data?.invoices ?? []) {
-      for (const tagId of inv.tagIds) {
-        counts.set(tagId, (counts.get(tagId) || 0) + 1);
-      }
-    }
+    for (const inv of data?.invoices ?? []) for (const tagId of inv.tagIds) counts.set(tagId, (counts.get(tagId) || 0) + 1);
     return counts;
   }, [data?.invoices]);
 
-  const handleCreate = () => {
-    if (!adapter) return;
-    createTag(adapter);
-  };
-
-  const handleSave = (tag: Tag) => {
-    if (!adapter) return;
-    upsertTag(adapter, tag);
-  };
-
-  const handleDelete = (id: string) => {
-    if (!adapter) return;
-    const count = tagCounts.get(id) || 0;
-    setDeleteConfirm({ id, count });
-  };
+  const save = (tag: Tag) => adapter && upsertTag(adapter, tag);
+  const total = data?.tags.length ?? 0;
 
   return (
-    <main className="p-6 lg:p-8">
-      <div className="mx-auto max-w-(--content-max-width)">
-        <Stack gap="lg">
-          <PageHeader
-            title={t(language, "tags.title")}
-            description={t(language, "tags.description")}
-            actions={
-              <Button variant="primary" onClick={handleCreate}>
-                {t(language, "tags.new")}
-              </Button>
-            }
-          />
+    <Page>
+      <PageHeader
+        title={de ? "Schlagwörter" : t(language, "tags.title")}
+        description={de ? "Ordnen Sie Rechnungen mit farbigen Schlagwörtern. Zuweisen können Sie sie in der Rechnung unter „Gestaltung und mehr“." : "Organise invoices with coloured tags. Assign them in an invoice under “Layout and more”."}
+        actions={<Button variant="primary" onClick={() => adapter && createTag(adapter)}>{t(language, "tags.new")}</Button>}
+      />
 
-          <div>
-            <Input
-              type="search"
-              placeholder={t(language, "actions.search") + "..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            {tags.length === 0 ? (
-              <Surface variant="solid" padding="lg">
-                <EmptyState
-                  title={search ? t(language, "common.noResults") : t(language, "tags.empty")}
-                  description={search ? t(language, "common.tryDifferentSearch") : t(language, "common.createTags")}
-                  icon={
-                    <svg className="h-6 w-6 text-[var(--color-ink-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-                    </svg>
-                  }
-                  action={
-                    !search && (
-                      <Button variant="primary" onClick={handleCreate}>
-                        {t(language, "tags.new")}
-                      </Button>
-                    )
-                  }
-                />
-              </Surface>
-            ) : null}
-
-            {tags.map((tag) => (
-              <div key={tag.id} className="relative">
-                <TagEditor
-                  tag={tag}
-                  onSave={handleSave}
-                  onDelete={() => handleDelete(tag.id)}
-                  namePlaceholder={t(language, "tags.namePlaceholder")}
-                />
-                {tagCounts.get(tag.id) ? (
-                  <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-ink)] px-1.5 text-xs text-white">
-                    {tagCounts.get(tag.id)}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-
-          {/* Tag Usage Summary */}
-          {tags.length > 0 && (
-            <Section title={t(language, "tags.quickOverview")}>
-              <Surface variant="soft" padding="md">
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-white shadow-sm"
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      {tag.name || t(language, "common.unnamed")}
-                      <span className="rounded-full bg-white/20 px-1.5 text-xs">
-                        {tagCounts.get(tag.id) || 0}
-                      </span>
+      {total === 0 && data ? (
+        <EmptyState title={t(language, "tags.empty")} description={t(language, "common.createTags")} action={<Button onClick={() => adapter && createTag(adapter)}>{t(language, "tags.new")}</Button>} />
+      ) : (
+        <section className="flex min-w-0 flex-col gap-4" aria-label={de ? "Verzeichnis" : "Directory"}>
+          <FilterBar label={de ? "Schlagwörter filtern" : "Filter tags"} aside={<span>{tags.length} {de ? "Schlagwörter" : "tags"}</span>}>
+            <FilterControl width="grow">
+              <Field label={de ? "Suchen" : "Search"}>
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={de ? "Name" : "Name"} />
+              </Field>
+            </FilterControl>
+            {search && <Button variant="quiet" onClick={() => setSearch("")}>{de ? "Zurücksetzen" : "Reset"}</Button>}
+          </FilterBar>
+          <Card>
+            {tags.length === 0 && <CardZone><p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.noResults")}</p></CardZone>}
+            {tags.map((tag) => {
+              const count = tagCounts.get(tag.id) || 0;
+              return (
+                <CardZone key={tag.id} className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                  <Field label={de ? "Name" : "Name"} className="min-w-0 lg:w-72">
+                    <Input value={tag.name} onChange={(e) => save({ ...tag, name: e.target.value })} placeholder={t(language, "tags.namePlaceholder")} />
+                  </Field>
+                  <Field label={de ? "Farbe" : "Colour"} className="min-w-0 flex-1">
+                    <div role="radiogroup" className="flex flex-wrap gap-1.5">
+                      {PRESET_COLORS.map(([color, name]) => (
+                        <button
+                          key={color}
+                          type="button"
+                          role="radio"
+                          aria-checked={tag.color === color}
+                          aria-label={name}
+                          title={name}
+                          onClick={() => save({ ...tag, color })}
+                          className={cn("size-8 rounded-pill border-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50", tag.color === color ? "border-ink" : "border-surface")}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </Surface>
-            </Section>
-          )}
-        </Stack>
-      </div>
+                  </Field>
+                  <div className="flex items-center justify-between gap-3 lg:flex-col lg:items-end">
+                    <span className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{count} {de ? (count === 1 ? "Rechnung" : "Rechnungen") : (count === 1 ? "invoice" : "invoices")}</span>
+                    <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" aria-label={`${t(language, "actions.delete")}: ${tag.name || t(language, "common.unnamed")}`} onClick={() => setDeleteConfirm({ id: tag.id, count })}>
+                      {t(language, "actions.delete")}
+                    </Button>
+                  </div>
+                </CardZone>
+              );
+            })}
+          </Card>
+        </section>
+      )}
 
       <ConfirmDialog
         open={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => {
-          if (adapter && deleteConfirm) {
-            deleteTag(adapter, deleteConfirm.id);
-          }
-        }}
+        onConfirm={() => { if (adapter && deleteConfirm) deleteTag(adapter, deleteConfirm.id); }}
+        returnFocusSelector="#inhalt"
         title={t(language, "tags.deleteTitle")}
-        description={
-          deleteConfirm?.count && deleteConfirm.count > 0
-            ? language === "de"
-              ? `Dieser Tag wird von ${deleteConfirm.count} Rechnung(en) verwendet. Möchtest du ihn wirklich löschen?`
-              : `This tag is used by ${deleteConfirm.count} invoice(s). Are you sure you want to delete it?`
-            : t(language, "tags.deleteDescription")
-        }
+        description={deleteConfirm?.count
+          ? de ? `Dieses Schlagwort wird von ${deleteConfirm.count} Rechnung(en) verwendet. Möchten Sie es wirklich löschen?` : `This tag is used by ${deleteConfirm.count} invoice(s). Are you sure you want to delete it?`
+          : t(language, "tags.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
         cancelLabel={t(language, "common.cancel")}
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
-    </main>
+    </Page>
   );
 }

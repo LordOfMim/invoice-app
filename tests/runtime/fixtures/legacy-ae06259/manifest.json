@@ -1,0 +1,14 @@
+{
+  "baseline": "ae06259",
+  "oldAppVersion": "1.0.0",
+  "oldMainSha256": "b2b723e85d0fed83562f31725395c77227c7d0b2a67c32e863e15187354ad2b2",
+  "payloadSha256": "bbf583542d6ec7cfdb33bbcd9d18b676a95f78f7b601cb4e792f0f3a7813ca1f",
+  "encryptedSha256": "ce1be265811a582868b637ef23107e3b6fbe5503765a64c675e3c4801dcb846e",
+  "encryptedBytes": 9585,
+  "dependencyVersions": {
+    "electron-store": "11.0.2",
+    "conf": "15.0.2",
+    "atomically": "2.1.0"
+  },
+  "method": "Actual historical initStore and exact-lock electron-store/Conf encryption code; only Electron app/ipc environment stubbed to disposable fixture directory; no mock Store or crypto; entirely synthetic records"
+}
