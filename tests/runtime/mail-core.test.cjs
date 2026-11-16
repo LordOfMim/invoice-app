@@ -1238,20 +1238,20 @@ test('withSignature appends the signature only when there is one', () => {
     let beats = 0;
     const heart = setInterval(() => { beats += 1; }, 5);
     const result = await html.convertHtml(big);
+    // Counted over the whole conversion (hundreds of ms), so a busy machine cannot starve the count.
+    assert.ok(beats >= 3, `the event loop kept running during the conversion (${beats} beats)`);
     assert.equal(result.skipped, '');
     assert.equal(result.text.split('\n\n').length, 17_000);
     assert.ok(result.text.startsWith('Hallo Welt, dies ist ein Absatz mit Link [https://x.example/y].'));
     assert.deepEqual(await html.convertHtml(''), { text: '', skipped: '' });
     assert.deepEqual(await html.convertHtml('<p>kurz</p>'), { text: 'kurz', skipped: '' });
 
-    // The same work with a time limit it cannot meet: ended, reported, and this thread was never held up.
-    beats = 0;
+    // The same work with a time limit it cannot meet: ended and reported.
     const started = Date.now();
     assert.deepEqual(await html.convertHtml(big, { timeoutMs: 15 }), { text: '', skipped: 'timeout' });
     const elapsed = Date.now() - started;
     clearInterval(heart);
     assert.ok(elapsed < 1000, `ended after ${elapsed} ms`);
-    assert.ok(beats >= 3, `the event loop kept running (${beats} beats in ${elapsed} ms)`);
     assert.equal(html.TIMEOUT_MS, 4000);
   });
 
