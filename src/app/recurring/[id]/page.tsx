@@ -68,7 +68,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
         description={`${t(language, "recurring.nextRun")}: ${formatDateOnly(recurring.nextRunDate, locale)}`}
         actions={<>
           <Button variant="primary" onClick={handleGenerate}>{de ? "Rechnung jetzt erstellen" : "Create invoice now"}</Button>
-          <Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Löschen …" : "Delete …"}</Button>
+          <Button variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => setShowDelete(true)}>{de ? "Löschen …" : "Delete …"}</Button>
         </>}
       />
 
@@ -85,14 +85,14 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
             </Select>
           </Field>
           <Field label={t(language, "recurring.nextRun")}>
-            <Input type="date" value={recurring.nextRunDate} onChange={(e) => save({ ...recurring, nextRunDate: e.target.value })} />
+            <Input type="date" value={recurring.nextRunDate} onChange={(e) => save({ ...recurring, nextRunDate: e.target.value, anchorDay: undefined /* a date chosen by hand becomes the new day of the month */ })} />
           </Field>
           <Field label={t(language, "recurring.reminder")} hint={t(language, "recurring.daysBeforeNextRun")}>
             <Input type="number" min="0" value={String(recurring.reminderDays)} onChange={(e) => save({ ...recurring, reminderDays: parseInt(e.target.value) || 0 })} />
           </Field>
           <div className="flex flex-col gap-1 @md:col-span-2">
             <Choice label={t(language, "recurring.active")} checked={recurring.active} onChange={(e) => save({ ...recurring, active: e.target.checked })} />
-            <Choice label={t(language, "recurring.autoGenerate")} checked={recurring.autoGenerate} onChange={(e) => save({ ...recurring, autoGenerate: e.target.checked })} />
+            <Choice label={t(language, "recurring.autoGenerate")} hint={t(language, "recurring.autoGenerateHint")} checked={recurring.autoGenerate} onChange={(e) => save({ ...recurring, autoGenerate: e.target.checked })} />
           </div>
         </FormSection>
 
@@ -140,7 +140,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
                     </Field>
                   </div>
                   <div className="shrink-0 pt-7">
-                    <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" aria-label={de ? `Position ${idx + 1} entfernen` : `Remove line ${idx + 1}`} onClick={() => save({ ...recurring, lineItems: recurring.lineItems.filter((x) => x.id !== li.id) })}>
+                    <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={de ? `Position ${idx + 1} entfernen` : `Remove line ${idx + 1}`} onClick={() => save({ ...recurring, lineItems: recurring.lineItems.filter((x) => x.id !== li.id) })}>
                       {t(language, "actions.remove")}
                     </Button>
                   </div>

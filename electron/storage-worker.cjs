@@ -211,8 +211,9 @@ async function command(message) {
         const previous = mirrorLoaded ? JSON.stringify(mirror) : config[DATA_KEY];
         if (typeof previous === 'string' && previous !== value) writeRecovery(`${RECOVERY_PREFIX}before-replacement:${sha(previous)}`, previous);
         mirror = candidate; mirrorLoaded = true;
-      } else if (key === AUX_KEY || key === 'windowBounds') {
+      } else if (key === AUX_KEY || key === 'windowBounds' || key === 'autoBackupFolder') {
         if (key === AUX_KEY && typeof value !== 'string') throw new Error('Ungültige Standardwerte.');
+        if (key === 'autoBackupFolder' && (typeof value !== 'string' || value.length > 4096)) throw new Error('Ungültiger Sicherungsordner.');
         if (config[DATA_KEY] !== undefined && !mirrorLoaded) snapshot(config[DATA_KEY]);
         config[key] = value;
       } else throw new Error('Nicht erlaubter Speicherschlüssel.');

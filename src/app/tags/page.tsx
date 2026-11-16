@@ -91,7 +91,7 @@ export default function TagsPage() {
                   </Field>
                   <div className="flex items-center justify-between gap-3 lg:flex-col lg:items-end">
                     <span className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{count} {de ? (count === 1 ? "Rechnung" : "Rechnungen") : (count === 1 ? "invoice" : "invoices")}</span>
-                    <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" aria-label={`${t(language, "actions.delete")}: ${tag.name || t(language, "common.unnamed")}`} onClick={() => setDeleteConfirm({ id: tag.id, count })}>
+                    <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={`${t(language, "actions.delete")}: ${tag.name || t(language, "common.unnamed")}`} onClick={() => setDeleteConfirm({ id: tag.id, count })}>
                       {t(language, "actions.delete")}
                     </Button>
                   </div>

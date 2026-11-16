@@ -8,10 +8,9 @@ import { HugeiconsIcon } from "./icon";
 /*
  * Source: platform + workspace overview — the recurring "Show all →" /
  * "All lines →" / "Open line →" link: 13px medium label + arrow that nudges
- * right on hover. Paper's #407FF2 normalized to color-link; the line-card
- * footer variant renders in ink. `direction="back"` mirrors it into the
+ * right on hover, in color-link; the `ink` tone renders in ink. `direction="back"` mirrors it into the
  * "← Show less" form (leading arrow, hover nudges left). `tone="accent"`
- * is the lines-directory card footer ("Line öffnen →", #5CABFF).
+ * now equals `link`: the blue base hue is too light for text.
  */
 export interface ArrowLinkProps
   extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
@@ -35,10 +34,10 @@ export function ArrowLink({
     <Comp
       data-slot="arrow-link"
       className={cn(
-        "group inline-flex shrink-0 items-center gap-1.5 rounded-sm font-sans text-base/4 font-medium tracking-snug outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        "group inline-flex shrink-0 items-center gap-1.5 rounded-sm font-sans text-base font-medium tracking-snug outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         tone === "link" && "text-link",
         tone === "ink" && "text-ink",
-        tone === "accent" && "text-accent-blue",
+        tone === "accent" && "text-link",
         className,
       )}
       {...props}

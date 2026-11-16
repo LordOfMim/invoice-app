@@ -1,291 +1,123 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { flushSync } from "react-dom";
+import { useDeferredValue, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/Textarea";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { DataTable, PrimaryCell, type DataTableColumn } from "@/components/ui/DataTable";
 import { Field } from "@/components/ui/Field";
-import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
-import { PrintStyles } from "@/components/PrintStyles";
+import { FilterBar, FilterControl } from "@/components/ui/FormLayout";
+import { SearchInput } from "@/components/ui/Input";
+import { EmptyState, Page, PageHeader, StatusNote } from "@/components/ui/Layout";
+import { OverflowMenu } from "@/components/ui/Menu";
+import { formatDay } from "@/components/invoiceStatus";
+import { loadDeclarationDefaults } from "@/lib/declarationDefaults";
+import { createDeclaration, senderLine } from "@/lib/documents";
+import type { ContractorDeclaration } from "@/lib/domain";
+import { addDeclaration, deleteDeclaration } from "@/lib/storage/store";
 import { usePersistedData } from "@/lib/storage/useStore";
-import type { StorageAdapter } from "@/lib/storage/types";
-import { STORAGE_KEY } from "@/lib/storage/keys";
 
-type FachunternehmerData = {
-  senderAddress: string;
-  recipientName: string;
-  recipientAddress: string;
-  kommission: string;
-  signatureName: string;
-  signatureImage: string | null;
-};
-
-const DEFAULT_DATA: FachunternehmerData = {
-  senderAddress: "Fa.Dembiany Schwirrammerweg 39 13129 Berlin",
-  recipientName: "Fa.Germerott\nInnenausbau Gmbh & Co KG",
-  recipientAddress: "Robert-Bosch-Strasse 3\n30989 Gehrden",
-  kommission: "90105 Berlin, Pohlstraße 40,",
-  signatureName: "Fa.Dembiany",
-  signatureImage: null,
-};
-
-function getTodayDate(): string {
-  const today = new Date();
-  return today.toLocaleDateString("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-export default function FachunternehmerPage() {
+/** All saved contractor declarations, newest first; each belongs to one construction project. */
+export default function DeclarationsPage() {
   const { adapter, data } = usePersistedData();
-  if (!adapter || !data) return <Page><PageHeader title="Fachunternehmererklärung" /><p role="status">Standardwerte werden geladen …</p></Page>;
-  return <FachunternehmerEditor adapter={adapter} />;
-}
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-function FachunternehmerEditor({ adapter }: { adapter: StorageAdapter }) {
-  const [data, setData] = useState<FachunternehmerData>(() => {
-    // Mount only after adoption completes. The adapter chooses native authority
-    // on desktop and localStorage in a browser, including intentional emptiness.
+  const all = data?.contractorDeclarations;
+  const rows = useMemo(() => {
+    const wanted = deferredQuery.trim().toLocaleLowerCase("de-DE");
+    return [...(all ?? [])]
+      .filter((entry) => !wanted || `${entry.kommission} ${entry.recipientName} ${entry.date} ${formatDay(entry.date, "de-DE")}`.toLocaleLowerCase("de-DE").includes(wanted))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  }, [all, deferredQuery]);
+
+  if (!adapter || !data) return <Page><PageHeader title="Fachunternehmererklärungen" /><p role="status">Erklärungen werden geladen …</p></Page>;
+
+  const invoiceNumbers = new Map(data.invoices.map((invoice) => [invoice.id, invoice.invoiceNumber]));
+
+  const open = (declaration: ContractorDeclaration) => window.location.assign(`/fachunternehmer/${declaration.id}`);
+  const createNew = () => {
+    const defaults = loadDeclarationDefaults(adapter);
+    // Without stored standard values the sender comes from the settings, so the first declaration is not blank.
+    const senderAddress = defaults.senderAddress || senderLine({ name: data.settings.defaultSender.name, address: data.settings.defaultSender.address });
+    open(addDeclaration(adapter, createDeclaration({ ...defaults, senderAddress, signatureName: defaults.signatureName || data.settings.defaultSender.name })));
+  };
+  const duplicate = (source: ContractorDeclaration) => {
+    const copy = createDeclaration(source);
+    open(addDeclaration(adapter, { ...copy, bodyText: source.bodyText, customerId: source.customerId }));
+  };
+
+  const columns: DataTableColumn<ContractorDeclaration>[] = [
     {
-      const stored = adapter.getItem("fachunternehmer-defaults");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          return { ...DEFAULT_DATA, ...parsed };
-        } catch {
-          // ignore
-        }
-      }
-    }
-    return DEFAULT_DATA;
-  });
-  const [currentDate] = useState(getTodayDate());
-  const [isEditing, setIsEditing] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "ok" | "info"; text: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+      key: "project",
+      header: "Bauvorhaben",
+      render: (row) => <PrimaryCell title={row.kommission || "Ohne Bauvorhaben"} href={`/fachunternehmer/${row.id}`} sub={row.invoiceId && invoiceNumbers.has(row.invoiceId) ? `zu Rechnung ${invoiceNumbers.get(row.invoiceId) || "ohne Nummer"}` : undefined} />,
+    },
+    { key: "recipient", header: "Empfänger", render: (row) => row.recipientName.trim() ? <span className="text-ink">{row.recipientName.split("\n")[0]}</span> : <span className="text-ink-muted">Noch kein Empfänger</span> },
+    { key: "date", header: "Datum", width: "8.5rem", render: (row) => <span className="tabular-nums">{formatDay(row.date, "de-DE")}</span> },
+    {
+      key: "actions",
+      header: "Aktionen",
+      hideHeader: true,
+      width: "5rem",
+      className: "text-right",
+      render: (row) => (
+        <OverflowMenu
+          label={`Weitere Aktionen für ${row.kommission || "Erklärung ohne Bauvorhaben"}`}
+          items={[
+            { kind: "link", label: "Öffnen", href: `/fachunternehmer/${row.id}` },
+            { label: "Für weiteres Bauvorhaben kopieren", onSelect: () => duplicate(row) },
+            { kind: "separator" },
+            { label: "Erklärung löschen …", tone: "danger", onSelect: () => setDeleteConfirm(row.id) },
+          ]}
+        />
+      ),
+    },
+  ];
 
-  const saveDefaults = () => {
-    if (!adapter) return;
-    try {
-      adapter.setItem("fachunternehmer-defaults", JSON.stringify(data));
-      setNotice({ tone: "ok", text: "Standardwerte gespeichert." });
-    } catch {
-      setNotice({ tone: "info", text: "Standardwerte konnten nicht gespeichert werden. Bitte die App geöffnet lassen und freien Speicher sowie Zugriffsrechte prüfen." });
-    }
-  };
-
-  const loadDefaults = () => {
-    if (!adapter) return;
-    const stored = adapter.getItem("fachunternehmer-defaults");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setData({ ...DEFAULT_DATA, ...parsed });
-        setNotice({ tone: "ok", text: "Standardwerte geladen." });
-      } catch {
-        setNotice({ tone: "info", text: "Keine gespeicherten Standardwerte gefunden." });
-      }
-    } else {
-      setNotice({ tone: "info", text: "Keine gespeicherten Standardwerte gefunden." });
-    }
-  };
-
-  const resetToDefaults = () => {
-    setData(DEFAULT_DATA);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow choosing the same file again after removing it
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setData((prev) => ({ ...prev, signatureImage: dataUrl }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeImage = () => {
-    setData((prev) => ({ ...prev, signatureImage: null }));
-  };
-
-  const handlePrint = () => {
-    if (!isEditing) return window.print();
-    // Form fields must not end up on paper: show the document first, then print.
-    flushSync(() => setIsEditing(false));
-    window.print();
-  };
-
-  const updateField = (field: keyof FachunternehmerData, value: string) => {
-    setData((prev) => ({ ...prev, [field]: value }));
-  };
-
+  const total = data.contractorDeclarations?.length ?? 0;
   return (
     <Page>
-      <PrintStyles />
       <PageHeader
-        title="Fachunternehmererklärung"
-        description="Übereinstimmungs- und Fachunternehmererklärung für ein Bauvorhaben ausfüllen und drucken. Die Angaben lassen sich als Standardwerte merken."
-        actions={<>
-          <Button variant="primary" onClick={handlePrint}>PDF / Drucken</Button>
-          <Button aria-pressed={isEditing} onClick={() => setIsEditing(!isEditing)}>{isEditing ? "Fertig, Vorschau zeigen" : "Angaben bearbeiten"}</Button>
-          <Button variant="ghost" onClick={saveDefaults}>Als Standard speichern</Button>
-          <Button variant="ghost" onClick={loadDefaults}>Standard laden</Button>
-          <Button variant="quiet" onClick={resetToDefaults}>Zurücksetzen</Button>
-        </>}
+        title="Fachunternehmererklärungen"
+        description="Übereinstimmungs- und Fachunternehmererklärungen je Bauvorhaben. Aus einer Rechnung heraus erstellt, sind Empfänger und Bauvorhaben schon ausgefüllt."
+        actions={<Button variant="primary" onClick={createNew}>Neue Erklärung</Button>}
       />
-      {notice && <StatusNote tone={notice.tone} className="no-print">{notice.text}</StatusNote>}
 
-      {/* Document: inner print layout unchanged; the screen frame is a ring (box-shadow), which print removes. */}
-      <div className="print-area">
-          <div className="invoice-paper mx-auto max-w-[210mm] rounded-card-sm bg-white p-10 ring-1 ring-line">
-            <div className="flex min-h-[270mm] flex-col text-sm leading-relaxed text-zinc-800">
-              {/* Sender */}
-              <div className="mb-8">
-                {isEditing ? (
-                  <Field label="Absender">
-                    <Input
-                      value={data.senderAddress}
-                      onChange={(e) => updateField("senderAddress", e.target.value)}
-                    />
-                  </Field>
-                ) : (
-                  <p className="text-xs text-zinc-500 underline underline-offset-2">
-                    {data.senderAddress}
-                  </p>
-                )}
-              </div>
+      {total === 0 ? (
+        <>
+          <EmptyState
+            title="Noch keine gespeicherten Erklärungen"
+            description="Legen Sie eine Erklärung an. Absender, Unterschrift und Text übernehmen spätere Erklärungen als Standard."
+            action={<Button onClick={createNew}>Neue Erklärung</Button>}
+          />
+          <StatusNote tone="info">Tipp: In einer Rechnung finden Sie unter „Weitere Aktionen“ den Punkt „Fachunternehmererklärung erstellen“.</StatusNote>
+        </>
+      ) : (
+        <section className="flex min-w-0 flex-col gap-4" aria-label="Verzeichnis">
+          <FilterBar label="Erklärungen filtern" aside={<span>{rows.length} {rows.length === 1 ? "Erklärung" : "Erklärungen"}</span>}>
+            <FilterControl width="grow">
+              <Field label="Suchen">
+                <SearchInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Bauvorhaben, Empfänger oder Datum" />
+              </Field>
+            </FilterControl>
+            {query !== "" && <Button variant="quiet" onClick={() => setQuery("")}>Zurücksetzen</Button>}
+          </FilterBar>
+          <DataTable caption="Fachunternehmererklärungen" columns={columns} rows={rows} rowKey={(row) => row.id} empty="Keine passende Erklärung. Ändern Sie die Suche." />
+        </section>
+      )}
 
-              {/* Recipient */}
-              <div className="mb-8">
-                <p className="font-medium">An</p>
-                {isEditing ? (
-                  <div className="mt-2 space-y-2">
-                    <Field label="Empfänger Name">
-                      <Textarea
-                        value={data.recipientName}
-                        onChange={(e) => updateField("recipientName", e.target.value)}
-                        rows={2}
-                      />
-                    </Field>
-                    <Field label="Empfänger Adresse">
-                      <Textarea
-                        value={data.recipientAddress}
-                        onChange={(e) => updateField("recipientAddress", e.target.value)}
-                        rows={2}
-                      />
-                    </Field>
-                  </div>
-                ) : (
-                  <div className="mt-1 whitespace-pre-line">
-                    {data.recipientName}
-                    {"\n"}
-                    {data.recipientAddress}
-                  </div>
-                )}
-              </div>
-
-              {/* Kommission */}
-              <div className="mb-6">
-                <p className="font-medium">Kommission und BV</p>
-                {isEditing ? (
-                  <Field label="Kommission">
-                    <Input
-                      value={data.kommission}
-                      onChange={(e) => updateField("kommission", e.target.value)}
-                    />
-                  </Field>
-                ) : (
-                  <p className="mt-1">{data.kommission}</p>
-                )}
-              </div>
-
-              {/* Date */}
-              <div className="mb-8">
-                <p>
-                  <span className="font-medium">Datum</span> {currentDate}
-                </p>
-              </div>
-
-              {/* Title */}
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold">
-                  Übereinstimmungs- / Fachunternehmererklärung
-                </h2>
-              </div>
-
-              {/* Body */}
-              <div className="mb-8 space-y-4">
-                <p>Sehr geehrte Damen und Herren,</p>
-                <p>
-                  Die von uns ausgeführten Arbeiten an den oben genannten Bauvorhaben wurden
-                  nach den anerkannten Regeln der Technik, sowie nach den DIN-Normen und
-                  Herstellervorschrift fachgerecht eingebaut.
-                </p>
-              </div>
-
-              {/* Signature area - grows to push content down */}
-              <div className="mt-auto flex items-end justify-between pt-12">
-                {/* Left: Greeting and signature */}
-                <div>
-                  <p className="mb-8">Mit freundlichen Grüßen</p>
-                  {isEditing ? (
-                    <Field label="Unterschrift Name">
-                      <Input
-                        value={data.signatureName}
-                        onChange={(e) => updateField("signatureName", e.target.value)}
-                      />
-                    </Field>
-                  ) : (
-                    <p className="font-medium">{data.signatureName}</p>
-                  )}
-                </div>
-
-                {/* Right: Signature Image */}
-                <div className="text-right">
-                  {isEditing && (
-                    <div className="mb-2 no-print">
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImageUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          Bild hochladen
-                        </Button>
-                        {data.signatureImage && (
-                          <Button variant="ghost" size="sm" onClick={removeImage}>
-                            Bild entfernen
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {data.signatureImage && (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={data.signatureImage}
-                      alt="Unterschrift / Stempel"
-                      className="max-h-40 max-w-xs object-contain"
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => { if (deleteConfirm) deleteDeclaration(adapter, deleteConfirm); }}
+        title="Erklärung löschen?"
+        description="Die gespeicherte Erklärung wird endgültig entfernt."
+        confirmLabel="Löschen"
+        cancelLabel="Abbrechen"
+        warningLabel="Das lässt sich nicht rückgängig machen."
+        variant="danger"
+      />
     </Page>
   );
 }

@@ -4,11 +4,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./lib/cn";
 
 /*
- * Source: workspace overview — the stat pattern shared by line-card stats
- * and the Pulse hero: muted label over a tone tick bar + semibold value +
- * optional DeltaBadge. Paper's weight 650 normalized to 600; the lg hero
- * value (30px) to text-display. The tick's tiny radius comes from
- * rounded-micro clamping on the narrow bar.
+ * Stat pattern: muted label over a tone tick bar + semibold value + optional
+ * delta slot; the lg value uses text-display. The tick's tiny radius comes
+ * from rounded-micro clamping on the narrow bar.
  */
 const tickVariants = cva("shrink-0 rounded-micro", {
   variants: {
@@ -63,7 +61,7 @@ export function StatCell({
     >
       <span
         className={cn(
-          "font-sans tracking-snug text-ink-soft",
+          "font-sans tracking-snug text-ink-muted",
           size === "lg" ? "text-sm" : "text-xs/3.5",
         )}
       >

@@ -15,7 +15,7 @@ export type MenuItem =
   | { kind: "separator" }
   | { kind: "label"; label: ReactNode };
 
-/** Menu rows at the readability size: at least 40px, 13px (Platform rows are 32px/12.5px). */
+/** Menu rows at the readability size: at least 40px (recipe rows are 32px), 13px. */
 const rowSize = "h-auto min-h-10 py-2 text-base";
 
 /**
@@ -47,7 +47,7 @@ export function OverflowMenu({ items, label, trigger, align = "end", className }
       <DropdownMenuContent align={align} aria-label={label} collisionPadding={8} className="max-w-[calc(100vw-1rem)]">
         {entries.map((item, index) => {
           if (item.kind === "separator") return <DropdownMenuSeparator key={index} />;
-          if (item.kind === "label") return <DropdownMenuLabel key={index} className="font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{item.label}</DropdownMenuLabel>;
+          if (item.kind === "label") return <DropdownMenuLabel key={index} className="font-sans text-sm font-medium text-ink-muted">{item.label}</DropdownMenuLabel>;
           if (item.kind === "link") {
             // The Platform item renders an icon lane next to its children, so the link is the slot target.
             return <DropdownMenuItem key={index} asChild className={rowSize}><Slottable><Link href={item.href}>{item.label}</Link></Slottable></DropdownMenuItem>;

@@ -2,6 +2,7 @@ import { isValidPersistedData } from "../../../electron/storage-validation.cjs";
 import type { 
   AppSettings, 
   Attachment,
+  ContractorDeclaration,
   CreditNote, 
   Customer, 
   Invoice, 
@@ -14,10 +15,11 @@ import type {
 } from "@/lib/domain";
 import { 
   computeInvoiceBalance,
-  computeInvoiceTotals,
+  computeInvoicePayable,
   convertInvoiceAmountToCurrency,
 } from "@/lib/calc";
-import { addMonthsClamped, dateToLocalISO, daysBetweenDateOnly, monthKey, todayLocalISO } from "@/lib/date";
+import { isDateOnly, addMonthsAnchored, dateToLocalISO, daysBetweenDateOnly, monthKey, parseDateOnly, todayLocalISO } from "@/lib/date";
+import { createDeclaration, createQuoteFromDefaults, invoiceFromQuote, switchReverseCharge, withSellerDefaults, type DeclarationDefaults } from "@/lib/documents";
 import { roundMoney } from "@/lib/money";
 import { 
   createDefaultSettings, 
@@ -30,6 +32,7 @@ import {
   createDefaultTemplateVariant,
   createDefaultTemplateCustomization,
   createCreditNoteFromInvoice,
+  dueDateFor,
   newId,
 } from "@/lib/defaults";
 import { STORAGE_KEY } from "@/lib/storage/keys";
@@ -78,6 +81,8 @@ export function parsePersistedData(json: string | null): PersistedDataV1 | null 
       creditNotes: asArray(data.creditNotes).map(migrateCreditNote),
       recurringInvoices: asArray(data.recurringInvoices).map(migrateRecurringInvoice),
       templateVariants: asArray(data.templateVariants).map(migrateTemplateVariant),
+      quotes: asArray(data.quotes).map(migrateInvoice),
+      contractorDeclarations: asArray(data.contractorDeclarations).map(migrateDeclaration),
     };
   } catch {
     return null;
@@ -427,6 +432,25 @@ function migrateTemplateVariant(value: unknown): TemplateVariant {
   };
 }
 
+function migrateDeclaration(value: unknown): ContractorDeclaration {
+  const source = isRecord(value) ? value : {};
+  return {
+    ...source,
+    id: asString(source.id, newId),
+    date: asString(source.date, todayLocalISO),
+    senderAddress: asString(source.senderAddress),
+    recipientName: asString(source.recipientName),
+    recipientAddress: asString(source.recipientAddress),
+    kommission: asString(source.kommission),
+    bodyText: asString(source.bodyText),
+    signatureName: asString(source.signatureName),
+    invoiceId: typeof source.invoiceId === "string" ? source.invoiceId : undefined,
+    customerId: typeof source.customerId === "string" ? source.customerId : undefined,
+    createdAt: asString(source.createdAt, nowIso),
+    updatedAt: asString(source.updatedAt, nowIso),
+  };
+}
+
 function createEmptyData(): PersistedDataV1 {
   return {
     schemaVersion: 1,
@@ -438,6 +462,8 @@ function createEmptyData(): PersistedDataV1 {
     creditNotes: [],
     recurringInvoices: [],
     templateVariants: [],
+    quotes: [],
+    contractorDeclarations: [],
   };
 }
 
@@ -520,32 +546,38 @@ export function getInvoice(adapter: StorageAdapter, id: string): Invoice | null 
   return loadData(adapter).invoices.find((inv) => inv.id === id) ?? null;
 }
 
-export function upsertInvoice(adapter: StorageAdapter, invoice: Invoice): void {
+/** Invoices and quotes share one record shape and one editor; they live in separate collections. */
+export type DocumentCollection = "invoices" | "quotes";
+
+export function upsertInvoice(adapter: StorageAdapter, invoice: Invoice, collection: DocumentCollection = "invoices"): void {
   const data = loadData(adapter);
-  const idx = data.invoices.findIndex((inv) => inv.id === invoice.id);
-  if (idx >= 0 && sameValue(data.invoices[idx], invoice)) return;
+  const list = data[collection] ?? [];
+  const idx = list.findIndex((inv) => inv.id === invoice.id);
+  if (idx >= 0 && sameValue(list[idx], invoice)) return;
   const nextInvoice: Invoice = { ...invoice, updatedAt: nowIso() };
-  const invoices = [...data.invoices];
-  if (idx >= 0) invoices[idx] = nextInvoice;
-  else invoices.unshift(nextInvoice);
-  saveData(adapter, { ...data, invoices });
+  const next = [...list];
+  if (idx >= 0) next[idx] = nextInvoice;
+  else next.unshift(nextInvoice);
+  saveData(adapter, { ...data, [collection]: next });
 }
 
 export function updateInvoice(
   adapter: StorageAdapter,
   id: string,
-  updater: (prev: Invoice) => Invoice
+  updater: (prev: Invoice) => Invoice,
+  collection: DocumentCollection = "invoices"
 ): Invoice | null {
   const data = loadData(adapter);
-  const idx = data.invoices.findIndex((inv) => inv.id === id);
+  const list = data[collection] ?? [];
+  const idx = list.findIndex((inv) => inv.id === id);
   if (idx < 0) return null;
 
-  const updated = updater(data.invoices[idx]);
-  if (sameValue(data.invoices[idx], updated)) return data.invoices[idx];
+  const updated = updater(list[idx]);
+  if (sameValue(list[idx], updated)) return list[idx];
   const nextInvoice = { ...updated, updatedAt: nowIso() };
-  const invoices = [...data.invoices];
-  invoices[idx] = nextInvoice;
-  saveData(adapter, { ...data, invoices });
+  const next = [...list];
+  next[idx] = nextInvoice;
+  saveData(adapter, { ...data, [collection]: next });
   return nextInvoice;
 }
 
@@ -557,7 +589,13 @@ export function deleteInvoice(adapter: StorageAdapter, id: string): void {
     ...data.settings,
     defaultInvoiceId: data.settings.defaultInvoiceId === id ? undefined : data.settings.defaultInvoiceId,
   };
-  saveData(adapter, { ...data, settings, invoices, creditNotes });
+  // A quote whose invoice is gone can be converted again; declarations keep their content without the link.
+  // A final invoice that deducted this invoice as an advance keeps its deduction (amounts on issued documents are
+  // never changed silently); `checkAdvanceDeductions` reports the missing source in the editor and on the dashboard.
+  const quotes = (data.quotes ?? []).map((quote) => (quote.convertedInvoiceId === id ? { ...quote, convertedInvoiceId: undefined, updatedAt: nowIso() } : quote));
+  const contractorDeclarations = (data.contractorDeclarations ?? []).map((declaration) =>
+    declaration.invoiceId === id ? { ...declaration, invoiceId: undefined, updatedAt: nowIso() } : declaration);
+  saveData(adapter, { ...data, settings, invoices, creditNotes, quotes, contractorDeclarations });
 }
 
 export function createInvoice(adapter: StorageAdapter): Invoice {
@@ -568,11 +606,11 @@ export function createInvoice(adapter: StorageAdapter): Invoice {
   const defaultInvoice = defaultInvoiceId ? data.invoices.find((inv) => inv.id === defaultInvoiceId) ?? null : null;
 
   const invoice = defaultInvoice
-    ? {
+    ? withSellerDefaults({
         ...duplicateInvoice(defaultInvoice),
         invoiceDate: today,
-        dueDate: today,
-      }
+        dueDate: dueDateFor(today, data.settings),
+      }, data.settings)
     : createInvoiceFromDefaults(data.settings);
 
   saveData(adapter, { ...data, invoices: [invoice, ...data.invoices] });
@@ -633,7 +671,7 @@ export function togglePaid(adapter: StorageAdapter, id: string): void {
 /** Add a payment to an invoice (pure function, returns new Invoice) */
 export function addPaymentToInvoice(invoice: Invoice, payment: Payment): Invoice {
   const payments = [...(invoice.payments ?? []), payment];
-  const total = computeInvoiceTotals(invoice).total;
+  const total = computeInvoicePayable(invoice).payable;
   const paid = computeInvoiceBalance({ ...invoice, payments, paid: false }).paidAmount >= total;
   return {
     ...invoice,
@@ -732,11 +770,19 @@ export function deleteCustomer(adapter: StorageAdapter, id: string): void {
   const recurringInvoices = data.recurringInvoices.map((ri) =>
     ri.customerId === id ? { ...ri, customerId: undefined, updatedAt: new Date().toISOString() } : ri
   );
+  const quotes = (data.quotes ?? []).map((quote) =>
+    quote.customerId === id ? { ...quote, customerId: undefined, updatedAt: new Date().toISOString() } : quote
+  );
+  const contractorDeclarations = (data.contractorDeclarations ?? []).map((declaration) =>
+    declaration.customerId === id ? { ...declaration, customerId: undefined, updatedAt: new Date().toISOString() } : declaration
+  );
   saveData(adapter, {
     ...data,
     customers: data.customers.filter((c) => c.id !== id),
     invoices,
     recurringInvoices,
+    quotes,
+    contractorDeclarations,
   });
 }
 
@@ -772,19 +818,17 @@ export function upsertProduct(adapter: StorageAdapter, product: Product): void {
 
 export function deleteProduct(adapter: StorageAdapter, id: string): void {
   const data = loadData(adapter);
-  const invoices = data.invoices.map((inv) => ({
-    ...inv,
-    lineItems: inv.lineItems.map((li) => (li.productId === id ? { ...li, productId: undefined } : li)),
-  }));
-  const recurringInvoices = data.recurringInvoices.map((ri) => ({
-    ...ri,
-    lineItems: ri.lineItems.map((li) => (li.productId === id ? { ...li, productId: undefined } : li)),
-  }));
+  // Only documents that really use the product are replaced; all others keep their identity (and cached rows).
+  const unlink = <T extends { lineItems: Invoice["lineItems"] }>(document: T): T =>
+    document.lineItems.some((li) => li.productId === id)
+      ? { ...document, lineItems: document.lineItems.map((li) => (li.productId === id ? { ...li, productId: undefined } : li)) }
+      : document;
   saveData(adapter, {
     ...data,
     products: data.products.filter((p) => p.id !== id),
-    invoices,
-    recurringInvoices,
+    invoices: data.invoices.map(unlink),
+    recurringInvoices: data.recurringInvoices.map(unlink),
+    quotes: (data.quotes ?? []).map(unlink),
   });
 }
 
@@ -820,11 +864,8 @@ export function upsertTag(adapter: StorageAdapter, tag: Tag): void {
 export function deleteTag(adapter: StorageAdapter, id: string): void {
   const data = loadData(adapter);
   // Also remove tag from all invoices
-  const invoices = data.invoices.map((inv) => ({
-    ...inv,
-    tagIds: inv.tagIds.filter((tid) => tid !== id),
-  }));
-  saveData(adapter, { ...data, tags: data.tags.filter((t) => t.id !== id), invoices });
+  const untag = (inv: Invoice): Invoice => (inv.tagIds.includes(id) ? { ...inv, tagIds: inv.tagIds.filter((tid) => tid !== id) } : inv);
+  saveData(adapter, { ...data, tags: data.tags.filter((t) => t.id !== id), invoices: data.invoices.map(untag), quotes: (data.quotes ?? []).map(untag) });
 }
 
 export function addTagToInvoice(adapter: StorageAdapter, invoiceId: string, tagId: string): void {
@@ -963,8 +1004,9 @@ export function generateInvoiceFromRecurring(
   const recurring = data.recurringInvoices.find((ri) => ri.id === recurringId);
   if (!recurring) return null;
 
-  const nowIso = new Date().toISOString();
   const scheduledDate = recurring.nextRunDate || todayLocalISO();
+  // A date that does not exist (imported or damaged data) must not become an invoice date.
+  if (!isDateOnly(scheduledDate)) return null;
 
   if (expectedNextRunDate && scheduledDate !== expectedNextRunDate) {
     return data.invoices.find(
@@ -972,18 +1014,53 @@ export function generateInvoiceFromRecurring(
     ) ?? null;
   }
 
+  // The day the schedule was set up for stays the anchor, so a run on the 31st returns to the 31st after February.
+  const anchorDay = recurring.anchorDay ?? parseDateOnly(scheduledDate)?.getDate();
+  const nextRunDate = calculateNextRunDate(scheduledDate, recurring.frequency, anchorDay);
+  return writeRecurringRun(adapter, data, recurring, scheduledDate, nextRunDate, anchorDay).invoice;
+}
+
+/**
+ * Store one run of a schedule: the invoice dated `runDate` (unless the schedule already has one for that day) and
+ * the schedule moved on to `nextRunDate`. One write for both.
+ */
+function writeRecurringRun(
+  adapter: StorageAdapter,
+  data: PersistedDataV1,
+  recurring: RecurringInvoice,
+  runDate: string,
+  nextRunDate: string,
+  anchorDay: number | undefined
+): { invoice: Invoice; created: boolean } {
+  const nowIso = new Date().toISOString();
+  const recurringId = recurring.id;
   const existingForRun = data.invoices.find(
-    (inv) => inv.recurringInvoiceId === recurringId && inv.invoiceDate === scheduledDate
+    (inv) => inv.recurringInvoiceId === recurringId && inv.invoiceDate === runDate
   );
-  if (existingForRun) return existingForRun;
-  
+  const advanced: RecurringInvoice = {
+    ...recurring,
+    lastRunDate: runDate,
+    nextRunDate,
+    anchorDay,
+    updatedAt: nowIso,
+  };
+  const recurringInvoices = data.recurringInvoices.map((ri) => (ri.id === recurringId ? advanced : ri));
+  if (existingForRun) {
+    // This run already has its invoice (created by hand, or the schedule was moved back onto that day): do not
+    // create a second one, but let the schedule continue instead of waiting on this day forever.
+    saveData(adapter, { ...data, recurringInvoices });
+    return { invoice: existingForRun, created: false };
+  }
+
   // Create invoice from recurring template
-  const invoice: Invoice = {
+  const draft: Invoice = {
     schemaVersion: 1,
     id: newId(),
     invoiceNumber: "",
-    invoiceDate: scheduledDate,
-    dueDate: scheduledDate,
+    invoiceDate: runDate,
+    dueDate: dueDateFor(runDate, data.settings),
+    // Tax numbers and bank details for the printed footer and the E-Rechnung, as on every new invoice.
+    einvoice: data.settings.defaultEInvoice ? structuredClone(data.settings.defaultEInvoice) : undefined,
     sender: { ...recurring.sender },
     recipient: { ...recurring.recipient },
     customerId: recurring.customerId,
@@ -1002,21 +1079,16 @@ export function generateInvoiceFromRecurring(
     createdAt: nowIso,
     updatedAt: nowIso,
   };
-
-  // Calculate next run date
-  const nextRunDate = calculateNextRunDate(scheduledDate, recurring.frequency);
-  
-  // Update recurring invoice
-  const updatedRecurring: RecurringInvoice = {
-    ...recurring,
-    lastRunDate: scheduledDate,
-    nextRunDate,
-    updatedAt: nowIso,
-  };
-
-  const recurringInvoices = data.recurringInvoices.map((ri) => 
-    ri.id === recurringId ? updatedRecurring : ri
-  );
+  // A customer marked for § 13b gets the invoice without VAT, exactly as when the customer is chosen in the editor
+  // (the tax rates of the schedule are remembered, so the switch can still be taken back on the draft).
+  const customer = recurring.customerId ? data.customers.find((entry) => entry.id === recurring.customerId) : undefined;
+  let invoice = draft;
+  if (customer?.reverseCharge) {
+    // The E-Rechnung needs the customer's VAT ID for reverse charge; it comes along as in the editor.
+    const taxId = customer.taxId?.replace(/\s+/g, "").toUpperCase() ?? "";
+    const withBuyer = /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(taxId) ? { ...draft, einvoice: { ...(draft.einvoice ?? {}), buyer: { vatId: taxId } } } : draft;
+    invoice = switchReverseCharge(withBuyer, true, data.settings.defaultTaxRate, data.products);
+  }
 
   saveData(adapter, { 
     ...data, 
@@ -1024,26 +1096,92 @@ export function generateInvoiceFromRecurring(
     recurringInvoices,
   });
 
-  return invoice;
+  return { invoice, created: true };
 }
 
-function calculateNextRunDate(currentDate: string, frequency: RecurringInvoice["frequency"]): string {
-  switch (frequency) {
-    case "monthly":
-      return addMonthsClamped(currentDate, 1);
-    case "quarterly":
-      return addMonthsClamped(currentDate, 3);
-    case "yearly":
-      return addMonthsClamped(currentDate, 12);
-    default:
-      return addMonthsClamped(currentDate, 1);
+const monthsPerRun = (frequency: RecurringInvoice["frequency"]) => (frequency === "quarterly" ? 3 : frequency === "yearly" ? 12 : 1);
+
+function calculateNextRunDate(currentDate: string, frequency: RecurringInvoice["frequency"], anchorDay?: number): string {
+  return addMonthsAnchored(currentDate, monthsPerRun(frequency), anchorDay);
+}
+
+/** Years before this are typing mistakes or damaged data, not a schedule to catch up on. */
+const EARLIEST_PLAUSIBLE_RUN_YEAR = 2000;
+
+/** What the automatic run did for one schedule. */
+export type RecurringRunResult = {
+  /** The schedule as it was before the run. */
+  recurring: RecurringInvoice;
+  /** The invoice that was newly created: one, or none when the run already had its invoice. */
+  invoices: Invoice[];
+  /** The date this run stands for (the invoice date). */
+  runDate: string;
+  /** How many earlier due dates were passed over without an invoice. */
+  skippedRuns: number;
+  /** With skipped runs: the date the schedule had been waiting on. */
+  dueSince?: string;
+  /** Set when an invoice of this schedule already carried `runDate`, so none was created. */
+  existingInvoice?: Invoice;
+};
+
+/**
+ * The most recent due date of a schedule and the first one after today, by calendar arithmetic (no stepping
+ * through the periods, so a schedule that is decades behind costs the same as one that is a day behind).
+ */
+function latestDueRun(recurring: RecurringInvoice, today: string): { runDate: string; nextRunDate: string; skippedRuns: number; anchorDay: number | undefined } | null {
+  const first = recurring.nextRunDate;
+  // Only real, plausible calendar dates are compared; anything else waits for the user.
+  if (!isDateOnly(first) || !isDateOnly(today) || first > today) return null;
+  const start = parseDateOnly(first);
+  const end = parseDateOnly(today);
+  if (!start || !end || start.getFullYear() < EARLIEST_PLAUSIBLE_RUN_YEAR) return null;
+  const anchorDay = recurring.anchorDay ?? start.getDate();
+  const months = monthsPerRun(recurring.frequency);
+  const runAt = (index: number) => (index === 0 ? first : addMonthsAnchored(first, index * months, anchorDay));
+  const monthsApart = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+  let skippedRuns = Math.floor(monthsApart / months);
+  // In the month of today the day may still lie ahead; then the run before it is the latest one that is due.
+  if (skippedRuns > 0 && runAt(skippedRuns) > today) skippedRuns -= 1;
+  const runDate = runAt(skippedRuns);
+  const nextRunDate = runAt(skippedRuns + 1);
+  if (!isDateOnly(runDate) || !isDateOnly(nextRunDate) || runDate > today || nextRunDate <= today) return null;
+  return { runDate, nextRunDate, skippedRuns, anchorDay };
+}
+
+/**
+ * Create the invoice that is due for every schedule with "automatically create" switched on: at most one per
+ * schedule and call. A schedule that is more than one period behind (the app was closed, or the switch was set
+ * before automatic creation existed) gets only its most recent due date; the earlier ones are skipped and the
+ * schedule continues after today, so old periods never arrive as a pile of back-dated drafts. Invoices come
+ * without a number so the user assigns it. Returns one entry per schedule that was moved on, including runs that
+ * created nothing because their invoice already existed.
+ */
+export function runDueRecurringInvoices(adapter: StorageAdapter, today: string = todayLocalISO()): RecurringRunResult[] {
+  const results: RecurringRunResult[] = [];
+  const candidates = loadData(adapter).recurringInvoices.filter((ri) => ri.active && ri.autoGenerate);
+  for (const candidate of candidates) {
+    const data = loadData(adapter);
+    const recurring = data.recurringInvoices.find((ri) => ri.id === candidate.id);
+    if (!recurring) continue;
+    const due = latestDueRun(recurring, today);
+    if (!due) continue;
+    const { invoice, created } = writeRecurringRun(adapter, data, recurring, due.runDate, due.nextRunDate, due.anchorDay);
+    results.push({
+      recurring,
+      invoices: created ? [invoice] : [],
+      runDate: due.runDate,
+      skippedRuns: due.skippedRuns,
+      dueSince: due.skippedRuns > 0 ? recurring.nextRunDate : undefined,
+      existingInvoice: created ? undefined : invoice,
+    });
   }
+  return results;
 }
 
 export function getDueRecurringInvoices(adapter: StorageAdapter): RecurringInvoice[] {
   const data = loadData(adapter);
   const today = todayLocalISO();
-  return data.recurringInvoices.filter((ri) => ri.active && ri.nextRunDate <= today);
+  return data.recurringInvoices.filter((ri) => ri.active && isDateOnly(ri.nextRunDate) && ri.nextRunDate <= today);
 }
 
 export function getUpcomingReminders(adapter: StorageAdapter): RecurringInvoice[] {
@@ -1100,11 +1238,17 @@ export function deleteTemplateVariant(adapter: StorageAdapter, id: string): void
       ? { ...ri, layout: { ...ri.layout, templateVariantId: undefined }, updatedAt: new Date().toISOString() }
       : ri
   );
+  const quotes = (data.quotes ?? []).map((quote) =>
+    quote.layout.templateVariantId === id
+      ? { ...quote, layout: { ...quote.layout, templateVariantId: undefined }, updatedAt: new Date().toISOString() }
+      : quote
+  );
   saveData(adapter, { 
     ...data, 
     templateVariants: data.templateVariants.filter((tv) => tv.id !== id),
     invoices,
     recurringInvoices,
+    quotes,
   });
 }
 
@@ -1167,6 +1311,7 @@ export function searchInvoices(adapter: StorageAdapter, query: string): Invoice[
     
     // Search in footer/notes
     if (inv.footerText.toLowerCase().includes(lowerQuery)) return true;
+    if ((inv.projectReference ?? "").toLowerCase().includes(lowerQuery)) return true;
     
     // Search in tags
     const tags = data.tags.filter((t) => inv.tagIds.includes(t.id));
@@ -1385,6 +1530,86 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     invoiceCount: data.invoices.length,
     customerCount: data.customers.length,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quotes
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function createQuote(adapter: StorageAdapter): Invoice {
+  const data = loadData(adapter);
+  const quote = createQuoteFromDefaults(data.settings);
+  saveData(adapter, { ...data, quotes: [quote, ...(data.quotes ?? [])] });
+  return quote;
+}
+
+export function duplicateQuoteById(adapter: StorageAdapter, id: string): Invoice | null {
+  const data = loadData(adapter);
+  const existing = (data.quotes ?? []).find((quote) => quote.id === id);
+  if (!existing) return null;
+  const copy: Invoice = { ...duplicateInvoice(existing), documentKind: "quote", quoteStatus: "open" };
+  saveData(adapter, { ...data, quotes: [copy, ...(data.quotes ?? [])] });
+  return copy;
+}
+
+export function deleteQuote(adapter: StorageAdapter, id: string): void {
+  const data = loadData(adapter);
+  // The invoice created from the quote stays; only its back reference goes.
+  const invoices = data.invoices.map((inv) => (inv.sourceQuoteId === id ? { ...inv, sourceQuoteId: undefined, updatedAt: nowIso() } : inv));
+  saveData(adapter, { ...data, invoices, quotes: (data.quotes ?? []).filter((quote) => quote.id !== id) });
+}
+
+/**
+ * Turn a quote into an invoice in one step. A quote that already has an existing invoice returns that invoice
+ * instead of creating a second one.
+ */
+export function convertQuoteToInvoice(adapter: StorageAdapter, quoteId: string): Invoice | null {
+  const data = loadData(adapter);
+  const quote = (data.quotes ?? []).find((candidate) => candidate.id === quoteId);
+  if (!quote) return null;
+  const existing = quote.convertedInvoiceId ? data.invoices.find((inv) => inv.id === quote.convertedInvoiceId) : undefined;
+  if (existing) return existing;
+  const invoice = invoiceFromQuote(quote, data.settings);
+  const quotes = (data.quotes ?? []).map((candidate) =>
+    candidate.id === quoteId ? { ...candidate, quoteStatus: "accepted" as const, convertedInvoiceId: invoice.id, updatedAt: nowIso() } : candidate);
+  saveData(adapter, { ...data, invoices: [invoice, ...data.invoices], quotes });
+  return invoice;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contractor declarations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function addDeclaration(adapter: StorageAdapter, declaration: ContractorDeclaration): ContractorDeclaration {
+  const data = loadData(adapter);
+  saveData(adapter, { ...data, contractorDeclarations: [declaration, ...(data.contractorDeclarations ?? [])] });
+  return declaration;
+}
+
+export function createDeclarationFromDefaults(adapter: StorageAdapter, defaults: DeclarationDefaults): ContractorDeclaration {
+  return addDeclaration(adapter, createDeclaration(defaults));
+}
+
+export function updateDeclaration(
+  adapter: StorageAdapter,
+  id: string,
+  updater: (prev: ContractorDeclaration) => ContractorDeclaration
+): ContractorDeclaration | null {
+  const data = loadData(adapter);
+  const list = data.contractorDeclarations ?? [];
+  const idx = list.findIndex((declaration) => declaration.id === id);
+  if (idx < 0) return null;
+  const updated = updater(list[idx]);
+  if (sameValue(list[idx], updated)) return list[idx];
+  const next = [...list];
+  next[idx] = { ...updated, updatedAt: nowIso() };
+  saveData(adapter, { ...data, contractorDeclarations: next });
+  return next[idx];
+}
+
+export function deleteDeclaration(adapter: StorageAdapter, id: string): void {
+  const data = loadData(adapter);
+  saveData(adapter, { ...data, contractorDeclarations: (data.contractorDeclarations ?? []).filter((declaration) => declaration.id !== id) });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

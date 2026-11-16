@@ -13,6 +13,7 @@ import { StatusPill } from "@/components/ui/Status";
 import { Button } from "@/components/ui/Button";
 import { StatusRing } from "@/components/platform/status-ring";
 import { cn } from "@/components/platform/lib/cn";
+import { checkAdvanceDeductions } from "@/lib/documents";
 import type { CreditNote, Language } from "@/lib/domain";
 
 const dashboardLabels: Record<Language, {
@@ -259,9 +260,14 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [invoiceRows, today]);
 
+  // Final invoices that still deduct an advance invoice which was cancelled, changed or deleted since.
+  const staleDeductions = useMemo(() => (data?.invoices ?? [])
+    .filter((invoice) => checkAdvanceDeductions(invoice, data?.invoices ?? [], data?.creditNotes ?? []).length > 0),
+  [data?.invoices, data?.creditNotes]);
+
   if (!stats) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
-  const attention = overdueInvoices.length + dueRecurring.length + upcomingReminders.length;
+  const attention = overdueInvoices.length + dueRecurring.length + upcomingReminders.length + staleDeductions.length;
 
   return (
     <Page>
@@ -288,6 +294,22 @@ export default function DashboardPage() {
             <ul className="flex flex-col gap-0.5">
               {dueRecurring.map((ri) => (
                 <li key={ri.id}><Link href={`/recurring/${ri.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">{ri.name || labels.unnamedRecurring}</Link></li>
+              ))}
+            </ul>
+          </StatusNote>
+        )}
+        {staleDeductions.length > 0 && (
+          <StatusNote tone="attention" title={de ? "Abzug von Abschlagsrechnungen prüfen" : "Check deducted advance invoices"}>
+            <p>{de
+              ? "Eine abgezogene Abschlagsrechnung wurde storniert, geändert oder gelöscht. Der Restbetrag dieser Schlussrechnungen stimmt möglicherweise nicht mehr:"
+              : "A deducted advance invoice was cancelled, changed or deleted. The amount due on these final invoices may be wrong:"}</p>
+            <ul className="flex flex-col gap-0.5">
+              {staleDeductions.map((inv) => (
+                <li key={inv.id}>
+                  <Link href={`/invoices/${inv.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                    {inv.invoiceNumber || labels.noNumber}{inv.recipient.name ? ` · ${inv.recipient.name}` : ""}
+                  </Link>
+                </li>
               ))}
             </ul>
           </StatusNote>

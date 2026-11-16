@@ -22,12 +22,28 @@ declare global {
       };
       getAppInfo: () => Promise<{ version: string; name: string; path: string }>;
       printToPDF: (options?: object) => Promise<Buffer | null>;
+      saveDocument?: (payload: { filename: string; bytes: Uint8Array }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+      saveTextFile?: (payload: { filename: string; extension: "json" | "csv"; text: string }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+      backup?: {
+        getFolder: () => Promise<{ ok: boolean; folder: string | null; available: boolean; error?: string }>;
+        chooseFolder: () => Promise<{ ok: boolean; canceled?: boolean; folder?: string | null; available?: boolean; error?: string }>;
+        clearFolder: () => Promise<{ ok: boolean; error?: string }>;
+        openFolder: () => Promise<{ ok: boolean; error?: string }>;
+        write: (json: string) => Promise<{ ok: boolean; file?: string; folder?: string; error?: string }>;
+      };
+      exportArchive?: {
+        begin: (filename: string) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+        addPdf: (name: string) => Promise<{ ok: boolean; name?: string; error?: string }>;
+        addText: (name: string, extension: "csv" | "txt", text: string) => Promise<{ ok: boolean; name?: string; error?: string }>;
+        finish: (options?: { cancel?: boolean; reveal?: boolean }) => Promise<{ ok: boolean; canceled?: boolean; count?: number; file?: string; error?: string }>;
+      };
       emailInvoiceWithPdf?: (payload: {
         to?: string;
         subject: string;
         body: string;
         filename: string;
       }) => Promise<{ ok: boolean; error?: string }>;
+      mail?: import("@/lib/mail").MailApi;
       platform: string;
       isElectron: boolean;
     };
@@ -37,6 +53,33 @@ declare global {
 // Check if running in Electron
 export function isElectron(): boolean {
   return typeof window !== 'undefined' && !!window.electronAPI?.isElectron;
+}
+
+/**
+ * Save a backup (JSON) or a list (CSV). The desktop app asks where to save and reports whether the file was written
+ * ("saved") or the dialog was closed ("canceled"). A browser can only start a download ("download"): whether and
+ * where that file ends up is not known to the page, so callers must not call it saved.
+ */
+export async function saveTextFile(filename: string, extension: "json" | "csv", text: string): Promise<"saved" | "canceled" | "download"> {
+  const save = typeof window !== "undefined" ? window.electronAPI?.saveTextFile : undefined;
+  if (save) {
+    const result = await save({ filename, extension, text });
+    if (result.ok) return "saved";
+    if (result.canceled) return "canceled";
+    throw new Error(result.error || "Die Datei konnte nicht gespeichert werden.");
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: extension === "csv" ? "text/csv;charset=utf-8" : "application/json" }));
+  const link = document.createElement("a");
+  try {
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return "download";
 }
 
 // In-memory cache for synchronous access (Electron storage is async)

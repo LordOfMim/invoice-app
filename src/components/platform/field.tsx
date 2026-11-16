@@ -3,9 +3,8 @@ import * as React from "react";
 import { cn } from "./lib/cn";
 
 /*
- * Source: sign-in page (Jul 2026). Form-field pattern: label above the
- * control, quiet hint OR danger error below — one vertical rhythm for every
- * auth/settings form. Label styling comes from the sign-in email field.
+ * Form-field pattern: label above the control, quiet hint OR danger error
+ * below — one vertical rhythm for every form.
  * The error slot replaces the hint (never both) and carries role="alert"
  * so screen readers announce it when it appears.
  */
@@ -53,11 +52,11 @@ export function Field({
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {error != null ? (
-        <p role="alert" className="font-sans text-sm tracking-snug text-danger">
+        <p role="alert" className="font-sans text-sm tracking-snug text-danger-ink">
           {error}
         </p>
       ) : hint != null ? (
-        <p className="font-sans text-sm tracking-snug text-ink-soft">{hint}</p>
+        <p className="font-sans text-sm tracking-snug text-ink-muted">{hint}</p>
       ) : null}
     </div>
   );

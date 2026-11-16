@@ -10,10 +10,9 @@ import { IconButton } from "./icon-button";
 
 /*
  * Dialog — the centered modal for focused decisions (numbers cell
- * editors). Same flat recipe as the Sheet: `surface` panel, `line`
- * hairline, NO shadow — separation comes from the hairline plus the
- * ink-veil overlay. Width defaults to 440px (`w-110`); hosts size via
- * className.
+ * editors): `surface` panel with a 16px radius and `shadow-high` (which
+ * carries the edge, no border) over the ink-veil overlay. Width defaults
+ * to 440px (`w-110`); hosts size via className.
  *
  * One content edge: header, body and footer share the same 28px (`px-7`)
  * inset, so labels, fields, hints and actions line up; the body only
@@ -82,7 +81,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-110 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-line bg-surface outline-none",
+          "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-110 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-card bg-surface shadow-high outline-none",
           "[&>form]:flex [&>form]:min-h-0 [&>form]:flex-col",
           "[@media(max-height:30rem)]:overflow-y-auto [@media(max-height:30rem)]:[&>form]:shrink-0",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-150",
@@ -125,7 +124,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-sans text-xl font-semibold tracking-snug text-ink",
+        "font-sans text-title font-semibold tracking-title text-ink",
         className,
       )}
       {...props}
@@ -141,7 +140,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "font-sans text-base/4.75 tracking-snug text-ink-body",
+        "font-sans text-base tracking-snug text-ink-body",
         className,
       )}
       {...props}

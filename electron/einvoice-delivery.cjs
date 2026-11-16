@@ -41,12 +41,17 @@ function buildEInvoiceEml({ to, subject, body, filename, mimeType, bytes }) {
     `Content-Disposition: attachment; filename*=UTF-8''${encodedName}`, '', base64(bytes), '', `--${boundary}--`, '',
   ].join('\r\n');
 }
-async function deliverEInvoice({ artifact, format, number, delivery = 'download', email = {} }, { saveDocument, composeWithAttachment, openPath, tempRoot = os.tmpdir() }) {
+async function deliverEInvoice({ artifact, format, number, delivery = 'download', email = {} }, { saveDocument, composeWithAttachment, openPath, stageAttachment, tempRoot = os.tmpdir() }) {
   const bytes = assertValidatedArtifact(artifact, format);
   const filename = attachmentName(number, format);
   if (delivery === 'download') {
     if (typeof saveDocument !== 'function') throw new Error('Speichern ist nicht verfügbar.');
     return await saveDocument(filename, bytes, artifact.extension);
+  }
+  if (delivery === 'attach') {
+    // Hand the validated bytes to the built-in mailbox; the user writes and sends the message there.
+    if (typeof stageAttachment !== 'function') throw new Error('Das Postfach ist nicht verfügbar.');
+    return { ok: true, attachment: stageAttachment(filename, bytes, artifact.mimeType) };
   }
   if (delivery !== 'email') throw new Error('Unbekannte Dokumentaktion.');
   if (!composeWithAttachment && !openPath) throw new Error('Kein E-Mailprogramm verfügbar.');

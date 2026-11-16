@@ -33,6 +33,8 @@ const TEXT_FIELDS: Array<[keyof InvoiceTexts, string]> = [
   ["invoiceNumberLabel", "Bezeichnung Rechnungsnummer"],
   ["invoiceDateLabel", "Bezeichnung Rechnungsdatum"],
   ["dueDateLabel", "Bezeichnung Fällig am"],
+  ["serviceDateLabel", "Bezeichnung Leistungsdatum"],
+  ["projectReferenceLabel", "Bezeichnung Bauvorhaben"],
   ["itemsDescriptionLabel", "Spalte Beschreibung"],
   ["itemsQuantityLabel", "Spalte Menge"],
   ["itemsUnitPriceLabel", "Spalte Einzelpreis"],
@@ -58,11 +60,13 @@ export function ExtrasTab({
   invoice,
   templateVariants,
   tags,
+  kind = "invoice",
   language,
   locale,
   errors,
   save,
 }: {
+  kind?: "invoice" | "quote";
   invoice: Invoice;
   templateVariants: TemplateVariant[];
   tags: Tag[];
@@ -72,6 +76,8 @@ export function ExtrasTab({
   save: (next: Invoice | ((prev: Invoice) => Invoice)) => void;
 }) {
   const de = language === "de";
+  const isQuote = kind === "quote";
+  const textFields = isQuote ? TEXT_FIELDS.filter(([key]) => key !== "serviceDateLabel" && key !== "footerHeading") : TEXT_FIELDS;
   const setLayout = (next: Partial<LayoutPreferences>) => save((prev) => ({ ...prev, layout: { ...prev.layout, ...next } }));
   const assigned = invoice.tagIds ?? [];
 
@@ -160,7 +166,7 @@ export function ExtrasTab({
             </Field>
           </>
         )}
-        <Field label={de ? "Eigenes Logo nur für diese Rechnung (optional)" : "Logo for this invoice only (optional)"} hint={de ? "Ohne eigenes Logo wird das Logo aus den Einstellungen verwendet." : "Without one, the logo from the settings is used."} className="@md:col-span-2">
+        <Field label={isQuote ? "Eigenes Logo nur für dieses Angebot (optional)" : de ? "Eigenes Logo nur für diese Rechnung (optional)" : "Logo for this invoice only (optional)"} hint={de ? "Ohne eigenes Logo wird das Logo aus den Einstellungen verwendet." : "Without one, the logo from the settings is used."} className="@md:col-span-2">
           <Input
             type="file"
             accept="image/*"
@@ -183,17 +189,17 @@ export function ExtrasTab({
         )}
       </FormSection>
 
-      <FormSection id="fusszeile" title={de ? "Fußzeile" : "Footer"} description={de ? "Kleine Fußzeile am Seitenende, links und rechts aufgeteilt." : "Small footer at the bottom of each page, split left and right."}>
+      <FormSection id="fusszeile" title={de ? "Fußzeile" : "Footer"} description={de ? "Kleine Fußzeile am Seitenende, links und rechts aufgeteilt. Steuernummer und Bankverbindung aus den Einstellungen stehen automatisch darunter." : "Small footer at the bottom of each page, split left and right."}>
         <Field label={de ? "Links" : "Left"}>
-          <Textarea rows={4} value={invoice.footerLeftText || ""} placeholder={de ? "z. B. Bankverbindung, IBAN, BIC" : "e.g. bank details"} onChange={(e) => save({ ...invoice, footerLeftText: e.target.value })} />
+          <Textarea rows={4} value={invoice.footerLeftText || ""} placeholder={de ? "z. B. Geschäftsführer, Handelsregister" : "e.g. managing director"} onChange={(e) => save({ ...invoice, footerLeftText: e.target.value })} />
         </Field>
         <Field label={de ? "Rechts" : "Right"}>
-          <Textarea rows={4} value={invoice.footerRightText || ""} placeholder={de ? "z. B. Steuernummer, USt-IdNr., Handelsregister" : "e.g. tax number, VAT ID"} onChange={(e) => save({ ...invoice, footerRightText: e.target.value })} />
+          <Textarea rows={4} value={invoice.footerRightText || ""} placeholder={de ? "z. B. Telefon, Internetseite" : "e.g. phone, website"} onChange={(e) => save({ ...invoice, footerRightText: e.target.value })} />
         </Field>
       </FormSection>
 
-      <FormSection id="texte" title={de ? "Texte auf der Rechnung" : "Texts on the invoice"} description={de ? "Alle Überschriften und Bezeichnungen, die auf dem Dokument stehen." : "All headings and labels printed on the document."}>
-        {TEXT_FIELDS.map(([key, label]) => (
+      <FormSection id="texte" title={isQuote ? "Texte auf dem Angebot" : de ? "Texte auf der Rechnung" : "Texts on the invoice"} description={de ? "Alle Überschriften und Bezeichnungen, die auf dem Dokument stehen." : "All headings and labels printed on the document."}>
+        {textFields.map(([key, label]) => (
           <Field key={key} label={label}>
             <Input value={invoice.texts[key] ?? ""} onChange={(e) => save((prev) => ({ ...prev, texts: { ...prev.texts, [key]: e.target.value } }))} />
           </Field>
@@ -225,7 +231,7 @@ export function ExtrasTab({
               const tag = tags.find((entry) => entry.id === tagId);
               if (!tag) return null;
               return (
-                <li key={tag.id} className="inline-flex h-8 items-center gap-2 rounded-pill border border-line-control bg-surface pr-1 pl-3 font-sans text-base font-medium tracking-snug text-ink">
+                <li key={tag.id} className="inline-flex h-8 items-center gap-2 rounded-pill border border-line bg-surface pr-1 pl-3 font-sans text-base font-medium tracking-snug text-ink">
                   <span aria-hidden className="size-2.5 rounded-pill" style={{ backgroundColor: tag.color }} />
                   {tag.name || t(language, "common.unnamed")}
                   <button
@@ -264,11 +270,11 @@ export function ExtrasTab({
                 </div>
                 <div className="flex items-center gap-2">
                   {attachment.dataUrl && (
-                    <a href={attachment.dataUrl} download={attachment.name} className="inline-flex h-8 items-center rounded-md border border-line-control px-3 font-sans text-base font-medium tracking-snug text-ink-secondary outline-none hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-ring/50">
+                    <a href={attachment.dataUrl} download={attachment.name} className="inline-flex h-8 items-center rounded-md bg-surface shadow-low px-3 font-sans text-base font-medium tracking-snug text-ink-secondary outline-none hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-ring/50">
                       {de ? "Herunterladen" : "Download"}
                     </a>
                   )}
-                  <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" aria-label={de ? `Anhang ${attachment.name} entfernen` : `Remove attachment ${attachment.name}`} onClick={() => save(removeAttachmentFromInvoice(invoice, attachment.id))}>
+                  <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={de ? `Anhang ${attachment.name} entfernen` : `Remove attachment ${attachment.name}`} onClick={() => save(removeAttachmentFromInvoice(invoice, attachment.id))}>
                     {t(language, "actions.remove")}
                   </Button>
                 </div>

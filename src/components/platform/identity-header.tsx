@@ -3,11 +3,8 @@ import * as React from "react";
 import { cn } from "./lib/cn";
 
 /*
- * Source: workspace overview v3 — the workspace identity block: 44px square
- * ink mark (radius card-sm) + name row (28px semibold + status pill) + muted
- * description row (optional mono slug). Paper values: mark #1C1D1F r14,
- * initials 15/18 semibold tracking 0.02em, name 28/34 semibold, description
- * 14.5/20 #6F7988 → text-lg/5 ink-muted.
+ * Identity block of one object: 44px square mark on the near-black fill (radius 10) with 14px semibold initials,
+ * name row (24px semibold + status pill) and a muted 14px description row with an optional reference.
  */
 export interface IdentityHeaderProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -20,7 +17,7 @@ export interface IdentityHeaderProps
   status?: React.ReactNode;
   /** Muted description, e.g. "Concierge & Booking". */
   description?: React.ReactNode;
-  /** Mono reference, e.g. "w/lindner-hotels". */
+  /** Quiet reference next to the description. */
   slug?: React.ReactNode;
   /** Right-aligned actions, e.g. favorite + menu IconButtons. */
   actions?: React.ReactNode;
@@ -46,7 +43,7 @@ export function IdentityHeader({
       {avatar ?? (
         <span
           aria-hidden
-          className="flex size-11 shrink-0 items-center justify-center rounded-card-sm bg-ink font-sans text-xl/4.5 font-semibold tracking-loose text-white"
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-fill font-sans text-xl/4.5 font-semibold tracking-loose text-white"
         >
           {initials}
         </span>
@@ -55,7 +52,7 @@ export function IdentityHeader({
         {/* The status wraps under the name when both don't fit (phones),
             instead of squeezing the truncating name to nothing. */}
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <h1 className="min-w-0 max-w-full truncate font-sans text-display font-semibold tracking-snug text-ink">
+          <h1 className="min-w-0 max-w-full truncate font-sans text-display font-semibold tracking-title text-ink">
             {name}
           </h1>
           {/* Bounded, not shrink-0: a status wider than the row (pills +
@@ -65,7 +62,7 @@ export function IdentityHeader({
         {(description != null || slug != null) && (
           <div className="flex items-center gap-2">
             {description != null && (
-              <span className="truncate font-sans text-lg/5 tracking-snug text-ink-muted">
+              <span className="truncate font-sans text-lg tracking-snug text-ink-muted">
                 {description}
               </span>
             )}
@@ -75,7 +72,7 @@ export function IdentityHeader({
               </span>
             )}
             {slug != null && (
-              <span className="truncate font-mono text-sm tracking-loose text-ink-disabled">
+              <span className="truncate font-sans text-sm text-ink-muted">
                 {slug}
               </span>
             )}

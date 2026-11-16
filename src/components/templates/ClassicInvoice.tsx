@@ -1,5 +1,5 @@
 import type { Invoice, TemplateCustomization } from "@/lib/domain";
-import { LineItemsTable, Logo, TotalsBlock, NotesSection, PageIndicator } from "@/components/templates/shared";
+import { LineItemsTable, Logo, documentMetaRows, TotalsBlock, NotesSection, PageIndicator } from "@/components/templates/shared";
 
 // Get customization style object as CSS variables
 function getCustomizationStyles(customization?: TemplateCustomization): React.CSSProperties {
@@ -70,18 +70,12 @@ export function ClassicInvoice({ invoice, currency, locale, logoDataUrl }: { inv
         <div className="space-y-1">
           <div className="text-2xl font-semibold tracking-tight">{t.documentTitle}</div>
           <div className="mt-3 grid gap-1 text-sm">
-            <div className="flex gap-2 min-w-86">
-              <div className="w-40 text-zinc-600">{t.invoiceNumberLabel}</div>
-              <div className="font-medium">{invoice.invoiceNumber}</div>
-            </div>
-            <div className="flex gap-2 min-w-86">
-              <div className="w-40 text-zinc-600">{t.invoiceDateLabel}</div>
-              <div className="font-medium">{invoice.invoiceDate}</div>
-            </div>
-            <div className="flex gap-2 min-w-86">
-              <div className="w-40 text-zinc-600">{t.dueDateLabel}</div>
-              <div className="font-medium">{invoice.dueDate}</div>
-            </div>
+            {documentMetaRows(invoice, locale).map((row) => (
+              <div key={row.key} className="flex gap-2 min-w-86">
+                <div className="w-40 shrink-0 text-zinc-600">{row.label}</div>
+                <div className="font-medium">{row.value}</div>
+              </div>
+            ))}
           </div>
         </div>
 

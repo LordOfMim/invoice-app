@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "./lib/cn";
 
 /*
- * Source: flow page — 60px top bar with a hairline bottom border:
+ * Top bar with a hairline bottom border (60px by default; the Helferlein shell sets 48px):
  * left slot (line switcher), absolutely centered slot (nav tabs),
  * right slot (dialer, stage badge, publish). The left padding is owned by
  * the shell layout (rail width), not this component.

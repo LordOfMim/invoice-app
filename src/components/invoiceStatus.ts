@@ -17,6 +17,16 @@ export function invoiceStatus(invoice: Invoice, balance: InvoiceBalance, languag
   return { key: "open", tone: "info", label: de ? "Offen" : "Open" };
 }
 
+/** Status word for a quote: converted, accepted, declined, expired or open. */
+export function quoteStatus(quote: Invoice, today: string, language: Language): { key: "converted" | "accepted" | "declined" | "expired" | "open"; tone: Tone; label: string } {
+  const de = language === "de";
+  if (quote.convertedInvoiceId) return { key: "converted", tone: "success", label: de ? "Rechnung erstellt" : "Invoiced" };
+  if (quote.quoteStatus === "accepted") return { key: "accepted", tone: "success", label: de ? "Angenommen" : "Accepted" };
+  if (quote.quoteStatus === "declined") return { key: "declined", tone: "muted", label: de ? "Abgelehnt" : "Declined" };
+  if (quote.dueDate && quote.dueDate < today) return { key: "expired", tone: "attention", label: de ? "Abgelaufen" : "Expired" };
+  return { key: "open", tone: "info", label: de ? "Offen" : "Open" };
+}
+
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
 /** Calendar date (YYYY-MM-DD) in the user's locale, e.g. 27.10.2026. */

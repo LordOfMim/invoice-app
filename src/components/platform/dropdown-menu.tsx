@@ -9,12 +9,10 @@ import type { IconSvgElement } from "./icon";
 
 /*
  * Dropdown menu — the floating account/action menu behind chrome controls
- * (UserChip, icon buttons). Styled strictly flat per the system: white
- * surface with a `line` hairline, rounded-lg (10px input-surface radius),
- * NO shadow — separation comes from the hairline alone (introducing a
- * popover shadow would need an approved DESIGN.md extension).
+ * (icon buttons): white surface, rounded-lg (10px), `shadow-high` as its
+ * edge and elevation (no border).
  *
- * Rows are 32px, rounded-md, `label`-scale text on the ink ramp; hovers
+ * Rows are 32px, rounded-sm, 13px medium text on the ink ramp; hovers
  * step onto surface-muted like every other control. A leading 16px icon
  * lane keeps labels aligned across rows (fixed lane, not gap — the same
  * rule as step lists).
@@ -63,7 +61,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          "z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-56 overflow-y-auto overscroll-contain origin-(--radix-dropdown-menu-content-transform-origin) rounded-lg border border-line bg-surface p-1.5",
+          "z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-56 overflow-y-auto overscroll-contain origin-(--radix-dropdown-menu-content-transform-origin) rounded-lg bg-surface p-1 shadow-high",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           "data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1",
           "duration-150 ease-out motion-reduce:animate-none",
@@ -95,9 +93,9 @@ function DropdownMenuItem({
       data-slot="dropdown-menu-item"
       data-variant={variant}
       className={cn(
-        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 font-sans text-md font-medium tracking-snug outline-none transition-colors duration-100",
+        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-sm px-2 font-sans text-md font-medium tracking-snug outline-none transition-colors duration-100",
         variant === "danger"
-          ? "text-danger data-highlighted:bg-danger/5"
+          ? "text-danger-ink data-highlighted:bg-danger-tint"
           : "text-ink-secondary data-highlighted:bg-surface-muted data-highlighted:text-ink",
         "data-disabled:pointer-events-none data-disabled:text-ink-disabled",
         className,
@@ -151,7 +149,7 @@ function DropdownMenuControlRow({
         onCycle?.();
       }}
       className={cn(
-        "flex h-9 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 font-sans text-md font-medium tracking-snug text-ink-secondary outline-none transition-colors duration-100 data-highlighted:bg-surface-muted data-highlighted:text-ink",
+        "flex h-9 cursor-pointer select-none items-center gap-2.5 rounded-sm px-2 font-sans text-md font-medium tracking-snug text-ink-secondary outline-none transition-colors duration-100 data-highlighted:bg-surface-muted data-highlighted:text-ink",
         className,
       )}
       {...props}
@@ -182,7 +180,7 @@ function DropdownMenuSeparator({
   return (
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1.5 my-1.5 h-px bg-line", className)}
+      className={cn("-mx-1 my-1 h-px bg-line", className)}
       {...props}
     />
   );

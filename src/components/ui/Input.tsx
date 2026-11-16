@@ -4,14 +4,20 @@ import { SearchField } from "@/components/platform/search-field";
 import { cn } from "@/components/platform/lib/cn";
 
 /**
- * Platform `Input` recipe at the Helferlein readability size (docs/design-reference.md, deviation 2): 40px high,
- * 14.5px text; 44px with 16px text on touch screens so iOS does not zoom (Overwatch `touch:` rule).
+ * Palermo control at its large size: 38px high, white with the control shadow as its edge, 14px text; 44px with 16px text on touch screens so iOS does not zoom (Overwatch `touch:` rule).
  */
-export const controlSize = "h-10 text-lg touch:h-11 touch:text-2xl";
+export const controlSize = "h-9.5 text-lg touch:h-11 touch:text-2xl";
 
-/** Shared Platform control recipe for the native textarea and select. */
+/**
+ * Invalid fields carry a red ring. With keyboard focus the ring stays red and the focus colour moves to an outline
+ * around it, so both states remain visible.
+ */
+const invalidClasses =
+  "aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-danger aria-[invalid=true]:focus-visible:ring-danger aria-[invalid=true]:focus-visible:outline-solid aria-[invalid=true]:focus-visible:outline-2 aria-[invalid=true]:focus-visible:outline-offset-2 aria-[invalid=true]:focus-visible:outline-ring";
+
+/** Shared control recipe for the native textarea and select. */
 export const controlClasses =
-  "block w-full min-w-0 rounded-md border border-line-input bg-surface px-3 font-sans font-medium text-ink outline-none transition-colors placeholder:font-normal placeholder:text-ink-disabled focus-visible:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-[invalid=true]:border-danger";
+  "block w-full min-w-0 rounded-md border-0 bg-surface px-2.5 font-sans text-ink shadow-control outline-none transition-[background-color,box-shadow] duration-150 placeholder:text-ink-faint hover:bg-surface-muted focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 " + invalidClasses;
 
 export type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size">;
 
@@ -23,9 +29,10 @@ export function Input({ className, type, ...props }: InputProps) {
       type={type}
       className={cn(
         controlSize,
-        "aria-[invalid=true]:border-danger read-only:bg-surface-subtle read-only:text-ink-secondary",
+        invalidClasses,
+        "read-only:bg-surface-subtle read-only:text-ink-secondary",
         numeric && "tabular-nums",
-        file && "h-auto py-2 text-base file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border file:border-line-control file:bg-surface file:px-3 file:font-sans file:text-base file:font-medium file:text-ink-secondary hover:file:bg-surface-subtle",
+        file && "h-auto py-2 text-base file:mr-3 file:h-8 file:cursor-pointer file:rounded-sm file:border-0 file:bg-surface-muted file:px-3 file:font-sans file:text-base file:font-medium file:text-ink-secondary hover:file:bg-surface-pressed",
         className,
       )}
       {...props}
@@ -35,5 +42,5 @@ export function Input({ className, type, ...props }: InputProps) {
 
 /** Platform `SearchField` at the control size; a live filter without submit. */
 export function SearchInput({ className, ...props }: Omit<InputProps, "type">) {
-  return <SearchField size="md" className={cn("h-10 touch:h-11 [&_input]:text-lg touch:[&_input]:text-2xl", className)} {...props} />;
+  return <SearchField size="md" className={cn("h-9.5 touch:h-11 [&_input]:text-lg touch:[&_input]:text-2xl", className)} {...props} />;
 }

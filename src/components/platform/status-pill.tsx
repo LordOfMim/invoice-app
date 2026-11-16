@@ -4,16 +4,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./lib/cn";
 
 /*
- * Source: flow page — inspector "In Progress" (7px dot + 13px medium label)
- * and activity-feed dots (filled vs. 1.5px outlined). Tones map to the fixed
- * step palette; no new hues. The outline variant is the workspace-overview
- * v3 "Aktiv" header pill: 22px hairline pill, 5px tone dot, 11px medium
- * label always in ink-secondary (Paper #505967).
+ * Status as a word with a tone dot: plain (7px dot + 13px medium label; dots filled, muted 1.5px outlined) or
+ * `outline`, a 22px hairline pill with a 5px dot and a 12px medium label in ink-secondary. Tones use the base hues
+ * of the palette (dots only, never text).
  */
 const dotVariants = cva("size-1.75 shrink-0 rounded-pill", {
   variants: {
     tone: {
-      success: "bg-step-say",
+      success: "bg-success",
       progress: "bg-warn",
       info: "bg-accent-blue",
       muted: "border-[1.5px] border-line-dot bg-transparent",

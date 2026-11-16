@@ -1,170 +1,170 @@
 /*
- * Humaify Platform design tokens — synchronised from humaify-platform
- * `packages/ui/src/styles.css` (branch `development`). Keep this file a
- * verbatim copy of the source's @theme/base/utility blocks; Overwatch-specific
- * additions live in `globals.css`. Removed against the source: the Tailwind
- * imports (owned by globals.css), `@source` (no workspace package here) and the
- * Blaak @font-face (loaded through next/font in `layout.tsx`). `--color-*` is
- * reset so Tailwind's default palette does not exist.
- *
- * Helferlein copy (via humaify-overwatch `src/app/platform-theme.css`, SHA256
- * 245d96c2…, identical in Werknetz). One deviation, documented in
- * docs/design-reference.md: the `--color-*: initial` reset is removed because
- * the unchanged print templates still use Tailwind's zinc palette. New UI uses
- * only the tokens below. Blaak (`--font-serif`) is not bundled and not used.
+ * Helferlein design tokens after the Palermo design system (public documentation at
+ * palermo.tryprofound.com/docs, read Nov 2026). Palermo is not published as a package, so the values below are
+ * rebuilt from its documented tokens; the token NAMES are the ones the app already used, so pages and recipes keep
+ * their classes. Mapping and the deliberate deviations (text contrast, control heights, focus ring) are listed in
+ * docs/design-reference.md. Tailwind's default palette stays available because the unchanged print templates use it;
+ * product UI uses only the tokens below.
  */
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design tokens — Single Source of Truth: Paper flow-detail screen (artboard 2MTE-0).
- * Values are extracted 1:1 via Paper MCP computed styles. Do not add new colors,
- * radii, or sizes without flagging the deviation (see .cursor/rules/ui-design-source-of-truth.mdc).
- */
-
 @theme {
-  /* Fonts */
+  /* Fonts: Inter variable (bundled, SIL OFL) and Roboto Mono for figures in code position. */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-roboto-mono), ui-monospace, "SF Mono", monospace;
+  --font-serif: Georgia, "Times New Roman", serif;
+
   /*
-   * Display serif — auth/brand-art surfaces ONLY (AuthArtPanel copy), never
-   * product UI. Blaak is licensed and bundled via @font-face above. Flagged
-   * deviation from the two-family rule, sanctioned Jul 2026 (DESIGN.md
-   * §Typography).
+   * Text. Palermo: text-primary #18181a, secondary #787878, tertiary #969696, quaternary #b4b4b4.
+   * Deviation: running secondary copy uses #636363 (6:1 on white) instead of #787878 (4.4:1), because the app is
+   * read by older users; #787878 remains for quiet marks next to a label.
    */
-  --font-serif: var(--font-blaak), Georgia, "Times New Roman", serif;
+  --color-ink: #18181a;
+  --color-ink-secondary: #636363;
+  --color-ink-body: #636363;
+  --color-ink-muted: #636363;
+  --color-ink-soft: #787878;
+  --color-ink-faint: #969696;
+  --color-ink-disabled: #b4b4b4;
 
-  /* Ink (text) scale — darkest to faintest */
-  --color-ink: #1c1d1f;
-  --color-ink-secondary: #505967;
-  --color-ink-body: #5b6472;
-  --color-ink-muted: #6f7988;
-  --color-ink-soft: #8f99a8;
-  --color-ink-faint: #98a1ae;
-  --color-ink-disabled: #b5bdc9;
-
-  /* Surfaces */
+  /* Backgrounds: bg-primary, bg-sidebar/bg-secondary, bg-tertiary (hover, selected), bg-secondary. */
   --color-surface: #ffffff;
-  --color-surface-rail: #fcfcfc;
-  --color-surface-muted: #f3f4f6;
-  --color-surface-subtle: #f7f8fa;
+  --color-surface-rail: #fafafa;
+  --color-surface-muted: #f5f5f5;
+  --color-surface-subtle: #fafafa;
+  --color-surface-selected: #f1f1f1;
+  --color-surface-pressed: #e8e8e8;
 
-  /* Hairlines / borders */
-  --color-line: #e4e7ec;
-  --color-line-control: #e0e3e8;
-  --color-line-input: #dfe3e9;
-  --color-line-dash: #d3d8df;
-  --color-line-strong: #c6ccd5;
-  --color-line-dot: #c7cdd6;
+  /* Lines: fill-quaternary for dividers, fill-tertiary for the strong edge. */
+  --color-line: #e8e8e8;
+  --color-line-control: #e8e8e8;
+  --color-line-input: #e8e8e8;
+  --color-line-dash: #d4d4d8;
+  --color-line-strong: #d4d4d8;
+  --color-line-dot: #d4d4d8;
 
-  /* Accents */
-  --color-accent-blue: #5cabff;
-  --color-link: #2563eb;
-  --color-brand: #0096ff;
+  /* Fills */
+  --color-fill: #18181a;
+  --color-fill-hover: #2c2c2e;
 
-  /* Step / semantic hues (flow editor) */
-  --color-step-ask: #5cabff;
-  --color-step-action: #ecaa3d;
-  --color-step-if: #c25587;
-  --color-step-tell: #887ec9;
-  --color-step-say: #1fb06a;
+  /* Palette: blue base / emphasis */
+  --color-accent-blue: oklch(62.3% 0.214 259.815);
+  --color-link: oklch(41.214% 0.17348 265.122);
+  --color-brand: oklch(62.3% 0.214 259.815);
+  --color-info-line: oklch(94.2% 0.028 255.34);
+  --color-info-tint: oklch(97% 0.014 254.604);
 
-  /* Warn / issue marker */
-  --color-warn: #ecaa3d;
-  --color-warn-ink: #8a6412;
-  --color-warn-line: #e0c075;
+  /* Former step hues, mapped to the Palermo palette */
+  --color-step-ask: oklch(62.3% 0.214 259.815);
+  --color-step-action: oklch(76.9% 0.188 70.08);
+  --color-step-if: oklch(70.5% 0.213 47.604);
+  --color-step-tell: oklch(62.3% 0.214 259.815);
+  --color-step-say: oklch(62.695% 0.18045 148.232);
+
+  /* Amber: base / emphasis / border / muted fill */
+  --color-warn: oklch(76.9% 0.188 70.08);
+  --color-warn-ink: oklch(47.3% 0.137 46.201);
+  --color-warn-line: oklch(94.011% 0.05289 96.769);
+  --color-warn-tint: oklch(98.7% 0.022 95.277);
+
+  /* Green */
+  --color-success: oklch(62.695% 0.18045 148.232);
+  --color-success-ink: oklch(39.3% 0.095 152.535);
+  --color-success-line: oklch(92.774% 0.06064 156.846);
+  --color-success-tint: oklch(96.861% 0.02956 154.903);
 
   /*
-   * Success — semantic family (workspace overview: delta badges, active
-   * pills, live markers). Base hue equals --color-step-say; the ink/tint
-   * pair exists so text on the tint stays readable.
+   * Red. `danger` is the palette base (marks, edges), `danger-ink` the emphasis step for text. Deviation:
+   * `danger-solid` carries white button text at 5:1; the palette base reaches only 3.9:1.
    */
-  --color-success: #1fb06a;
-  --color-success-ink: #0b7a4d;
-  --color-success-tint: #e8f6ee;
-
-  /* Destructive — provisional, no red exists on the flow page yet */
-  --color-danger: #dc2626;
+  --color-danger: oklch(63.7% 0.237 25.331);
+  --color-danger-ink: oklch(44.4% 0.177 26.899);
+  --color-danger-solid: oklch(55% 0.22 26.5);
+  --color-danger-line: oklch(94.5% 0.027 17.633);
+  --color-danger-tint: oklch(97.1% 0.013 17.38);
 
   /* shadcn-compat semantic aliases */
   --color-background: #ffffff;
-  --color-foreground: #1c1d1f;
+  --color-foreground: #18181a;
   --color-card: #ffffff;
-  --color-card-foreground: #1c1d1f;
+  --color-card-foreground: #18181a;
   --color-popover: #ffffff;
-  --color-popover-foreground: #1c1d1f;
-  --color-primary: #1c1d1f;
+  --color-popover-foreground: #18181a;
+  --color-primary: #18181a;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f3f4f6;
-  --color-secondary-foreground: #1c1d1f;
-  --color-muted: #f7f8fa;
-  --color-muted-foreground: #6f7988;
-  --color-accent: #f3f4f6;
-  --color-accent-foreground: #1c1d1f;
-  --color-destructive: #dc2626;
-  --color-border: #e4e7ec;
-  --color-input: #dfe3e9;
-  --color-ring: #5cabff;
+  --color-secondary: #f5f5f5;
+  --color-secondary-foreground: #18181a;
+  --color-muted: #fafafa;
+  --color-muted-foreground: #636363;
+  --color-accent: #f5f5f5;
+  --color-accent-foreground: #18181a;
+  --color-destructive: oklch(55% 0.22 26.5);
+  --color-border: #e8e8e8;
+  --color-input: #e8e8e8;
+  /* Deviation: keyboard focus keeps a visible blue ring; Palermo's own 3px halo (5% black) is too faint to find. */
+  --color-ring: oklch(62.3% 0.214 259.815);
 
-  /*
-   * Radii — exactly five values. Rule of use:
-   * micro = elements < 20px (keycaps, tiny avatars), sm = controls ≤ 26px,
-   * md = 28px controls & plates, lg = input surfaces & rail items,
-   * pill = chips, nav pills, dots.
-   */
-  --radius-micro: 4.5px;
-  --radius-sm: 7px;
+  /* Radii from the Palermo scale (4, 6, 8, 10, 12, 16, rounded). */
+  --radius-micro: 4px;
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
-  --radius-card-sm: 14px;
-  --radius-card: 22px;
-  --radius-pill: 999px;
+  --radius-card-sm: 12px;
+  --radius-card: 16px;
+  --radius-pill: 10000px;
 
-  /* Type scale (px, from Paper) */
-  --text-3xs: 9px;
-  --text-3xs--line-height: 12px;
+  /*
+   * Elevation. Every shadow carries its own 1px edge, so a surface with a shadow gets no border.
+   * low: controls and plates; medium: cards; high: menus, dialogs.
+   */
+  --shadow-edge: 0 0 0 1px rgb(0 0 0 / 0.05);
+  --shadow-low: 0 1px 2px 0 rgb(0 0 0 / 0.02), 0 2px 4px 0 rgb(0 0 0 / 0.02), 0 0 0 1px rgb(0 0 0 / 0.05);
+  --shadow-low-hover: 0 1px 2px 0 rgb(0 0 0 / 0.02), 0 2px 4px 0 rgb(0 0 0 / 0.02), 0 0 0 1px #ebebeb, 0 0 0 1px rgb(0 0 0 / 0.05);
+  /* Deviation: text fields carry a slightly stronger edge (9% instead of 5%) so they are easy to find. */
+  --shadow-control: 0 1px 2px 0 rgb(0 0 0 / 0.02), 0 2px 4px 0 rgb(0 0 0 / 0.02), 0 0 0 1px rgb(0 0 0 / 0.09);
+  --shadow-medium: 0 4px 4px 0 rgb(0 0 0 / 0.02), 0 4px 80px 8px rgb(0 0 0 / 0.02), 0 0 0 1px rgb(0 0 0 / 0.05);
+  --shadow-high: 0 4px 5px 0 rgb(0 0 0 / 0.02), 0 8px 32px 0 rgb(0 0 0 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.05);
+
+  /*
+   * Type scale. Palermo steps: micro 10/14, mini 12/16, small 13/18 (product default), regular 14/20,
+   * title-mini 18/24, title-small 24/32, title-regular 28/32. The app's step names map onto them; `2xl` (16/24)
+   * is the one step outside the scale, kept so inputs on touch screens do not trigger the iOS zoom.
+   */
+  --text-3xs: 10px;
+  --text-3xs--line-height: 14px;
   --text-2xs: 10px;
-  --text-2xs--line-height: 12px;
-  --text-xs: 11px;
-  --text-xs--line-height: 14px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
   --text-sm: 12px;
   --text-sm--line-height: 16px;
-  --text-md: 12.5px;
-  --text-md--line-height: 16px;
+  --text-md: 13px;
+  --text-md--line-height: 18px;
   --text-base: 13px;
-  --text-base--line-height: 16px;
-  --text-lg: 14.5px;
-  --text-lg--line-height: 22px;
-  --text-xl: 15px;
-  --text-xl--line-height: 22px;
+  --text-base--line-height: 18px;
+  --text-lg: 14px;
+  --text-lg--line-height: 20px;
+  --text-xl: 14px;
+  --text-xl--line-height: 20px;
   --text-2xl: 16px;
-  --text-2xl--line-height: 22px;
-  --text-display: 28px;
-  --text-display--line-height: 34px;
-  /*
-   * Display-XL — serif hero on auth art panels (pairs with --font-serif)
-   * and, sanctioned Aug 2026, the sans HeroStat value on overview pages
-   * (workspace overview v3). No other product-UI uses.
-   */
-  --text-display-xl: 40px;
-  --text-display-xl--line-height: 46px;
+  --text-2xl--line-height: 24px;
+  --text-title: 18px;
+  --text-title--line-height: 24px;
+  --text-display: 24px;
+  --text-display--line-height: 32px;
+  --text-display-xl: 28px;
+  --text-display-xl--line-height: 32px;
 
-  /*
-   * Tracking — exactly three values:
-   * snug for all sans UI text, caps for mono uppercase labels/badges,
-   * loose for mono code references and avatar initials.
-   */
-  --tracking-caps: 0.08em;
-  --tracking-snug: -0.01em;
-  --tracking-loose: 0.02em;
+  /* Tracking: body text is not tracked; titles sit at -0.25px; caps labels keep a little air. */
+  --tracking-caps: 0.02em;
+  --tracking-snug: 0em;
+  --tracking-loose: 0em;
+  --tracking-title: -0.25px;
 
-  /*
-   * Motion — the built-in CSS easings are too weak for deliberate UI motion.
-   * ease-out: entrances, press feedback, anything responding to the user.
-   * ease-in-out: elements already on screen moving A→B. Never use ease-in.
-   */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* Motion: 150ms on Palermo's default curve. */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @layer base {
@@ -174,12 +174,12 @@
   }
 
   /* The TopBar is sticky: anchor jumps and focus scrolling stop below it
-     (52–60px bar + breathing room) instead of hiding targets underneath. */
+     (48px bar + breathing room) instead of hiding targets underneath. */
   html {
     scroll-padding-top: 5rem;
   }
 
-  /* Mobile chrome adds a 44px menu row below the 52px TopBar. */
+  /* Mobile chrome adds a 44px menu row below the 48px TopBar. */
   @media (width < 64rem) {
     html {
       scroll-padding-top: 7rem;

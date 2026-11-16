@@ -77,6 +77,7 @@ export default function RecurringPage() {
             {!ri.active ? <StatusPill tone="muted">{t(language, "recurring.paused")}</StatusPill>
               : isDue ? <StatusPill tone="attention">{t(language, "recurring.due")}</StatusPill>
                 : isUpcoming ? <StatusPill tone="info">{t(language, "recurring.upcoming")}</StatusPill> : null}
+            {ri.active && <span className="font-sans text-base text-ink-muted">{t(language, ri.autoGenerate ? "recurring.autoOn" : "recurring.autoOff")}</span>}
             {ri.lastRunDate && <span className="font-sans text-base text-ink-muted">{t(language, "recurring.lastRun")}: {formatDateOnly(ri.lastRunDate, locale)}</span>}
           </span>
         );

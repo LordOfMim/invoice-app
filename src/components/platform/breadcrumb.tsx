@@ -5,9 +5,8 @@ import { cn } from "./lib/cn";
 import { IconButton } from "./icon-button";
 
 /*
- * Source: flow page — page toolbar breadcrumb: back button (28px, radius 7,
- * hairline), 13px medium muted segments, "/" separator in line-strong,
- * 15px semibold ink current segment.
+ * Page toolbar breadcrumb: back button (26px, radius 6), 13px medium muted
+ * segments, "/" separator in line-strong, 14px semibold ink current segment.
  *
  * Top-bar variant (platform overview, Jul 2026): emblem › chevron ›
  * clickable segments (13px medium, 9px chevron separators in line-strong)
@@ -31,7 +30,7 @@ export function Breadcrumb({
 export interface BreadcrumbBackProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {}
 
-/** Reuses IconButton (press feedback included); Paper spec: 28px, radius 7. */
+/** Reuses IconButton (press feedback included). */
 export function BreadcrumbBack({ className, ...props }: BreadcrumbBackProps) {
   return (
     <IconButton
@@ -96,7 +95,7 @@ export interface BreadcrumbLinkProps
 }
 
 /**
- * Clickable top-bar breadcrumb segment (13px medium ink, Paper 2PJF-0).
+ * Clickable top-bar breadcrumb segment (13px medium ink).
  * A real pressable: ghost-style hover fill + the standard press feedback.
  */
 export function BreadcrumbLink({
@@ -111,7 +110,7 @@ export function BreadcrumbLink({
       data-slot="breadcrumb-link"
       aria-current={current ? "page" : undefined}
       className={cn(
-        "-mx-1 min-w-0 cursor-pointer select-none truncate rounded-sm px-1 py-0.5 font-sans text-base/4 font-medium tracking-snug text-ink outline-none transition-[color,background-color,transform] duration-150 ease-out hover:bg-surface-muted active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+        "-mx-1 min-w-0 cursor-pointer select-none truncate rounded-sm px-1 py-0.5 font-sans text-base font-medium tracking-snug text-ink outline-none transition-[color,background-color,transform] duration-150 ease-out hover:bg-surface-muted active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
       {...props}
@@ -155,7 +154,7 @@ export function BreadcrumbPage({
       aria-current="page"
       data-slot="breadcrumb-page"
       className={cn(
-        "min-w-0 truncate font-sans text-xl/4.5 font-semibold tracking-snug text-ink",
+        "min-w-0 truncate font-sans text-xl font-semibold tracking-snug text-ink",
         className,
       )}
       {...props}

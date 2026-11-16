@@ -84,8 +84,8 @@ export function ConfirmDialog({
         }}
       >
         <DialogHeader className="pr-14">
-          <DialogTitle className="text-2xl">{title}</DialogTitle>
-          {description ? <DialogDescription className="text-lg/6">{description}</DialogDescription> : <DialogDescription className="sr-only">{title}</DialogDescription>}
+          <DialogTitle>{title}</DialogTitle>
+          {description ? <DialogDescription className="text-lg">{description}</DialogDescription> : <DialogDescription className="sr-only">{title}</DialogDescription>}
         </DialogHeader>
         {variant === "danger" && warningLabel && (
           <DialogBody className="pb-2">

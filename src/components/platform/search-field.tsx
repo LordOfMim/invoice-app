@@ -8,11 +8,9 @@ import { HugeiconsIcon } from "./icon";
 import { IconButton } from "./icon-button";
 
 /*
- * Source: workspaces directory — the 42px toolbar search box (`md`): leading
- * search glyph on ink-soft, hairline border (Paper's #D3D8DF normalized to
- * line-input per the token roles), disabled-ink placeholder. Focus follows
- * the input convention: line-strong border + soft ring. `sm` (32px) matches
- * the directory toolbars and the Select/Input md control scale. Optional
+ * Search box: leading search glyph in ink-soft, edge from `shadow-control`
+ * (no border), ink-faint placeholder. Focus follows the input convention
+ * (2px ring). Sizes: `md` 42px, `sm` 32px. Optional
  * clear control appears in the trailing lane once the field has content.
  * When `onSearch` is set the leading glyph is a real submit control (click
  * or Enter) so typing never has to remount the field mid-keystroke.
@@ -33,8 +31,7 @@ const searchFieldSize = {
 export interface SearchFieldProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
   /**
-   * `md` = 42px standalone toolbar (workspaces). `sm` = 32px directory /
-   * dialog toolbar — same height as Input/Select md.
+   * `md` = 42px standalone toolbar. `sm` = 32px directory / dialog toolbar.
    */
   size?: keyof typeof searchFieldSize;
   /** Trailing slot inside the field, e.g. a pending spinner. */
@@ -131,7 +128,7 @@ export function SearchField({
     <div
       data-slot="search-field"
       className={cn(
-        "flex w-full items-center rounded-md border border-line-input bg-surface transition-colors focus-within:border-line-strong focus-within:ring-2 focus-within:ring-ring/30",
+        "flex w-full items-center rounded-md bg-surface shadow-control transition-[background-color,box-shadow] duration-150 hover:bg-surface-muted focus-within:bg-surface focus-within:ring-2 focus-within:ring-ring/50",
         scale.root,
         className,
       )}
@@ -161,7 +158,7 @@ export function SearchField({
         ref={inputRef}
         type="search"
         className={cn(
-          "w-full min-w-0 bg-transparent font-sans font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-disabled [&::-webkit-search-cancel-button]:hidden",
+          "w-full min-w-0 bg-transparent font-sans text-ink outline-none placeholder:text-ink-faint [&::-webkit-search-cancel-button]:hidden",
           scale.input,
         )}
         {...props}

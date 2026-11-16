@@ -55,7 +55,7 @@ export function createInvoiceDirectory() {
           dueLabel: formatDay(invoice.dueDate, locale),
           balance,
           status: invoiceStatus(invoice, balance, language),
-          searchText: `${invoice.invoiceNumber} ${invoice.recipient.name} ${invoice.invoiceDate} ${dateLabel}`.toLocaleLowerCase(locale),
+          searchText: `${invoice.invoiceNumber} ${invoice.recipient.name} ${invoice.projectReference ?? ""} ${invoice.invoiceDate} ${dateLabel}`.toLocaleLowerCase(locale),
         };
         cache.set(invoice, { locale, language, today, credits: linked, row });
         return row;
