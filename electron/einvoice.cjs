@@ -54,6 +54,13 @@ function assertDocument(d) {
   }
   if (new Set(d.taxes.map(t => `${t.rate}:${t.category}`)).size !== d.taxes.length || d.lines.some(l => !d.taxes.some(t => t.rate === l.taxRate && t.category === l.taxCategory))) throw new Error('Steuergruppen fehlen oder sind doppelt vorhanden.');
   if (!close(round(subtotal), d.totals.subtotal) || !close(round(taxTotal), d.totals.taxTotal) || !close(round(subtotal + taxTotal), d.totals.total)) throw new Error('Rechnungssummen stimmen nicht mit Positionen und Steuern überein.');
+  // Advance invoices deducted on a final invoice: optional, but when present they must add up.
+  const prepaid = d.totals.prepaid ?? 0;
+  if (!Number.isFinite(prepaid) || prepaid < 0 || prepaid - d.totals.total > 0.000001) throw new Error('Die abgezogenen Abschlagsrechnungen passen nicht zum Rechnungsbetrag.');
+  if (d.totals.payable !== undefined && !close(round(d.totals.total - prepaid), d.totals.payable)) throw new Error('Der Restbetrag stimmt nicht mit Rechnungsbetrag und Abschlägen überein.');
+  if (d.deductions !== undefined && (!Array.isArray(d.deductions) || d.deductions.length > 500 || !close(round(d.deductions.reduce((s, x) => s + x.gross, 0)), prepaid))) throw new Error('Die Liste der Abschlagsrechnungen stimmt nicht mit dem abgezogenen Betrag überein.');
+  if (d.extraNotes !== undefined && (!Array.isArray(d.extraNotes) || d.extraNotes.some(n => typeof n !== 'string'))) throw new Error('Ungültige E-Rechnungsdaten.');
+  if (d.lines.some(l => l.taxCategory === 'AE') && !(typeof d.buyer.vatId === 'string' && d.buyer.vatId.trim())) throw new Error('Bei Steuerschuldnerschaft des Leistungsempfängers fehlt die Umsatzsteuer-ID des Empfängers.');
 }
 async function exportEInvoice({ format, document, runtimeDir, assetsDir } = {}) {
   if (!['xrechnung', 'zugferd'].includes(format)) throw new Error('Unbekanntes E-Rechnungsformat.');

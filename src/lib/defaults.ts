@@ -14,8 +14,8 @@ import type {
   TemplateCustomization, 
   TemplateVariant 
 } from "@/lib/domain";
-import { computeInvoiceTotals } from "@/lib/calc";
-import { dateToLocalISO } from "@/lib/date";
+import { computeInvoicePayable } from "@/lib/calc";
+import { addDays, dateToLocalISO } from "@/lib/date";
 
 function isoDateToday(): string {
   const now = new Date();
@@ -140,6 +140,12 @@ export function createLineItemFromProduct(product: Product): InvoiceLineItem {
   };
 }
 
+/** Due date of a new invoice: the invoice date plus the payment term from the settings (0 or unset = same day). */
+export function dueDateFor(invoiceDate: string, settings: Pick<AppSettings, "defaultPaymentTermDays">): string {
+  const days = settings.defaultPaymentTermDays;
+  return typeof days === "number" && Number.isFinite(days) && days > 0 ? addDays(invoiceDate, Math.min(Math.round(days), 365)) : invoiceDate;
+}
+
 export function createInvoiceFromDefaults(settings: AppSettings): Invoice {
   const nowIso = new Date().toISOString();
   const today = isoDateToday();
@@ -154,7 +160,7 @@ export function createInvoiceFromDefaults(settings: AppSettings): Invoice {
 
     invoiceNumber: "",
     invoiceDate: today,
-    dueDate: today,
+    dueDate: dueDateFor(today, settings),
 
     sender: { ...settings.defaultSender },
     einvoice: settings.defaultEInvoice ? structuredClone(settings.defaultEInvoice) : undefined,
@@ -198,24 +204,50 @@ export function createInvoiceFromCustomer(settings: AppSettings, customer: Custo
   };
 }
 
+/**
+ * A record keyed by line id (unit codes, tax rates remembered for § 13b) for copies of those lines that received
+ * new ids: `copies[i]` is the copy of `originals[i]`. Keys of lines that no longer exist are dropped.
+ */
+export function remapLineIdKeys<T>(
+  record: Record<string, T> | undefined,
+  originals: readonly { id: string }[],
+  copies: readonly { id: string }[],
+): Record<string, T> | undefined {
+  if (!record) return undefined;
+  const next: Record<string, T> = {};
+  originals.forEach((line, index) => {
+    if (copies[index] && Object.prototype.hasOwnProperty.call(record, line.id)) next[copies[index].id] = record[line.id];
+  });
+  return next;
+}
+
 export function duplicateInvoice(invoice: Invoice): Invoice {
   const nowIso = new Date().toISOString();
   const lineItems = invoice.lineItems.map((line) => ({ ...line, id: newId() }));
   const einvoice = invoice.einvoice ? structuredClone(invoice.einvoice) : undefined;
-  if (einvoice?.unitCodes) {
-    einvoice.unitCodes = Object.fromEntries(invoice.lineItems.flatMap((line, index) => {
-      const code = invoice.einvoice?.unitCodes?.[line.id];
-      return code ? [[lineItems[index].id, code]] : [];
-    }));
-  }
+  if (einvoice?.unitCodes) einvoice.unitCodes = remapLineIdKeys(invoice.einvoice?.unitCodes, invoice.lineItems, lineItems);
+  // The date of supply belongs to the original; the copy is for new work.
+  if (einvoice?.serviceDate) einvoice.serviceDate = undefined;
   return {
     ...invoice,
     id: newId(),
     invoiceNumber: "",
+    // A copied final invoice starts without deductions. Its advance invoices are not offered again while the
+    // original still deducts them (the editor says so); they become free once the original is cancelled in full.
+    advanceDeductions: undefined,
+    // The tax rates remembered for switching § 13b off follow their positions to the new ids.
+    reverseChargePreviousRates: remapLineIdKeys(invoice.reverseChargePreviousRates, invoice.lineItems, lineItems),
     paid: false,
     payments: [],
     attachments: [],
     creditNoteIds: [],
+    // A copy is a new document: it carries no reminders and no link to a quote.
+    reminders: undefined,
+    // Nor is it a run of the schedule its original came from (that would block the schedule's own run on that day).
+    recurringInvoiceId: undefined,
+    convertedInvoiceId: undefined,
+    sourceQuoteId: undefined,
+    quoteStatus: invoice.documentKind === "quote" ? "open" : undefined,
     createdAt: nowIso,
     updatedAt: nowIso,
     lineItems,
@@ -308,7 +340,8 @@ export function createDefaultCreditNoteTextsDe(): CreditNoteTexts {
 
 export function createCreditNoteFromInvoice(invoice: Invoice, type: "storno" | "gutschrift"): CreditNote {
   const nowIso = new Date().toISOString();
-  const invoiceTotal = computeInvoiceTotals(invoice).total;
+  // A cancellation reverses what this invoice demands (a final invoice minus its deducted advances).
+  const invoiceTotal = Math.max(0, computeInvoicePayable(invoice).payable);
   return {
     schemaVersion: 1,
     id: newId(),

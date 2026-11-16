@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardZone, KeyValueList } from "@/components/ui/Layout";
 import { DecimalInput } from "@/components/ui/DecimalInput";
@@ -10,8 +10,10 @@ import { OverflowMenu } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { KindBadge } from "@/components/ui/Status";
 import { Textarea } from "@/components/ui/Textarea";
-import { computeInvoiceTotals, computeLineTotal } from "@/lib/calc";
-import { createDefaultLineItem, createLineItemFromProduct } from "@/lib/defaults";
+import { computeInvoicePayable, computeLineTotal } from "@/lib/calc";
+import { formatDocumentDate } from "@/lib/date";
+import { createDefaultLineItem, createLineItemFromProduct, newId } from "@/lib/defaults";
+import { lineTaxRateFor } from "@/lib/documents";
 import type { Invoice, InvoiceLineItem, InvoiceTexts, LineItemType, Product } from "@/lib/domain";
 import { formatMoney, roundMoney } from "@/lib/money";
 import { fieldId } from "./fields";
@@ -24,10 +26,37 @@ type RowProps = {
   currency: string;
   locale: string;
   errors: Record<string, string>;
+  /** Products whose name or description matches what is being typed into a fresh position. */
+  products: readonly Product[];
+  /** True when the invoice is issued without VAT (§ 13b): products are taken over with 0 %. */
+  reverseCharge: boolean;
   onUpdate: (id: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => void;
   onRemove: (id: string) => void;
   onMove: (id: string, offset: -1 | 1) => void;
 };
+
+const MAX_SUGGESTIONS = 4;
+
+/** Products to offer for a position that is still being typed: no product chosen yet and no price entered. */
+function suggestProducts(item: InvoiceLineItem, products: readonly Product[]): Product[] {
+  if ((item.type ?? "item") !== "item" || item.productId || item.unitPrice !== 0) return [];
+  const query = item.description.trim().toLocaleLowerCase("de-DE");
+  if (query.length < 2 || query.includes("\n")) return [];
+  const starts: Product[] = [];
+  const contains: Product[] = [];
+  for (const product of products) {
+    const name = product.name.toLocaleLowerCase("de-DE");
+    const description = product.description.toLocaleLowerCase("de-DE");
+    if (name === query || description === query) continue; // already typed out in full; nothing left to complete
+    if (name.startsWith(query) || description.startsWith(query)) starts.push(product);
+    else if (name.includes(query) || description.includes(query)) contains.push(product);
+  }
+  return [...starts, ...contains].slice(0, MAX_SUGGESTIONS);
+}
+
+const noSubscribe = () => () => {};
+/** The Mac keyboard has ⌘ where others have Strg. */
+const isMac = () => window.electronAPI?.platform === "darwin" || /mac/i.test(navigator.userAgent);
 
 const typeLabel: Record<LineItemType, string> = { header: "Überschrift", subheader: "Unter-Überschrift", item: "Position" };
 
@@ -38,12 +67,13 @@ const percentOf = (rate: number | undefined) => (rate === undefined ? undefined 
  * One row of the positions plate: mono index lane (Platform step-list recipe), number and description, then the
  * structured amounts. Row actions (type, order, remove) live in a visible „…“ menu, never on hover only.
  */
-const LineItemRow = memo(function LineItemRow({ item, index, count, texts, currency, locale, errors, onUpdate, onRemove, onMove }: RowProps) {
+const LineItemRow = memo(function LineItemRow({ item, index, count, texts, currency, locale, errors, products, reverseCharge, onUpdate, onRemove, onMove }: RowProps) {
   const itemType = item.type ?? "item";
   const isItem = itemType === "item";
   const id = (prop: string) => fieldId(`lineItems.${index}.${prop}`);
   const rowError = errors[`lineItems.${index}`];
   const net = computeLineTotal(item).net;
+  const suggestions = suggestProducts(item, products);
 
   return (
     <CardZone className={`@container ${itemType === "header" ? "bg-surface-subtle" : ""}`}>
@@ -68,6 +98,27 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
               />
             </Field>
           </div>
+          {suggestions.length > 0 && (
+            <div role="group" aria-label="Passende Produkte und Leistungen" className="flex flex-wrap items-center gap-2 @lg:pl-[calc(7rem+0.75rem)]">
+              <span className="font-sans text-base tracking-snug text-ink-muted">Übernehmen:</span>
+              {suggestions.map((product) => (
+                <Button
+                  key={product.id}
+                  size="sm"
+                  onClick={() => onUpdate(item.id, (prev) => ({
+                    ...prev,
+                    description: product.description || product.name,
+                    unit: product.unit,
+                    unitPrice: product.unitPrice,
+                    taxRate: reverseCharge ? 0 : product.taxRate,
+                    productId: product.id,
+                  }))}
+                >
+                  {product.name} · {formatMoney(product.unitPrice, currency, locale)}
+                </Button>
+              ))}
+            </div>
+          )}
           {isItem && (
             <div className="grid grid-cols-1 gap-3 @xs:grid-cols-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)]">
               <Field label={texts.itemsQuantityLabel || "Menge"} id={id("quantity")} error={errors[`lineItems.${index}.quantity`]}>
@@ -84,7 +135,7 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
               </Field>
               <div className="flex min-w-0 flex-col gap-1.5 @xs:col-span-2 @2xl:col-span-1">
                 <span className="font-sans text-base font-medium tracking-snug text-ink-secondary">Netto</span>
-                <span className="flex h-10 items-center justify-end rounded-md bg-surface-subtle px-3 font-sans text-lg font-semibold tracking-snug text-ink tabular-nums">
+                <span className="flex h-9.5 items-center justify-end rounded-md bg-surface-subtle px-3 touch:h-11 font-sans text-lg font-semibold tracking-snug text-ink tabular-nums">
                   {formatMoney(net, currency, locale)}
                 </span>
               </div>
@@ -126,6 +177,7 @@ export function LineItemsEditor({
   invoice,
   products,
   defaultTaxRate,
+  previous,
   currency,
   locale,
   errors,
@@ -137,6 +189,8 @@ export function LineItemsEditor({
   invoice: Invoice;
   products: Product[];
   defaultTaxRate?: number;
+  /** The customer's most recent other document; its positions can be taken over. */
+  previous?: Invoice;
   currency: string;
   locale: string;
   errors: Record<string, string>;
@@ -145,25 +199,69 @@ export function LineItemsEditor({
   onRemove: (id: string) => void;
   onMove: (id: string, offset: -1 | 1) => void;
 }) {
-  const [focusRequest, setFocusRequest] = useState<{ index: number; at: number } | null>(null);
-  const totals = computeInvoiceTotals(invoice);
+  /** Row whose description takes the focus as soon as it is on the page. */
+  const pendingFocus = useRef<number | null>(null);
+  const mac = useSyncExternalStore(noSubscribe, isMac, () => false);
+  const totals = computeInvoicePayable(invoice);
   const texts = invoice.texts;
+  const reverseCharge = invoice.reverseCharge === true;
+  const newLineTaxRate = lineTaxRateFor(invoice, defaultTaxRate);
+  const hasContent = invoice.lineItems.some((item) => item.description.trim() || item.unitPrice !== 0);
+  // The source may be an invoice or, for a quote, another quote: name it by its own title and number.
+  const previousName = previous ? `${previous.texts.documentTitle.trim() || (previous.documentKind === "quote" ? "Angebot" : "Rechnung")} ${previous.invoiceNumber.trim() || "ohne Nummer"}` : "";
+  const previousPositions = previous ? previous.lineItems.filter((item) => (item.type ?? "item") === "item").length : 0;
 
-  // A new row is ready for typing: its description takes the focus.
+  // A new row is ready for typing: its description takes the focus once the row is rendered.
+  const rowCount = invoice.lineItems.length;
   useEffect(() => {
-    if (!focusRequest) return;
-    document.getElementById(fieldId(`lineItems.${focusRequest.index}.description`))?.focus();
-  }, [focusRequest]);
+    if (pendingFocus.current === null) return;
+    const element = document.getElementById(fieldId(`lineItems.${pendingFocus.current}.description`));
+    if (!element) return;
+    pendingFocus.current = null;
+    element.focus();
+  }, [rowCount]);
 
   const add = (type: LineItemType, item?: InvoiceLineItem) => {
-    setFocusRequest({ index: invoice.lineItems.length, at: Date.now() });
-    save((prev) => ({ ...prev, lineItems: [...prev.lineItems, item ?? createDefaultLineItem(defaultTaxRate, type)] }));
+    pendingFocus.current = invoice.lineItems.length;
+    save((prev) => ({ ...prev, lineItems: [...prev.lineItems, item ?? createDefaultLineItem(newLineTaxRate, type)] }));
+  };
+
+  /**
+   * Keyboard entry without the mouse: Enter in the last field (tax rate) of the last position starts the next
+   * position, and ⌘/Strg + Enter does so from any field. A plain Enter in a description keeps breaking the line.
+   */
+  const onRowsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing || event.altKey || event.shiftKey) return;
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+    const shortcut = event.metaKey || event.ctrlKey;
+    if (!shortcut && target.id !== fieldId(`lineItems.${invoice.lineItems.length - 1}.taxRate`)) return;
+    event.preventDefault();
+    add("item");
+  };
+
+  const takeOverPrevious = () => {
+    if (!previous) return;
+    save((prev) => {
+      const copies = previous.lineItems.map((item): InvoiceLineItem => ({
+        ...item,
+        id: newId(),
+        taxRate: (item.type ?? "item") === "item" && prev.reverseCharge ? 0 : item.taxRate,
+      }));
+      // Untouched starter rows make room; anything the user typed stays.
+      const kept = prev.lineItems.filter((item) => item.description.trim() || item.unitPrice !== 0);
+      if (!prev.reverseCharge) return { ...prev, lineItems: [...kept, ...copies] };
+      // Without VAT (§ 13b) the copies carry 0 %; their own rates are remembered for the day it is switched off.
+      const rates = { ...(prev.reverseChargePreviousRates ?? {}) };
+      previous.lineItems.forEach((item, index) => { if ((item.type ?? "item") === "item" && item.taxRate) rates[copies[index].id] = item.taxRate; });
+      return { ...prev, lineItems: [...kept, ...copies], reverseChargePreviousRates: rates };
+    });
   };
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {errors.lineItems && <p role="alert" className="font-sans text-base tracking-snug text-danger">{errors.lineItems}</p>}
-      <Card>
+      {errors.lineItems && <p role="alert" className="font-sans text-base tracking-snug text-danger-ink">{errors.lineItems}</p>}
+      <Card onKeyDown={onRowsKeyDown}>
         {invoice.lineItems.length === 0 && (
           <CardZone>
             <p className="font-sans text-lg tracking-snug text-ink-muted">Noch keine Positionen. Fügen Sie unten die erste Position hinzu.</p>
@@ -179,6 +277,8 @@ export function LineItemsEditor({
             currency={currency}
             locale={locale}
             errors={errors}
+            products={products}
+            reverseCharge={reverseCharge}
             onUpdate={onUpdate}
             onRemove={onRemove}
             onMove={onMove}
@@ -190,11 +290,25 @@ export function LineItemsEditor({
             items={[
               { label: texts.subtotalLabel || "Zwischensumme", value: formatMoney(totals.subtotal, currency, locale) },
               { label: texts.taxTotalLabel || "Steuer", value: formatMoney(totals.taxTotal, currency, locale) },
-              { label: texts.totalLabel || "Gesamt", value: formatMoney(totals.total, currency, locale), emphasis: true },
+              { label: texts.totalLabel || "Gesamt", value: formatMoney(totals.total, currency, locale), emphasis: totals.deducted === 0 },
+              ...(totals.deducted !== 0 ? [
+                { label: "Abschlagsrechnungen", value: formatMoney(-totals.deducted, currency, locale) },
+                { label: totals.payable < 0 ? "Guthaben" : "Restbetrag", value: formatMoney(Math.abs(totals.payable), currency, locale), emphasis: true },
+              ] : []),
             ]}
           />
         </CardZone>
       </Card>
+      {previous && previous.lineItems.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" onClick={takeOverPrevious}>
+            Positionen aus {previousName} {hasContent ? "anfügen" : "übernehmen"}
+          </Button>
+          <span className="font-sans text-base tracking-snug text-ink-muted">
+            vom {formatDocumentDate(previous.invoiceDate, locale)} · {previousPositions === 1 ? "1 Position" : `${previousPositions} Positionen`}
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-end gap-2">
         <Button onClick={() => add("item")}>Position hinzufügen</Button>
         <Button variant="ghost" onClick={() => add("header")}>Überschrift</Button>
@@ -205,7 +319,7 @@ export function LineItemsEditor({
               value=""
               onChange={(e) => {
                 const product = products.find((p) => p.id === e.target.value);
-                if (product) add("item", createLineItemFromProduct(product));
+                if (product) add("item", { ...createLineItemFromProduct(product), ...(reverseCharge ? { taxRate: 0 } : {}) });
               }}
             >
               <option value="">Aus Produkten übernehmen …</option>
@@ -216,6 +330,9 @@ export function LineItemsEditor({
           </Field>
         )}
       </div>
+      <p className="max-w-[72ch] font-sans text-base tracking-snug text-ink-muted">
+        Mit der Tastatur: Die Eingabetaste im Feld „{texts.itemsTaxRateLabel || "MwSt."} %“ der letzten Position legt die nächste Position an. {mac ? "⌘ + Eingabetaste" : "Strg + Eingabetaste"} tut dasselbe aus jedem Feld der Positionen. In der Beschreibung beginnt die Eingabetaste wie gewohnt eine neue Zeile.
+      </p>
     </div>
   );
 }

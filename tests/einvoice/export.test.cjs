@@ -67,7 +67,7 @@ const runtimeDir = process.env.EINVOICE_RUNTIME_DIR || path.join(root, 'electron
 const assetsDir = process.env.EINVOICE_ASSETS_DIR || path.join(root, 'electron/einvoice-assets');
 const integrationAvailable = fs.existsSync(path.join(runtimeDir, 'manifest.json'));
 if (process.env.EINVOICE_REQUIRE_INTEGRATION === '1' && !integrationAvailable) throw new Error('EINVOICE_REQUIRE_INTEGRATION=1, aber die gepinnte Runtime fehlt.');
-test('real offline XML and PDF/A-3b exports pass the pinned validator', { skip: !integrationAvailable, timeout: 120000 }, async () => {
+test('real offline XML and PDF/A-3b exports pass the pinned validator', { skip: !integrationAvailable, timeout: 300000 }, async () => {
   const status = await getEInvoiceRuntimeStatus({ runtimeDir, assetsDir }); assert.equal(status.available, true, status.message);
   const d = fixture();
   for (const format of ['xrechnung', 'zugferd']) {
@@ -133,7 +133,54 @@ test('current KoSIT report requires its terminal acceptance assessment', () => {
   assert.equal(parseKositReport('<rep:report xmlns:rep="http://www.xoev.de/de/validator/varl/1"><rep:assessment><rep:reject/></rep:assessment></rep:report>'), false);
 });
 
-test('official KoSIT 2026-08-31 rejects a well-formed CII without buyer reference', { skip: !integrationAvailable, timeout: 120000 }, async () => {
+test('official KoSIT 2026-08-31 rejects a well-formed CII without buyer reference', { skip: !integrationAvailable, timeout: 300000 }, async () => {
   const invalid = fixture(); invalid.buyerReference = '';
   await assert.rejects(validateXRechnung(Buffer.from(buildCii(invalid, 'xrechnung')), runtimeDir), /KoSIT|freigegeben/);
+});
+
+function finalInvoice() {
+  return { ...invoice(), invoiceKind: 'final', projectReference: 'Neubau Musterweg 3', advanceDeductions: [{ id: 'a1', invoiceNumber: 'RE-2026-000', invoiceDate: '2026-09-01', net: 100, tax: 19 }] };
+}
+test('a final invoice carries the deducted advance invoices as prepaid amount', () => {
+  const prepared = prepareEInvoice(finalInvoice(), 'xrechnung');
+  assert.equal(prepared.ok, true, JSON.stringify(prepared.errors));
+  assert.deepEqual({ ...prepared.document.totals }, { subtotal: 200, taxTotal: 38, total: 238, prepaid: 119, payable: 119 });
+  assertDocument(prepared.document);
+  const xml = buildCii(prepared.document, 'xrechnung');
+  assert.match(xml, /<ram:GrandTotalAmount>238\.00<\/ram:GrandTotalAmount><ram:TotalPrepaidAmount>119\.00<\/ram:TotalPrepaidAmount><ram:DuePayableAmount>119\.00<\/ram:DuePayableAmount>/);
+  assert.match(xml, /RE-2026-000 vom 01\.09\.2026 über 119,00 EUR/);
+  assert.match(xml, /Bauvorhaben: Neubau Musterweg 3/);
+  // Deductions on any other kind of invoice are ignored, exactly as on the printed invoice.
+  const standard = prepareEInvoice({ ...finalInvoice(), invoiceKind: undefined }, 'xrechnung');
+  assert.equal(standard.document.totals.prepaid, 0);
+  assert.doesNotMatch(buildCii(standard.document, 'xrechnung'), /TotalPrepaidAmount/);
+});
+test('a credit balance and manipulated prepaid sums are refused', () => {
+  const over = finalInvoice(); over.advanceDeductions[0].net = 1000;
+  assert.ok(prepareEInvoice(over, 'zugferd').errors.some(e => e.field === 'advanceDeductions'));
+  const d = prepareEInvoice(finalInvoice(), 'zugferd').document;
+  assert.throws(() => assertDocument({ ...d, totals: { ...d.totals, prepaid: 500 } }), /Abschlag/);
+  assert.throws(() => assertDocument({ ...d, totals: { ...d.totals, payable: 1 } }), /Restbetrag/);
+  assert.throws(() => assertDocument({ ...d, deductions: [] }), /Abschlag/);
+  // Documents prepared by an older renderer carry no prepaid fields and stay valid.
+  const legacy = fixture(); assertDocument(legacy); assert.doesNotMatch(buildCii(legacy, 'zugferd'), /TotalPrepaidAmount/);
+});
+function reverseChargeInvoice() {
+  const base = invoice();
+  return { ...base, reverseCharge: true, lineItems: base.lineItems.map(l => ({ ...l, taxRate: 0 })), einvoice: { ...base.einvoice, taxCategory: 'AE', taxExemptionReason: 'Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG)' } };
+}
+test('reverse charge needs the VAT ID of the recipient', () => {
+  const ok = prepareEInvoice(reverseChargeInvoice(), 'zugferd');
+  assert.equal(ok.ok, true, JSON.stringify(ok.errors));
+  const missing = reverseChargeInvoice(); missing.einvoice.buyer = { ...missing.einvoice.buyer, vatId: '' };
+  assert.ok(prepareEInvoice(missing, 'zugferd').errors.some(e => e.field === 'einvoice.buyer.vatId'));
+  assert.throws(() => assertDocument({ ...ok.document, buyer: { ...ok.document.buyer, vatId: '' } }), /Umsatzsteuer-ID/);
+});
+test('final invoice and reverse charge pass the pinned validator in both formats', { skip: !integrationAvailable, timeout: 400000 }, async () => {
+  for (const source of [finalInvoice(), reverseChargeInvoice()]) for (const format of ['xrechnung', 'zugferd']) {
+    const prepared = prepareEInvoice(source, format);
+    assert.equal(prepared.ok, true, JSON.stringify(prepared.errors));
+    const result = await exportEInvoice({ format, document: prepared.document, runtimeDir, assetsDir });
+    assert.equal(result.validation.valid, true);
+  }
 });

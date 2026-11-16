@@ -6,33 +6,30 @@ import { cn } from "./lib/cn";
 import { Spinner } from "./spinner";
 
 /*
- * Source: flow page — "+ Step" button (secondary) and the Publish split button
- * (primary segment). Primary = accent blue #5CABFF with white semibold label.
- * Extensions (auth/settings screens, Jul 2026): quiet (text-only step-up,
- * calmer than ghost — mode toggles, sign-out), danger (destructive solid on
- * the provisional danger red), lg size (36px auth-screen scale-up, the
- * formalized sign-in deviation), and a `loading` prop (spinner + disabled).
+ * Palermo button: 8px radius, 13px medium label, 150ms. Primary is the near-black fill with white text, secondary a
+ * white control whose edge comes from the low shadow (no border), ghost a transparent control, quiet Palermo's
+ * "subtle", danger the destructive fill. Heights: sm 24, md 28 (Palermo regular), lg 38 (Palermo large).
  */
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-sans outline-none transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
+  "inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-sans outline-none transition-[color,background-color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         primary:
-          "bg-accent-blue font-semibold text-white tracking-snug hover:bg-accent-blue/90",
+          "bg-fill font-medium text-white hover:bg-fill-hover",
         secondary:
-          "border border-line-control bg-surface font-medium text-ink-secondary tracking-snug hover:bg-surface-subtle",
+          "bg-surface font-medium text-ink shadow-low hover:bg-surface-muted",
         ghost:
-          "font-medium text-ink-secondary tracking-snug hover:bg-surface-muted",
+          "font-medium text-ink hover:bg-surface-muted",
         quiet:
-          "font-medium text-ink-soft tracking-snug hover:text-ink-secondary",
-        danger: "bg-danger font-semibold text-white tracking-snug hover:bg-danger/90",
-        dark: "bg-ink font-medium text-white tracking-snug hover:bg-ink/90",
+          "font-medium text-ink-secondary hover:text-ink",
+        danger: "bg-danger-solid font-medium text-white hover:bg-danger-ink",
+        dark: "bg-fill font-medium text-white hover:bg-fill-hover",
       },
       size: {
-        sm: "h-6.5 px-2.75 text-sm",
-        md: "h-7 px-3 text-md",
-        lg: "h-9 gap-2 px-3.5 text-base",
+        sm: "h-6 px-2 text-sm",
+        md: "h-7 px-2.5 text-md",
+        lg: "h-9.5 gap-1.5 px-3.5 text-base",
       },
     },
     defaultVariants: {
@@ -82,8 +79,7 @@ export function Button({
 }
 
 /*
- * Split button — Publish pattern from the top bar: primary action segment +
- * hairline divider + a quiet trailing segment (e.g. release counter "r 19").
+ * Split button: primary action segment + hairline divider + a quiet trailing segment.
  */
 export interface SplitButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -105,13 +101,13 @@ export function SplitButton({
     <div
       data-slot="split-button"
       className={cn(
-        "inline-flex h-7 shrink-0 overflow-clip rounded-md border border-line-control transition-transform duration-150 ease-out has-[button:active]:scale-[0.97] motion-reduce:has-[button:active]:scale-100",
+        "inline-flex h-7 shrink-0 overflow-clip rounded-md shadow-low transition-transform duration-150 ease-out has-[button:active]:scale-[0.97] motion-reduce:has-[button:active]:scale-100",
         className,
       )}
     >
       <button
         type="button"
-        className="inline-flex cursor-pointer items-center gap-1.5 bg-accent-blue pr-2.5 pl-2.25 font-sans text-md font-semibold tracking-snug text-white outline-none transition-colors hover:bg-accent-blue/90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0"
+        className="inline-flex cursor-pointer items-center gap-1.5 bg-fill pr-2.5 pl-2.25 font-sans text-md font-medium text-white outline-none transition-colors hover:bg-fill-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0"
         {...props}
       >
         {children}
@@ -120,7 +116,7 @@ export function SplitButton({
       <button
         type="button"
         onClick={onTrailingClick}
-        className="inline-flex cursor-pointer items-center bg-surface-rail px-2.25 font-mono text-xs outline-none transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+        className="inline-flex cursor-pointer items-center bg-surface-rail px-2.25 font-sans text-xs font-medium text-ink-secondary outline-none transition-colors hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
         {...trailingProps}
       >
         {trailing}

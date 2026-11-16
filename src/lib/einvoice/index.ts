@@ -1,5 +1,5 @@
 import type { EInvoiceParty, Invoice } from "../domain";
-import { computeInvoiceTotals, computeLineTotal } from "../calc";
+import { computeInvoicePayable, computeLineTotal } from "../calc";
 import { roundMoney } from "../money";
 
 export type EInvoiceFormat = "xrechnung" | "zugferd";
@@ -13,7 +13,13 @@ export type EInvoiceDocument = {
   taxExemptionReason: string;
   lines: { id: string; description: string; quantity: number; unitCode: string; unitPrice: number; taxRate: number; taxCategory: string; net: number }[];
   taxes: { rate: number; category: string; basis: number; amount: number }[];
-  totals: { subtotal: number; taxTotal: number; total: number };
+  /** `prepaid` is what earlier advance invoices already demanded; `payable` is what this document still demands. */
+  totals: { subtotal: number; taxTotal: number; total: number; prepaid: number; payable: number };
+  /** Advance invoices a final invoice deducts, for the visible PDF and the invoice note. */
+  deductions: { number: string; date: string; gross: number; tax: number }[];
+  projectReference: string;
+  /** Additional structured notes (BT-22), e.g. the list of deducted advance invoices. */
+  extraNotes: string[];
   presentation: { title: string; sellerAddress: string; buyerAddress: string; sellerContact: string; buyerContact: string; notes: string; footer: string; logoDataUrl?: string; labels: Invoice["texts"] };
 };
 
@@ -87,11 +93,26 @@ export function prepareEInvoice(invoice: Invoice, format: EInvoiceFormat): { ok:
     g.amount = roundMoney(g.basis * g.rate / 100);
     if (g.amount !== g.lineTax) add("lineItems", `Steuerrundung bei ${g.rate} % weicht um ${Math.abs(g.amount - g.lineTax).toFixed(2)} ${currency} ab. Die Positionsrundung dieser Rechnung entspricht nicht der E-Rechnungssumme; bitte Positionen anpassen.`);
   }
-  const totals = computeInvoiceTotals(invoice);
-  if (![totals.subtotal, totals.taxTotal, totals.total].every(Number.isFinite) || totals.total < 0) add("lineItems", "Rechnungssummen sind ungültig.");
+  if ([...groups.values()].some((g) => g.category === "AE") && !text(buyer.vatId)) add("einvoice.buyer.vatId", "Rechnungsempfänger: Umsatzsteuer-ID fehlt. Bei Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG) verlangt die E-Rechnung die USt-IdNr. des Empfängers.");
+  const amounts = computeInvoicePayable(invoice);
+  const totals = { subtotal: amounts.subtotal, taxTotal: amounts.taxTotal, total: amounts.total, prepaid: amounts.deducted, payable: amounts.payable };
+  if (![totals.subtotal, totals.taxTotal, totals.total, totals.prepaid, totals.payable].every(Number.isFinite) || totals.total < 0) add("lineItems", "Rechnungssummen sind ungültig.");
+  if (totals.prepaid < 0) add("advanceDeductions", "Die abgezogenen Abschlagsrechnungen ergeben einen negativen Betrag.");
+  if (totals.payable < 0) add("advanceDeductions", "Die Abschlagsrechnungen übersteigen den Rechnungsbetrag. Ein Guthaben lässt sich nicht als E-Rechnung ausgeben; bitte eine Gutschrift erstellen oder die Abzüge prüfen.");
+  const deductions = invoice.invoiceKind === "final"
+    ? (invoice.advanceDeductions ?? []).map((item) => ({ number: text(item.invoiceNumber), date: item.invoiceDate, gross: roundMoney((Number.isFinite(item.net) ? item.net : 0) + (Number.isFinite(item.tax) ? item.tax : 0)), tax: roundMoney(Number.isFinite(item.tax) ? item.tax : 0) }))
+    : [];
+  const germanDate = (value: string) => (validDate(value) ? `${value.slice(8, 10)}.${value.slice(5, 7)}.${value.slice(0, 4)}` : value);
+  const amountText = (value: number) => `${value.toFixed(2).replace(".", ",")} ${currency}`;
+  const projectReference = text(invoice.projectReference);
+  const extraNotes: string[] = [];
+  if (projectReference) extraNotes.push(`${text(invoice.texts.projectReferenceLabel) || "Bauvorhaben"}: ${projectReference}`);
+  if (invoice.invoiceKind === "advance") extraNotes.push("Abschlagsrechnung");
+  if (invoice.invoiceKind === "final") extraNotes.push("Schlussrechnung");
+  if (deductions.length) extraNotes.push(`Abzüglich bereits gestellter Abschlagsrechnungen: ${deductions.map((item) => `${item.number || "ohne Nummer"}${item.date ? ` vom ${germanDate(item.date)}` : ""} über ${amountText(item.gross)} (darin Umsatzsteuer ${amountText(item.tax)})`).join("; ")}. Restbetrag: ${amountText(totals.payable)}.`);
   const document: EInvoiceDocument = {
     number: text(invoice.invoiceNumber), date: invoice.invoiceDate, dueDate: invoice.dueDate, currency,
-    seller, buyer, buyerReference: text(details.buyerReference), paymentMeansCode, iban, bic: text(details.bic), accountName: text(details.accountName), paymentTerms: text(details.paymentTerms), serviceDate: details.serviceDate ?? "", taxExemptionReason: text(details.taxExemptionReason), lines, taxes: [...groups.values()].map(({ rate, category, basis, amount }) => ({ rate, category, basis, amount })), totals,
+    seller, buyer, buyerReference: text(details.buyerReference), paymentMeansCode, iban, bic: text(details.bic), accountName: text(details.accountName), paymentTerms: text(details.paymentTerms), serviceDate: details.serviceDate ?? "", taxExemptionReason: text(details.taxExemptionReason), lines, taxes: [...groups.values()].map(({ rate, category, basis, amount }) => ({ rate, category, basis, amount })), totals, deductions, projectReference, extraNotes,
     presentation: { title: invoice.texts.documentTitle, sellerAddress: invoice.sender.address, buyerAddress: invoice.recipient.address, sellerContact: invoice.sender.contact, buyerContact: invoice.recipient.contact, notes: invoice.notesText, footer: [invoice.footerLeftText ?? invoice.footerText, invoice.footerRightText].filter(Boolean).join("\n"), logoDataUrl: invoice.layout.showLogo ? invoice.logoDataUrl : undefined, labels: invoice.texts },
   };
   return { ok: errors.length === 0, errors, ...(errors.length ? {} : { document }) };

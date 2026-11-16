@@ -52,3 +52,51 @@ export function addMonthsClamped(dateOnly: string, months: number): string {
   target.setDate(Math.min(originalDay, daysInTargetMonth));
   return dateToLocalISO(target);
 }
+
+/** Like addMonthsClamped, but returns to `anchorDay` whenever the target month is long enough (31st → 28th → 31st). */
+export function addMonthsAnchored(dateOnly: string, months: number, anchorDay?: number): string {
+  const date = parseDateOnly(dateOnly);
+  if (!date) return todayLocalISO();
+  const day = anchorDay && anchorDay >= 1 && anchorDay <= 31 ? Math.floor(anchorDay) : date.getDate();
+  const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const daysInTargetMonth = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, daysInTargetMonth));
+  return dateToLocalISO(target);
+}
+
+export function addDays(dateOnly: string, days: number): string {
+  const date = parseDateOnly(dateOnly);
+  if (!date) return todayLocalISO();
+  if (!Number.isFinite(days)) return dateOnly;
+  date.setDate(date.getDate() + Math.round(days));
+  return dateToLocalISO(date);
+}
+
+/** True for a real calendar date in YYYY-MM-DD form (2026-02-30 is not one). */
+export function isDateOnly(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const date = parseDateOnly(value);
+  return !!date && dateToLocalISO(date) === value;
+}
+
+/**
+ * Locale of everything printed on a document (invoice, quote, reminder, declaration) and of the tax export:
+ * dates as 14.11.2026, amounts as 1.234,56 €. Documents are German whatever language the app itself is shown in,
+ * so the PDF, the E-Rechnung and the export never disagree.
+ */
+export const DOCUMENT_LOCALE = "de-DE";
+
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Calendar date for documents and lists: 14.11.2026 (de) or 11/14/2026 (en). Unparseable input is returned as typed. */
+export function formatDocumentDate(value: string | undefined, locale: string): string {
+  if (!value) return "";
+  const date = parseDateOnly(value);
+  if (!date || dateToLocalISO(date) !== value) return value;
+  let formatter = dayFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
+    dayFormatters.set(locale, formatter);
+  }
+  return formatter.format(date);
+}

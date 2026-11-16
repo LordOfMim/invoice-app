@@ -7,7 +7,7 @@ import { cn } from "./lib/cn";
  * Source: workspace overview — 14px ring indicator on line cards and the
  * activity timeline: white core with a hairline ring around a 7px tone dot.
  * The opaque core lets the ring sit on the timeline's dotted spine.
- * Tones mirror StatusDot; Paper's muted #C4CAD2 normalized to line-strong.
+ * Tones mirror StatusDot; muted is line-strong.
  */
 const ringDotVariants = cva("size-1.75 rounded-pill", {
   variants: {

@@ -3,7 +3,7 @@ import { cn } from "@/components/platform/lib/cn";
 
 /*
  * Form compositions after humaify-overwatch `src/components/ui/form-layout.tsx`: `FormPage` (880px column of
- * stacked groups), `FormSection` (Platform workspace-settings recipe: 15px semibold title, muted description, field
+ * stacked groups), `FormSection` (Platform workspace-settings recipe: 18px semibold title, muted description, field
  * grid) and the filter row of the Platform audit page. Helferlein saves every input immediately, so there is no
  * submit row unless a form really submits something.
  */
@@ -18,7 +18,7 @@ export function FormSection({ title, description, columns = 2, id, actions, clas
     <section className={cn("@container flex min-w-0 scroll-mt-24 flex-col gap-4", className)} aria-labelledby={id ? `${id}-title` : undefined} id={id}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <h2 id={id ? `${id}-title` : undefined} tabIndex={id ? -1 : undefined} className="font-sans text-xl/5.5 font-semibold tracking-snug text-ink outline-none">{title}</h2>
+          <h2 id={id ? `${id}-title` : undefined} tabIndex={id ? -1 : undefined} className="font-sans text-title font-semibold tracking-title text-ink outline-none">{title}</h2>
           {description && <p className="max-w-[72ch] font-sans text-base tracking-snug text-ink-muted">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

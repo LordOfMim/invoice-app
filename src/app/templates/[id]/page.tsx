@@ -48,7 +48,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
         title={variant.name || t(language, "templates.new")}
         initials={initialsOf(variant.name) || "V"}
         description={de ? `Variante der Vorlage ${variant.baseTemplateId}. Änderungen werden automatisch lokal gespeichert.` : `Variant of the ${variant.baseTemplateId} template. Changes are saved locally automatically.`}
-        actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Variante löschen …" : "Delete variant …"}</Button>}
+        actions={<Button variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => setShowDelete(true)}>{de ? "Variante löschen …" : "Delete variant …"}</Button>}
       />
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
@@ -68,10 +68,10 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
           <FormSection title={t(language, "templates.typography")} columns={1}>
             <Field label={`${t(language, "templates.fontSizeScale")}: ${(c.fontSizeScale * 100).toFixed(0)} %`}>
-              <input type="range" min="0.8" max="1.2" step="0.05" value={c.fontSizeScale} onChange={(e) => updateCustomization({ fontSizeScale: parseFloat(e.target.value) })} className="h-10 w-full accent-accent-blue" />
+              <input type="range" min="0.8" max="1.2" step="0.05" value={c.fontSizeScale} onChange={(e) => updateCustomization({ fontSizeScale: parseFloat(e.target.value) })} className="h-10 w-full accent-ink" />
             </Field>
             <Field label={`${t(language, "templates.lineSpacing")}: ${c.lineSpacing.toFixed(1)}`}>
-              <input type="range" min="1" max="2" step="0.1" value={c.lineSpacing} onChange={(e) => updateCustomization({ lineSpacing: parseFloat(e.target.value) })} className="h-10 w-full accent-accent-blue" />
+              <input type="range" min="1" max="2" step="0.1" value={c.lineSpacing} onChange={(e) => updateCustomization({ lineSpacing: parseFloat(e.target.value) })} className="h-10 w-full accent-ink" />
             </Field>
           </FormSection>
 
@@ -107,19 +107,19 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
         {/* Schematic sample of the variant settings; the real document preview lives in the invoice. */}
         <Section title={t(language, "templates.preview")} summary={de ? "Schematische Probe. Das echte Dokument sehen Sie in der Rechnung unter „Vorschau“." : "Schematic sample. See the real document in an invoice under “Preview”."} className="lg:sticky lg:top-20">
-          <div className="rounded-card-sm border border-line bg-surface p-6 text-ink" style={{ fontSize: `${c.fontSizeScale * 100}%`, lineHeight: c.lineSpacing }}>
+          <div className="rounded-card-sm shadow-medium bg-surface p-6 text-ink" style={{ fontSize: `${c.fontSizeScale * 100}%`, lineHeight: c.lineSpacing }}>
             <div className={`mb-4 pb-4 ${c.headerStyle === "boxed" ? "rounded-lg border p-4" : c.headerStyle === "underlined" ? "border-b-2" : "border-b"}`} style={{ borderColor: c.accentColor }}>
               <div className="font-semibold" style={{ color: c.accentColor, fontSize: "1.15em" }}>{de ? "Rechnung" : "Invoice"} RE-2026-001</div>
               <div className="text-ink-muted" style={{ fontSize: "0.9em" }}>27.10.2026</div>
             </div>
             <div className="mb-4 grid grid-cols-2 gap-4" style={{ fontSize: "0.9em" }}>
               <div>
-                <div className="font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{t(language, "common.from")}</div>
+                <div className="font-sans text-sm font-medium text-ink-muted">{t(language, "common.from")}</div>
                 <div>{de ? "Ihre Firma" : "Your company"}</div>
                 <div className="text-ink-muted">{de ? "Musterstraße 1, Musterstadt" : "1 Sample Street, Sample Town"}</div>
               </div>
               <div>
-                <div className="font-mono text-xs font-medium tracking-caps text-ink-muted uppercase">{t(language, "common.to")}</div>
+                <div className="font-sans text-sm font-medium text-ink-muted">{t(language, "common.to")}</div>
                 <div>{de ? "Beispielkunde" : "Sample customer"}</div>
                 <div className="text-ink-muted">{de ? "Beispielweg 2, Beispielort" : "2 Example Road, Example City"}</div>
               </div>

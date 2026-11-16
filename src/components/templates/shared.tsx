@@ -1,7 +1,28 @@
 import Image from "next/image";
 import type { Invoice, InvoiceLineItem, LogoPosition, LogoSize, TemplateCustomization } from "@/lib/domain";
-import { computeInvoiceTotals, computeLineTotal, formatTaxPercent } from "@/lib/calc";
+import { computeInvoicePayable, computeLineTotal, formatTaxPercent } from "@/lib/calc";
+import { formatDocumentDate } from "@/lib/date";
+import { REVERSE_CHARGE_NOTE, invoiceKindOf, legalFooterLines } from "@/lib/documents";
 import { formatMoney, formatQuantity } from "@/lib/money";
+
+/**
+ * The rows of the block under the document title: number, date, date of supply, due date and project. Every
+ * template lays them out its own way, but which rows appear is decided once here. Dates print in the reader's
+ * format (31.12.2026) instead of the stored ISO form.
+ */
+export function documentMetaRows(invoice: Invoice, locale: string): { key: string; label: string; value: string }[] {
+  const t = invoice.texts;
+  const isQuote = invoice.documentKind === "quote";
+  const serviceDate = isQuote ? "" : invoice.einvoice?.serviceDate?.trim() ?? "";
+  const project = invoice.projectReference?.trim() ?? "";
+  return [
+    { key: "number", label: t.invoiceNumberLabel, value: invoice.invoiceNumber },
+    { key: "date", label: t.invoiceDateLabel, value: formatDocumentDate(invoice.invoiceDate, locale) },
+    ...(serviceDate ? [{ key: "service", label: t.serviceDateLabel?.trim() || "Leistungsdatum", value: formatDocumentDate(serviceDate, locale) }] : []),
+    { key: "due", label: t.dueDateLabel, value: formatDocumentDate(invoice.dueDate, locale) },
+    ...(project ? [{ key: "project", label: t.projectReferenceLabel?.trim() || "Bauvorhaben", value: project }] : []),
+  ];
+}
 
 export function Logo({ dataUrl, position, size = "medium" }: { dataUrl: string; position: LogoPosition; size?: LogoSize }) {
   const justify: Record<LogoPosition, string> = {
@@ -26,18 +47,26 @@ export function Logo({ dataUrl, position, size = "medium" }: { dataUrl: string; 
 }
 
 // Fixed page footer - appears at bottom of every printed page
-// Contains footer text (left/right) and page indicator
+// Contains footer text (left/right, or the single default footer text), the tax and bank details, and the page indicator
 export function PageIndicator({ invoice }: { invoice: Invoice }) {
-  const leftText = invoice.footerLeftText?.trim();
-  const rightText = invoice.footerRightText?.trim();
-  const hasFooterText = (leftText || rightText) && invoice.layout.showFooter;
-  
+  const showFooter = invoice.layout.showFooter;
+  const leftText = showFooter ? invoice.footerLeftText?.trim() : "";
+  const rightText = showFooter ? invoice.footerRightText?.trim() : "";
+  const singleText = showFooter && !leftText && !rightText ? invoice.footerText?.trim() : "";
+  const legalLines = showFooter ? legalFooterLines(invoice, `${leftText ?? ""} ${rightText ?? ""} ${singleText ?? ""}`) : [];
+
   return (
     <div className="invoice-page-number bg-white text-[10px] pt-3 border-t border-zinc-200">
-      {hasFooterText && (
+      {(leftText || rightText) && (
         <div className="flex justify-between gap-4 text-zinc-500 mb-2">
           <div className="whitespace-pre-wrap">{leftText}</div>
           <div className="whitespace-pre-wrap text-right">{rightText}</div>
+        </div>
+      )}
+      {singleText && <div className="mb-2 whitespace-pre-wrap text-center text-zinc-500">{singleText}</div>}
+      {legalLines.length > 0 && (
+        <div className="mb-2 text-center text-zinc-500">
+          {legalLines.map((line) => <div key={line}>{line}</div>)}
         </div>
       )}
       <div className="text-center text-zinc-400">
@@ -60,23 +89,47 @@ export function ContinuationHeader({ invoice }: { invoice: Invoice }) {
 }
 
 export function TotalsBlock({ invoice, currency, locale }: { invoice: Invoice; currency: string; locale: string }) {
-  const totals = computeInvoiceTotals(invoice);
+  const totals = computeInvoicePayable(invoice);
   const t = invoice.texts;
+  const money = (value: number) => formatMoney(value, currency, locale);
+  const deductions = invoiceKindOf(invoice) === "final" ? invoice.advanceDeductions ?? [] : [];
 
   return (
     <div className="invoice-totals-block ml-auto w-full max-w-xs space-y-1 text-sm">
       <div className="flex items-center justify-between">
         <div className="text-zinc-600">{t.subtotalLabel}</div>
-        <div className="font-medium">{formatMoney(totals.subtotal, currency, locale)}</div>
+        <div className="font-medium">{money(totals.subtotal)}</div>
       </div>
       <div className="flex items-center justify-between">
         <div className="text-zinc-600">{t.taxTotalLabel}</div>
-        <div className="font-medium">{formatMoney(totals.taxTotal, currency, locale)}</div>
+        <div className="font-medium">{money(totals.taxTotal)}</div>
       </div>
       <div className="mt-2 flex items-center justify-between border-t border-zinc-200 pt-2">
         <div className="text-zinc-600">{t.totalLabel}</div>
-        <div className="text-base font-semibold">{formatMoney(totals.total, currency, locale)}</div>
+        <div className={deductions.length ? "font-medium" : "text-base font-semibold"}>{money(totals.total)}</div>
       </div>
+      {deductions.length > 0 && (
+        <>
+          {deductions.map((deduction) => (
+            <div key={deduction.id} className="flex items-start justify-between gap-3">
+              <div className="text-zinc-600">
+                abzgl. Abschlagsrechnung {deduction.invoiceNumber}
+                {deduction.invoiceDate ? ` vom ${formatDocumentDate(deduction.invoiceDate, locale)}` : ""}
+                {deduction.tax ? <span className="block text-xs">darin USt {money(deduction.tax)}</span> : null}
+              </div>
+              <div className="whitespace-nowrap font-medium">{money(-(deduction.net + deduction.tax))}</div>
+            </div>
+          ))}
+          <div className="mt-2 flex items-start justify-between gap-3 border-t border-zinc-200 pt-2">
+            <div className="text-zinc-600">
+              {totals.payable < 0 ? "Guthaben" : "Restbetrag"}
+              {totals.payableTax ? <span className="block text-xs">darin USt {money(totals.payableTax)}</span> : null}
+            </div>
+            <div className="whitespace-nowrap text-base font-semibold">{money(Math.abs(totals.payable))}</div>
+          </div>
+        </>
+      )}
+      {invoice.reverseCharge && <div className="pt-2 text-xs text-zinc-600">{REVERSE_CHARGE_NOTE}</div>}
     </div>
   );
 }

@@ -16,12 +16,17 @@ Lokale Rechnungsverwaltung für macOS, Windows und Linux – mit Kunden, Produkt
 
 ## Funktionen
 
-- **Rechnungen mit Live-Vorschau** in drei Vorlagen (Classic, Modern, Minimal), eigenem Logo und direktem PDF-Export
+- **Rechnungen mit Live-Vorschau** in drei Vorlagen (Classic, Modern, Minimal), eigenem Logo und direktem PDF-Export; die nächste Rechnungsnummer wird vorgeschlagen, doppelte Nummern werden gemeldet, fehlende Pflichtangaben (Steuernummer, Leistungsdatum, Anschriften, Rechnungsnummer) aufgelistet
+- **Angebote**, die sich mit einem Klick in eine Rechnung übernehmen lassen; **Abschlags- und Schlussrechnungen** mit Abzug der gestellten Abschläge; Bauvorhaben als eigenes Feld
+- **Bauleistungen nach § 13b UStG** (Steuerschuldnerschaft des Leistungsempfängers) mit dem vorgeschriebenen Hinweis
 - **E-Rechnung**: ZUGFeRD-PDF/A-3b und XRechnung (CII), jeweils erst nach bestandener lokaler Prüfung speicherbar
+- **E-Mail-Postfach** (IMAP/SMTP, Desktop-App) mit Eingang, Ausgang und Gesprächen; Rechnungen, Angebote, Zahlungserinnerungen und E-Rechnungen direkt aus der App senden. Outlook.com-, Hotmail- und Live-Konten werden noch nicht unterstützt
 - **Kunden, Produkte und Leistungen**, Schlagwörter und wiederverwendbare Vorlagenvarianten
-- **Zahlungen, Teilzahlungen, Gutschriften und Stornos** mit Auswertung offener und überfälliger Beträge
-- **Wiederkehrende Rechnungen** sowie eine druckbare Fachunternehmererklärung
-- **Datensicherung** als JSON-Export und -Import, automatische Sicherung vor jedem Versionswechsel
+- **Zahlungen, Teilzahlungen, Gutschriften und Stornos**, **Zahlungserinnerungen und Mahnungen** zu überfälligen Rechnungen sowie eine Auswertung offener und überfälliger Beträge
+- **Export für die Steuer**: Belege eines Zeitraums als CSV-Liste und, in der Desktop-App, als ZIP mit der Liste und den PDFs der Rechnungen (Stornos und Gutschriften stehen in der Liste)
+- **Wiederkehrende Rechnungen**, auf Wunsch beim Öffnen der App automatisch als Entwurf angelegt, sowie eine druckbare Fachunternehmererklärung, auch direkt aus einer Rechnung
+- **Datensicherung** als JSON-Export und -Import, automatische wöchentliche Sicherung in einen gewählten Ordner (Desktop-App) und Sicherung vor jedem Versionswechsel
+- Wählbare **Schriftgröße** der Oberfläche
 - Oberfläche auf Deutsch und Englisch, keine Cloud, kein Konto, keine Telemetrie
 
 | Rechnungsliste | E-Rechnung | Kunden |

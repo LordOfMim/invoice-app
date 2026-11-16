@@ -11,7 +11,10 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: ["3xs", "2xs", "md", "display", "display-xl"] }],
+      "font-size": [{ text: ["3xs", "2xs", "md", "title", "display", "display-xl"] }],
+      // Token shadows and radii, otherwise read as shadow colours / unknown classes and never replaced by an override.
+      shadow: [{ shadow: ["low", "control", "medium", "high"] }],
+      rounded: [{ rounded: ["micro", "card-sm", "card", "pill"] }],
     },
   },
 });

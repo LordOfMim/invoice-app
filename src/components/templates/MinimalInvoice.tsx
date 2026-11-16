@@ -1,5 +1,5 @@
 import type { Invoice, TemplateCustomization } from "@/lib/domain";
-import { LineItemsTable, Logo, TotalsBlock, NotesSection, PageIndicator } from "@/components/templates/shared";
+import { LineItemsTable, Logo, documentMetaRows, TotalsBlock, NotesSection, PageIndicator } from "@/components/templates/shared";
 
 // Get customization style object as CSS variables
 function getCustomizationStyles(customization?: TemplateCustomization): React.CSSProperties {
@@ -60,18 +60,12 @@ export function MinimalInvoice({ invoice, currency, locale, logoDataUrl }: { inv
         <div className="text-right">
           <div className="text-2xl font-semibold tracking-tight">{t.documentTitle}</div>
           <div className="mt-3 space-y-1 text-sm">
-            <div>
-              <span className="text-zinc-600">{t.invoiceNumberLabel}</span>
-              <span className="ml-2 font-medium">{invoice.invoiceNumber}</span>
-            </div>
-            <div>
-              <span className="text-zinc-600">{t.invoiceDateLabel}</span>
-              <span className="ml-2 font-medium">{invoice.invoiceDate}</span>
-            </div>
-            <div>
-              <span className="text-zinc-600">{t.dueDateLabel}</span>
-              <span className="ml-2 font-medium">{invoice.dueDate}</span>
-            </div>
+            {documentMetaRows(invoice, locale).map((row) => (
+              <div key={row.key}>
+                <span className="text-zinc-600">{row.label}</span>
+                <span className="ml-2 font-medium">{row.value}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

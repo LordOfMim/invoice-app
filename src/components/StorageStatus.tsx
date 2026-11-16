@@ -16,7 +16,7 @@ export function StorageStatus({ language = "de" }: { language?: Language }) {
       : (de ? "Lokal gespeichert" : "Saved locally");
   return (
     <span role="status" aria-live="polite" title={de ? "Alle Eingaben werden automatisch auf diesem Gerät gespeichert. Offline nutzbar." : "Every input is saved automatically on this device. Works offline."}>
-      <StatusPill tone={status === "error" ? "error" : status === "saving" ? "attention" : "success"} className={status === "error" ? "border-danger/40 text-danger" : undefined}>
+      <StatusPill tone={status === "error" ? "error" : status === "saving" ? "attention" : "success"} className={status === "error" ? "border-danger-line text-danger-ink" : undefined}>
         {label}
       </StatusPill>
     </span>

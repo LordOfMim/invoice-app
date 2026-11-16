@@ -4,22 +4,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./lib/cn";
 
 /*
- * Inline alert/callout for form flows (auth screens: passkey error,
- * magic-link sent, 2FA required). Flagged deviation (approved, sign-in
- * states Jul 2026): first surface-level use of the tint families outside
- * badges — danger/success get a tinted plate + matching ink, info stays a
- * neutral tonal surface. No icons, no titles: one quiet sentence.
+ * Inline alert/callout for messages in a flow: danger/success get a tinted
+ * plate with its matching line and ink step, info stays a neutral tonal
+ * surface. No icons.
  *
  * Semantics follow the variant: danger interrupts (role=alert), success and
  * info announce politely (role=status).
  */
 const alertVariants = cva(
-  "flex w-full items-start rounded-lg border px-3 py-2.5 font-sans text-sm tracking-snug",
+  "flex w-full items-start rounded-md border p-3 font-sans text-base",
   {
     variants: {
       variant: {
-        danger: "border-danger/20 bg-danger/6 text-danger",
-        success: "border-success/25 bg-success-tint text-success-ink",
+        danger: "border-danger-line bg-danger-tint text-danger-ink",
+        success: "border-success-line bg-success-tint text-success-ink",
         info: "border-line bg-surface-subtle text-ink-body",
       },
     },

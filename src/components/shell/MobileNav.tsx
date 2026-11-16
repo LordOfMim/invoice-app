@@ -15,11 +15,11 @@ import type { NavGroup, NavItem } from "./nav";
  * focus trap, Escape, focus return). The row sticks below the top bar. The caller keys this component by the path,
  * so every navigation closes the menu and it never reopens by itself.
  */
-export function MobileNav({ groups, group, item: page, title, closeLabel, openLabel, currentLabel, menuLabel }: { groups: readonly NavGroup[]; group?: NavGroup; item?: NavItem; title: string; closeLabel: string; openLabel: string; currentLabel: string; menuLabel: string }) {
+export function MobileNav({ groups, badges = {}, group, item: page, title, closeLabel, openLabel, currentLabel, menuLabel }: { groups: readonly NavGroup[]; badges?: Record<string, { count: number; label: string }>; group?: NavGroup; item?: NavItem; title: string; closeLabel: string; openLabel: string; currentLabel: string; menuLabel: string }) {
   const [open, setOpen] = useState(false);
   const nested = Boolean(group?.label && page);
   return (
-    <nav aria-label={title} className="no-print sticky top-13 z-25 border-b border-line bg-surface px-4 sm:px-6 lg:hidden">
+    <nav aria-label={title} className="no-print sticky top-12 z-25 border-b border-line bg-surface px-4 sm:px-6 lg:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
@@ -33,10 +33,10 @@ export function MobileNav({ groups, group, item: page, title, closeLabel, openLa
                 <>
                   <span className="min-w-0 shrink truncate font-medium text-ink-muted">{group?.label}</span>
                   <HugeiconsIcon icon={ArrowRight01Icon} size={12} className="shrink-0 text-line-strong" />
-                  <span className="min-w-0 truncate font-semibold text-ink">{page.label}</span>
+                  <span className="min-w-0 truncate font-medium text-ink">{page.label}</span>
                 </>
               ) : (
-                <span className="min-w-0 truncate font-semibold text-ink">{page?.label ?? title}</span>
+                <span className="min-w-0 truncate font-medium text-ink">{page?.label ?? title}</span>
               )}
             </span>
             <span className="flex shrink-0 items-center gap-1 font-medium text-ink-secondary">
@@ -65,10 +65,10 @@ export function MobileNav({ groups, group, item: page, title, closeLabel, openLa
                           onClick={() => setOpen(false)}
                           className={cn(
                             "flex min-h-11 flex-col justify-center gap-0.5 rounded-md px-3 py-2 font-sans text-lg tracking-snug outline-none transition-colors duration-100 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
-                            current ? "bg-surface-muted font-semibold text-ink" : "font-medium text-ink-secondary hover:bg-surface-subtle hover:text-ink",
+                            current ? "bg-surface-pressed font-medium text-ink" : "font-medium text-ink-secondary hover:bg-surface-muted hover:text-ink",
                           )}
                         >
-                          <span>{item.label}</span>
+                          <span>{item.label}{badges[item.key]?.count ? <span className="font-normal text-ink-muted"> · {badges[item.key].label}</span> : null}</span>
                           <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{item.hint}</span>
                         </Link>
                       </li>

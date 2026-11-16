@@ -50,7 +50,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
         description={`${t(language, "creditNotes.linkedInvoice")}: ${creditNote.linkedInvoiceNumber || t(language, "common.unknown")}`}
         actions={<>
           <LinkButton href={`/invoices/${creditNote.linkedInvoiceId}`}>{t(language, "actions.viewOriginalInvoice")}</LinkButton>
-          <Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Löschen …" : "Delete …"}</Button>
+          <Button variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => setShowDelete(true)}>{de ? "Löschen …" : "Delete …"}</Button>
         </>}
       />
 

@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/Input";
 import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import type { InvoiceTemplateId, Language } from "@/lib/domain";
+import type { EInvoiceDetails, EInvoiceParty, InvoiceTemplateId, Language, UiScale } from "@/lib/domain";
+import { formatIban } from "@/lib/documents";
 import { createDefaultTextsDe } from "@/lib/defaults";
 import { t } from "@/lib/i18n";
 import { roundMoney } from "@/lib/money";
@@ -28,6 +29,11 @@ export default function SettingsPage() {
   if (!adapter || !settings) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
   const layout = settings.defaultLayout;
+  const details = settings.defaultEInvoice ?? {};
+  const setDetails = (patch: Partial<EInvoiceDetails>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), ...patch } }));
+  const setSeller = (patch: Partial<EInvoiceParty>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), seller: { ...(prev.defaultEInvoice?.seller ?? {}), ...patch } } }));
+  const ibanCompact = (details.iban ?? "").replace(/\s+/g, "");
+  const ibanLooksWrong = ibanCompact !== "" && !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(ibanCompact.toUpperCase());
   const setLayout = (next: Partial<typeof layout>) => updateSettings(adapter, (prev) => ({ ...prev, defaultLayout: { ...prev.defaultLayout, ...next } }));
 
   return (
@@ -50,6 +56,27 @@ export default function SettingsPage() {
           </Field>
         </FormSection>
 
+        <FormSection
+          title="Steuer und Bankverbindung"
+          description="Pflichtangaben jeder Rechnung. Einmal eintragen: Neue Rechnungen drucken sie in der Fußzeile und übernehmen sie in die E-Rechnung."
+        >
+          <Field label="Steuernummer" hint="Vom Finanzamt, z. B. 12/345/67890.">
+            <Input value={details.seller?.taxId ?? ""} onChange={(e) => setSeller({ taxId: e.target.value || undefined })} />
+          </Field>
+          <Field label="USt-IdNr. (falls vorhanden)" hint="z. B. DE123456789. Eine der beiden Nummern genügt.">
+            <Input value={details.seller?.vatId ?? ""} onChange={(e) => setSeller({ vatId: e.target.value.trim().toUpperCase() || undefined })} />
+          </Field>
+          <Field label="IBAN" error={ibanLooksWrong ? "Diese IBAN sieht unvollständig aus. Bitte prüfen." : undefined} hint={ibanCompact ? `Wird gedruckt als ${formatIban(ibanCompact)}` : "Das Konto, auf das Kunden überweisen."}>
+            <Input value={details.iban ?? ""} autoComplete="off" spellCheck={false} onChange={(e) => setDetails({ iban: e.target.value.toUpperCase() || undefined })} />
+          </Field>
+          <Field label="BIC (optional)">
+            <Input value={details.bic ?? ""} autoComplete="off" spellCheck={false} onChange={(e) => setDetails({ bic: e.target.value.trim().toUpperCase() || undefined })} />
+          </Field>
+          <Field label="Kontoinhaber (optional)" hint="Nur nötig, wenn er vom Absender abweicht." className="@md:col-span-2">
+            <Input value={details.accountName ?? ""} onChange={(e) => setDetails({ accountName: e.target.value || undefined })} />
+          </Field>
+        </FormSection>
+
         <FormSection title={t(language, "settings.defaults")} description={de ? "Werte, mit denen neue Rechnungen und Positionen starten." : "Values new invoices and line items start with."}>
           <Field label={t(language, "settings.currency")} hint={de ? "Dreistelliger Code, z. B. EUR" : "Three-letter code, e.g. EUR"}>
             <Input value={settings.currency} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} />
@@ -59,6 +86,13 @@ export default function SettingsPage() {
               allowEmpty
               value={settings.defaultTaxRate === undefined ? undefined : roundMoney(settings.defaultTaxRate * 100)}
               onValueChange={(percent) => updateSettings(adapter, (prev) => ({ ...prev, defaultTaxRate: percent === undefined ? undefined : percent / 100 }))}
+            />
+          </Field>
+          <Field label="Zahlungsziel in Tagen" hint="Neue Rechnungen sind so viele Tage nach dem Rechnungsdatum fällig. Leer oder 0: sofort fällig.">
+            <DecimalInput
+              allowEmpty
+              value={settings.defaultPaymentTermDays}
+              onValueChange={(days) => updateSettings(adapter, (prev) => ({ ...prev, defaultPaymentTermDays: days === undefined || days <= 0 ? undefined : Math.min(365, Math.round(days)) }))}
             />
           </Field>
           <Field label={t(language, "settings.pdfFilenamePattern")} hint={de ? "{invoiceNumber} wird durch die Rechnungsnummer ersetzt." : "{invoiceNumber} is replaced by the invoice number."} className="@md:col-span-2">
@@ -127,14 +161,14 @@ export default function SettingsPage() {
           {settings.defaultLogoDataUrl && (
             <div className="flex flex-wrap items-center gap-4">
               <Image src={settings.defaultLogoDataUrl} alt={t(language, "settings.logoPreview")} width={128} height={64} unoptimized className="h-16 w-auto rounded-md border border-line bg-surface p-1" />
-              <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoDataUrl: undefined }))}>
+              <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoDataUrl: undefined }))}>
                 {t(language, "settings.removeLogo")}
               </Button>
             </div>
           )}
         </FormSection>
 
-        <FormSection title={t(language, "settings.defaultFooter")} columns={1}>
+        <FormSection title={t(language, "settings.defaultFooter")} description="Steht mittig am Seitenende neuer Rechnungen, solange dort keine eigene Fußzeile links oder rechts eingetragen ist. Steuernummer und Bankverbindung müssen hier nicht wiederholt werden." columns={1}>
           <Field label={t(language, "settings.defaultFooter")} hideLabel>
             <Textarea rows={6} value={settings.defaultFooterText} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultFooterText: e.target.value }))} />
           </Field>
@@ -147,6 +181,16 @@ export default function SettingsPage() {
             </Button>
             {textsReset && <StatusNote tone="ok">{de ? "Die deutschen Standardtexte gelten jetzt für neue Rechnungen." : "German default texts now apply to new invoices."}</StatusNote>}
           </div>
+        </FormSection>
+
+        <FormSection title="Schriftgröße der App" description="Größere Schrift für Menüs, Listen und Eingabefelder. Rechnungen und PDFs bleiben unverändert." columns={1}>
+          <Field label="Schriftgröße">
+            <Select value={settings.uiScale ?? "normal"} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, uiScale: e.target.value === "normal" ? undefined : e.target.value as UiScale }))}>
+              <option value="normal">Normal</option>
+              <option value="large">Groß</option>
+              <option value="xlarge">Sehr groß</option>
+            </Select>
+          </Field>
         </FormSection>
 
         <FormSection title={de ? "Sprache" : "Language"} columns={1}>

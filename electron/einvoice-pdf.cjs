@@ -19,6 +19,7 @@ async function renderZugferdPdf(d, assetsDir) {
   const moneyFormatter = new Intl.NumberFormat('de-DE', { style: 'currency', currency: d.currency });
   const money = n => moneyFormatter.format(n);
   const decimal = n => String(n).replace('.', ',');
+  const day = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? `${v.slice(8, 10)}.${v.slice(5, 7)}.${v.slice(0, 4)}` : v);
   const unitLabel = code => ({ C62: 'Stk.', H87: 'Stk.', HUR: 'Std.', DAY: 'Tage', MON: 'Mon.', ANN: 'Jahre', KGM: 'kg', GRM: 'g', MTR: 'm', MTK: 'm²', MTQ: 'm³', KMT: 'km', LTR: 'l', MIN: 'Min.', SEC: 'Sek.' })[code] || code;
   const label = d.presentation.labels;
   const text = (v, x, y, width, options = {}) => doc.text(String(v || ''), x, y, { width, ...options });
@@ -30,7 +31,7 @@ async function renderZugferdPdf(d, assetsDir) {
     doc.image(d.presentation.logoDataUrl, 420, 44, { fit: [125, 54], align: 'right' });
   }
   doc.font('Regular').fontSize(10).fillColor('#52636c');
-  text(`${label.invoiceNumberLabel || 'Rechnungsnummer'}: ${d.number}\n${label.invoiceDateLabel || 'Rechnungsdatum'}: ${d.date}\n${label.dueDateLabel || 'Fällig am'}: ${d.dueDate}`, 48, 91, 490, { lineGap: 3 });
+  text(`${label.invoiceNumberLabel || 'Rechnungsnummer'}: ${d.number}\n${label.invoiceDateLabel || 'Rechnungsdatum'}: ${day(d.date)}\n${label.dueDateLabel || 'Fällig am'}: ${day(d.dueDate)}`, 48, 91, 490, { lineGap: 3 });
   const partyText = p => `${p.name}\n${p.street}\n${p.postalCode} ${p.city}\n${p.countryCode}`;
   doc.font('Bold').fillColor('#182b35').fontSize(9);
   text(label.senderHeading || 'Rechnungssteller', 48, 164, 235); text(label.recipientHeading || 'Rechnungsempfänger', 315, 164, 230);
@@ -39,7 +40,7 @@ async function renderZugferdPdf(d, assetsDir) {
   const buyerH = doc.heightOfString(partyText(d.buyer), { width: 230 });
   text(partyText(d.seller), 48, 184, 235, { lineGap: 2 }); text(partyText(d.buyer), 315, 184, 230, { lineGap: 2 });
   doc.y = 195 + Math.max(sellerH, buyerH) + 14;
-  for (const line of [d.buyerReference && `Käuferreferenz: ${d.buyerReference}`, d.serviceDate && `Leistungsdatum: ${d.serviceDate}`].filter(Boolean)) { text(line, 48, doc.y, 499); doc.moveDown(0.4); }
+  for (const line of [d.buyerReference && `Käuferreferenz: ${d.buyerReference}`, d.serviceDate && `${label.serviceDateLabel || 'Leistungsdatum'}: ${day(d.serviceDate)}`, d.projectReference && `${label.projectReferenceLabel || 'Bauvorhaben'}: ${d.projectReference}`].filter(Boolean)) { text(line, 48, doc.y, 499); doc.moveDown(0.4); }
   doc.moveDown(0.8);
   const header = () => {
     const y = doc.y;
@@ -62,10 +63,12 @@ async function renderZugferdPdf(d, assetsDir) {
     text(l.description, 56, y, 225); text(`${decimal(l.quantity)} ${unitLabel(l.unitCode)}`, 286, y, 47, { align: 'right' }); text(money(l.unitPrice), 341, y, 70, { align: 'right' }); text(`${decimal(l.taxRate)} %`, 419, y, 42, { align: 'right' }); text(money(l.net), 468, y, 72, { align: 'right' });
     doc.moveTo(48, y + height - 6).lineTo(547, y + height - 6).strokeColor('#dfe5e8').stroke(); doc.y = y + height;
   }
+  const deductions = Array.isArray(d.deductions) ? d.deductions : [];
+  const deductionRows = d.totals.prepaid > 0 ? [...deductions.map(x => [`abzgl. Abschlagsrechnung ${x.number}${x.date ? ` vom ${day(x.date)}` : ''}`, -x.gross]), ['Restbetrag', d.totals.total - d.totals.prepaid]] : [];
   nextPageIfNeeded(Math.min(120, 60 + d.taxes.length * 21)); doc.y += 12;
-  for (const [caption, value] of [[label.subtotalLabel || 'Nettosumme', d.totals.subtotal], ...d.taxes.map(t => [`${label.taxTotalLabel || 'Umsatzsteuer'} ${t.rate} %`, t.amount]), [label.totalLabel || 'Gesamtbetrag', d.totals.total]]) {
+  for (const [caption, value] of [[label.subtotalLabel || 'Nettosumme', d.totals.subtotal], ...d.taxes.map(t => [`${label.taxTotalLabel || 'Umsatzsteuer'} ${t.rate} %`, t.amount]), [label.totalLabel || 'Gesamtbetrag', d.totals.total], ...deductionRows]) {
     nextPageIfNeeded(30);
-    const y = doc.y; doc.font(caption === (label.totalLabel || 'Gesamtbetrag') ? 'Bold' : 'Regular').fontSize(10); text(caption, 270, y, 185, { align: 'right' }); text(money(value), 462, y, 78, { align: 'right' }); doc.y = y + 21;
+    const y = doc.y; doc.font(caption === (label.totalLabel || 'Gesamtbetrag') || caption === 'Restbetrag' ? 'Bold' : 'Regular').fontSize(10); text(caption, 270, y, 185, { align: 'right' }); text(money(value), 462, y, 78, { align: 'right' }); doc.y = y + 21;
   }
   const paragraphs = [d.taxExemptionReason, d.paymentTerms, d.iban && `IBAN: ${d.iban}${d.bic ? ` · BIC: ${d.bic}` : ''}${d.accountName ? `\nKontoinhaber: ${d.accountName}` : ''}`, d.seller.vatId && `USt-IdNr.: ${d.seller.vatId}`, d.seller.taxId && `Steuernummer: ${d.seller.taxId}`, d.seller.email && `Kontakt: ${d.seller.contactName || d.seller.name} · ${d.seller.email}${d.seller.contactPhone ? ` · ${d.seller.contactPhone}` : ''}`, d.presentation.notes && `${label.notesHeading || 'Hinweise'}\n${d.presentation.notes}`, d.presentation.footer].filter(Boolean);
   doc.font('Regular').fontSize(9).fillColor('#52636c');

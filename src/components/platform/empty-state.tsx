@@ -5,7 +5,7 @@ import { HugeiconsIcon, type IconSvgElement } from "./icon";
 
 /*
  * Empty state — minimalist centered block for "nothing here" moments
- * (no workspaces yet, no search hits): a 40px hairline icon plate, a quiet
+ * (no workspaces yet, no search hits): a 40px icon plate on the low shadow, a quiet
  * title and an optional muted caption. Deliberately no CTA slot — the
  * surrounding page owns any action.
  */
@@ -33,7 +33,7 @@ export function EmptyState({
       {...props}
     >
       {icon != null && (
-        <span className="flex size-10 items-center justify-center rounded-lg border border-line bg-surface text-ink-muted">
+        <span className="flex size-10 items-center justify-center rounded-md bg-surface text-ink-secondary shadow-low">
           <HugeiconsIcon icon={icon} size={18} />
         </span>
       )}

@@ -45,7 +45,7 @@ export function Disclosure({
   return (
     <section id={id} className={cn("flex min-w-0 scroll-mt-24 flex-col gap-4", className)}>
       <div className="flex min-w-0 flex-col gap-1">
-        <Heading className="font-sans text-xl/5.5 font-semibold tracking-snug text-ink">
+        <Heading className="font-sans text-title font-semibold tracking-title text-ink">
           <button type="button" aria-expanded={open} aria-controls={contentId} onClick={toggle} className="group inline-flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
             <HugeiconsIcon icon={ArrowDown01Icon} size={15} className={cn("shrink-0 text-ink-muted transition-transform duration-150 ease-out motion-reduce:transition-none", !open && "-rotate-90")} />
             <span className="underline-offset-4 decoration-line-strong group-hover:underline">{title}</span>

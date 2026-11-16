@@ -2,7 +2,10 @@ import type { IconSvgElement } from "@/components/platform/icon";
 import {
   Analytics01Icon,
   DatabaseExportIcon,
+  FileExportIcon,
+  NoteEditIcon,
   Invoice03Icon,
+  Mail01Icon,
   LayoutTemplateIcon,
   Certificate01Icon,
   PackageIcon,
@@ -39,7 +42,9 @@ export function navGroups(language: Language): readonly NavGroup[] {
       key: "work",
       items: [
         { key: "invoices", href: "/invoices", icon: Invoice03Icon, label: text(language, "Rechnungen", "Invoices"), hint: text(language, "Alle Rechnungen suchen, öffnen und als PDF speichern", "Find, open and save invoices as PDF") },
+        { key: "quotes", href: "/quotes", icon: NoteEditIcon, label: text(language, "Angebote", "Quotes"), hint: text(language, "Angebote und Kostenvoranschläge, mit einem Klick zur Rechnung", "Quotes and estimates, one click to an invoice") },
         { key: "customers", href: "/customers", icon: UserGroupIcon, label: text(language, "Kunden", "Customers"), hint: text(language, "Empfänger, die Sie in Rechnungen übernehmen", "Recipients you can fill into invoices") },
+        { key: "mail", href: "/mail", icon: Mail01Icon, label: text(language, "E-Mail", "E-mail"), hint: text(language, "Eingang, Ausgang und Gespräche; Rechnungen direkt senden", "Inbox, sent mail and conversations; send invoices directly") },
         { key: "products", href: "/products", icon: PackageIcon, label: text(language, "Produkte und Leistungen", "Products and services"), hint: text(language, "Wiederkehrende Positionen mit Preis", "Reusable line items with price") },
       ],
     },
@@ -50,7 +55,7 @@ export function navGroups(language: Language): readonly NavGroup[] {
         { key: "credit-notes", href: "/credit-notes", icon: ReceiptDollarIcon, label: text(language, "Gutschriften und Stornos", "Credit notes"), hint: text(language, "Korrekturen zu gestellten Rechnungen", "Corrections to issued invoices") },
         { key: "recurring", href: "/recurring", icon: RepeatIcon, label: text(language, "Wiederkehrende Rechnungen", "Recurring invoices"), hint: text(language, "Rechnungen, die regelmäßig neu entstehen", "Invoices that are created on a schedule") },
         { key: "templates", href: "/templates", icon: LayoutTemplateIcon, label: text(language, "Vorlagen", "Templates"), hint: text(language, "Varianten für das Rechnungslayout", "Variants of the invoice layout") },
-        { key: "fachunternehmer", href: "/fachunternehmer", icon: Certificate01Icon, label: text(language, "Fachunternehmer\u00ADerklärung", "Contractor declaration"), hint: text(language, "Erklärung für Bauvorhaben drucken", "Print a contractor declaration") },
+        { key: "fachunternehmer", href: "/fachunternehmer", icon: Certificate01Icon, label: text(language, "Fachunternehmer\u00ADerklärung", "Contractor declaration"), hint: text(language, "Erklärungen je Bauvorhaben speichern und drucken", "Save and print contractor declarations per project") },
       ],
     },
     {
@@ -58,6 +63,7 @@ export function navGroups(language: Language): readonly NavGroup[] {
       label: text(language, "Überblick", "Overview"),
       items: [
         { key: "dashboard", href: "/dashboard", icon: Analytics01Icon, label: text(language, "Auswertung", "Insights"), hint: text(language, "Offene Beträge, Zahlungen und Fälligkeiten", "Open amounts, payments and due dates") },
+        { key: "export", href: "/export", icon: FileExportIcon, label: text(language, "Export für die Steuer", "Tax export"), hint: text(language, "Rechnungen eines Zeitraums als Liste und PDFs für den Steuerberater", "Invoices of a period as a list and PDFs for the tax advisor") },
       ],
     },
     {

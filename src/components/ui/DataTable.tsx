@@ -4,11 +4,10 @@ import { cn } from "@/components/platform/lib/cn";
 import { Button } from "./Button";
 
 /*
- * Directory table after humaify-overwatch `src/components/ui/data.tsx` (Platform `DataTable`, `Pager`): hairline
- * plate, mono-caps column heads on the rail surface, rows on hairlines, no zebra stripes. The first column names the
- * object, amounts are right-aligned with tabular figures, row actions sit last. Below md every row becomes a hairline
- * card with visible column labels. Readability profile: 14.5px cells and 11px heads in ink-muted
- * (docs/design-reference.md, deviation 2).
+ * Directory table after humaify-overwatch `src/components/ui/data.tsx` (Platform `DataTable`, `Pager`): one card,
+ * 48px rows on hairlines, 13px medium column heads in secondary text, no zebra stripes. The first column names the
+ * object, amounts are right-aligned with tabular figures, row actions sit last. Below md every row becomes its own
+ * card with visible column labels. Cells are 14px (docs/design-reference.md, deviation 2).
  */
 export type DataTableColumn<T> = {
   key: string;
@@ -34,7 +33,7 @@ export type DataTableProps<T> = {
 
 export function DataTable<T>({ columns, rows, rowKey, caption, empty, rowClassName, className }: DataTableProps<T>) {
   return (
-    <div className={cn("relative w-full min-w-0 md:overflow-x-auto md:rounded-card-sm md:border md:border-line", className)} role="region" aria-label={caption} tabIndex={0}>
+    <div className={cn("relative w-full min-w-0 md:overflow-x-auto md:rounded-card-sm md:bg-surface md:shadow-medium", className)} role="region" aria-label={caption} tabIndex={0}>
       <table role="table" className="w-full border-collapse text-left max-md:block">
         <caption className="sr-only">{caption}</caption>
         <thead role="rowgroup" className="max-md:sr-only">
@@ -45,7 +44,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, empty, rowClassNa
                 role="columnheader"
                 scope="col"
                 style={column.width ? { width: column.width } : undefined}
-                className={cn("h-10 border-b border-line bg-surface-rail px-4 font-mono text-xs font-medium tracking-caps whitespace-nowrap text-ink-muted uppercase", column.numeric && "text-right", column.className)}
+                className={cn("h-12 border-b border-line px-4 font-sans text-base font-medium whitespace-nowrap text-ink-secondary", column.numeric && "text-right", column.className)}
               >
                 {column.hideHeader ? <span className="sr-only">{column.header}</span> : column.header}
               </th>
@@ -54,7 +53,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, empty, rowClassNa
         </thead>
         <tbody role="rowgroup" className="max-md:flex max-md:flex-col max-md:gap-3">
           {rows.length ? rows.map((row) => (
-            <tr key={rowKey(row)} role="row" className={cn("max-md:flex max-md:flex-col max-md:gap-2 max-md:rounded-card-sm max-md:border max-md:border-line max-md:bg-surface max-md:p-4 md:[&:last-child>td]:border-b-0", rowClassName?.(row))}>
+            <tr key={rowKey(row)} role="row" className={cn("max-md:flex max-md:flex-col max-md:gap-2 max-md:rounded-card-sm max-md:shadow-medium max-md:bg-surface max-md:p-4 md:[&:last-child>td]:border-b-0", rowClassName?.(row))}>
               {columns.map((column, index) => {
                 const label = index > 0 && !column.hideHeader && typeof column.header === "string" && column.header ? column.header : undefined;
                 return (
@@ -62,9 +61,9 @@ export function DataTable<T>({ columns, rows, rowKey, caption, empty, rowClassNa
                     key={column.key}
                     role="cell"
                     className={cn(
-                      "border-b border-line px-4 py-3 align-middle font-sans text-lg/5 tracking-snug text-ink-body",
+                      "h-12 border-b border-line px-4 py-2.5 align-middle font-sans text-lg tracking-snug text-ink-body",
                       column.numeric && "md:text-right tabular-nums",
-                      "max-md:min-w-0 max-md:border-0 max-md:p-0 max-md:whitespace-normal",
+                      "max-md:h-auto max-md:min-w-0 max-md:border-0 max-md:p-0 max-md:whitespace-normal",
                       label && "max-md:flex max-md:flex-wrap max-md:items-baseline max-md:justify-between max-md:gap-x-4 max-md:gap-y-1",
                       !label && index > 0 && "max-md:flex max-md:flex-wrap max-md:justify-end max-md:gap-2",
                       column.className,
@@ -81,7 +80,7 @@ export function DataTable<T>({ columns, rows, rowKey, caption, empty, rowClassNa
               })}
             </tr>
           )) : (
-            <tr role="row" className="max-md:block max-md:rounded-card-sm max-md:border max-md:border-line">
+            <tr role="row" className="max-md:block max-md:rounded-card-sm max-md:shadow-medium">
               <td role="cell" colSpan={Math.max(columns.length, 1)} className="px-4 py-6 font-sans text-lg tracking-snug text-ink-muted max-md:block">{empty ?? "Keine Einträge."}</td>
             </tr>
           )}

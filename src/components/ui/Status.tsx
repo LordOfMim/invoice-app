@@ -5,22 +5,21 @@ import { cn } from "@/components/platform/lib/cn";
 
 /*
  * Status vocabulary after humaify-overwatch `src/components/ui/status.tsx`: always a word plus a tone dot
- * (Platform outline `StatusPill`), dashed mono badges for provisional states. Readability profile: 26px pill with
- * 13px label instead of 22px/11px (docs/design-reference.md, deviation 2).
+ * (Platform outline `StatusPill`), dashed badges for provisional states. Pills are 24px high with a 12px label.
  */
 export type Tone = "success" | "attention" | "error" | "info" | "muted";
 const pillTone = { success: "success", attention: "progress", error: "danger", info: "info", muted: "muted" } as const satisfies Record<Tone, "success" | "progress" | "info" | "muted" | "danger">;
 
 export function StatusPill({ tone, className, ...props }: HTMLAttributes<HTMLSpanElement> & { tone: Tone }) {
-  return <PlatformStatusPill variant="outline" tone={pillTone[tone]} className={cn("h-6.5 gap-2 px-2.5 text-base/4 whitespace-nowrap", className)} {...props} />;
+  return <PlatformStatusPill variant="outline" tone={pillTone[tone]} className={cn("h-6 gap-1.5 px-2 text-sm/4 whitespace-nowrap", className)} {...props} />;
 }
 
-/** Platform dashed stage badge (DRAFT recipe) for provisional or mode states, e.g. STANDARD. */
+/** Dashed stage badge for provisional or mode states, e.g. Standard. */
 export function DashedBadge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return <Badge variant="stage" className={cn("h-6.5 px-2 text-2xs", className)} {...props} />;
+  return <Badge variant="stage" className={cn("whitespace-nowrap", className)} {...props} />;
 }
 
-/** Quiet mono role badge (Platform `Badge` role) for fixed kinds, e.g. STORNO, GUTSCHRIFT. */
+/** Quiet role badge (Platform `Badge` role) for fixed kinds, e.g. Storno, Gutschrift. */
 export function KindBadge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return <Badge variant="role" className={cn("h-6.5 px-2 text-2xs", className)} {...props} />;
+  return <Badge variant="role" className={cn("whitespace-nowrap", className)} {...props} />;
 }

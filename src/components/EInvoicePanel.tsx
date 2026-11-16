@@ -1,5 +1,6 @@
 "use client";
 
+import { useDocumentMail } from "@/components/mail/useDocumentMail";
 import { useRef, useState, type ReactNode } from "react";
 import type { EInvoiceDetails, EInvoiceParty, Invoice } from "@/lib/domain";
 import { prepareEInvoice, type EInvoiceError, type EInvoiceFormat } from "@/lib/einvoice";
@@ -119,6 +120,8 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
     requestAnimationFrame(() => document.getElementById("einvoice-messages")?.focus());
   }
 
+  const documentMail = useDocumentMail(({ warning, to }) => setSuccess(warning || `Die geprüfte E-Rechnung wurde an ${to} gesendet.`));
+
   async function exportInvoice(format: EInvoiceFormat, delivery: "download" | "email" = "download") {
     if (exportInFlight.current) return;
     setSuccess("");
@@ -128,7 +131,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
       return;
     }
     const api = window.electronAPI as typeof window.electronAPI & {
-      exportEInvoice?: (payload: object) => Promise<{ ok: boolean; prepared?: boolean; canceled?: boolean; error?: string }>;
+      exportEInvoice?: (payload: object) => Promise<{ ok: boolean; prepared?: boolean; canceled?: boolean; error?: string; attachment?: { id: string; name: string; size: number } }>;
     };
     if (!api?.exportEInvoice) {
       showErrors([{ field: "", message: "Der geprüfte E-Rechnungsexport ist in der installierten Desktop-App verfügbar." }]);
@@ -139,16 +142,24 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
     setBusyDelivery(delivery);
     onErrors([]);
     try {
+      const email = {
+        to: details.buyer?.email || (details.buyer?.electronicAddressScheme === "EM" ? details.buyer.electronicAddress : "") || "",
+        subject: `${invoice.texts.documentTitle || "Rechnung"} ${invoice.invoiceNumber}`.trim(),
+        body: `Anbei erhalten Sie die E-Rechnung ${invoice.invoiceNumber}.\n\n${invoice.sender.name}`,
+      };
+      // With a connected mailbox the validated file goes straight into a message the user sends from here.
+      const direct = delivery === "email" && documentMail.available;
       const exported = await api.exportEInvoice({
         format,
         document: result.document,
-        delivery,
-        email: delivery === "email" ? {
-          to: details.buyer?.email || (details.buyer?.electronicAddressScheme === "EM" ? details.buyer.electronicAddress : "") || "",
-          subject: `${invoice.texts.documentTitle || "Rechnung"} ${invoice.invoiceNumber}`.trim(),
-          body: `Anbei erhalten Sie die E-Rechnung ${invoice.invoiceNumber}.\n\n${invoice.sender.name}`,
-        } : undefined,
+        delivery: direct ? "attach" : delivery,
+        email: delivery === "email" && !direct ? email : undefined,
       });
+      if (direct) {
+        if (exported.ok && exported.attachment) documentMail.composeWithAttachment({ to: email.to ?? "", subject: email.subject, text: email.body }, exported.attachment);
+        else if (!exported.canceled) showErrors([{ field: "", message: exported.error || "Die Datei konnte nicht erstellt werden." }]);
+        return;
+      }
       if (delivery === "email" && exported.ok && exported.prepared !== true) {
         showErrors([{ field: "", message: "Diese App-Version hat keinen E-Mailentwurf bestätigt. Bitte die aktuelle Desktop-App verwenden." }]);
         return;
@@ -235,12 +246,12 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
             <div className="flex flex-col gap-2">
               <Button className="w-full" loading={busy === "zugferd" && busyDelivery === "download"} disabled={busy !== null} onClick={() => exportInvoice("zugferd")}>{busy === "zugferd" && busyDelivery === "download" ? "Wird geprüft …" : "ZUGFeRD-PDF speichern"}</Button>
               <p className="font-sans text-base tracking-snug text-ink-muted">Lesbares PDF mit eingebetteten Rechnungsdaten.</p>
-              <Button className="w-full" loading={busy === "zugferd" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("zugferd", "email")}>ZUGFeRD-PDF per E-Mail vorbereiten</Button>
+              <Button className="w-full" loading={busy === "zugferd" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("zugferd", "email")}>{documentMail.available ? "ZUGFeRD-PDF per E-Mail senden" : "ZUGFeRD-PDF per E-Mail vorbereiten"}</Button>
             </div>
             <div className="flex flex-col gap-2">
               <Button className="w-full" loading={busy === "xrechnung" && busyDelivery === "download"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung")}>{busy === "xrechnung" && busyDelivery === "download" ? "Wird geprüft …" : "XRechnung-XML speichern"}</Button>
               <p className="font-sans text-base tracking-snug text-ink-muted">Eigenständige XML-Datei mit Käuferreferenz, bei Behörden meist die Leitweg-ID.</p>
-              <Button className="w-full" loading={busy === "xrechnung" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung", "email")}>XRechnung-XML per E-Mail vorbereiten</Button>
+              <Button className="w-full" loading={busy === "xrechnung" && busyDelivery === "email"} disabled={busy !== null} onClick={() => exportInvoice("xrechnung", "email")}>{documentMail.available ? "XRechnung-XML per E-Mail senden" : "XRechnung-XML per E-Mail vorbereiten"}</Button>
             </div>
           </CardZone>
         </Card>
@@ -331,6 +342,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
           {defaultsSaved && <StatusNote tone="ok">Ihre Angaben als Rechnungssteller und die Zahlungsdaten werden für neue Rechnungen übernommen.</StatusNote>}
         </div>
       </Section>
+      {documentMail.dialog}
     </FormPage>
   );
 }

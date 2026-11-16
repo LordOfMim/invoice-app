@@ -44,7 +44,7 @@ export function Field({ label, hint, error, id, hideLabel = false, className, ch
   const controlId = control?.props.id ?? id ?? generated;
   const descriptionId = `${controlId}-description`;
   const description = error ? (
-    <p id={descriptionId} role="alert" className={cn(hintClasses, "text-danger")}>{error}</p>
+    <p id={descriptionId} role="alert" className={cn(hintClasses, "text-danger-ink")}>{error}</p>
   ) : hint ? (
     <p id={descriptionId} className={cn(hintClasses, "text-ink-muted")}>{hint}</p>
   ) : null;
@@ -75,8 +75,8 @@ export function Field({ label, hint, error, id, hideLabel = false, className, ch
 /** Checkbox or radio with its label on one line (Overwatch `Choice`). */
 export function Choice({ label, hint, className, type = "checkbox", ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { label: ReactNode; hint?: ReactNode; type?: "checkbox" | "radio" }) {
   return (
-    <label className={cn("flex min-h-10 cursor-pointer items-start gap-2.5 py-2 font-sans text-lg/5 tracking-snug text-ink", className)}>
-      <input type={type} className="mt-0.5 size-4 shrink-0 cursor-pointer accent-accent-blue disabled:cursor-not-allowed disabled:opacity-50 touch:size-5" {...props} />
+    <label className={cn("flex min-h-10 cursor-pointer items-start gap-2.5 py-2 font-sans text-lg tracking-snug text-ink", className)}>
+      <input type={type} className="mt-0.5 size-4 shrink-0 cursor-pointer accent-ink disabled:cursor-not-allowed disabled:opacity-50 touch:size-5" {...props} />
       <span className="flex min-w-0 flex-col gap-0.5">
         {label}
         {hint && <span className="font-sans text-base tracking-snug text-ink-muted">{hint}</span>}

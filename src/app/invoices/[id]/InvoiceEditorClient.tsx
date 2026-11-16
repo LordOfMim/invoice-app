@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { UnderlineTabs } from "@/components/platform/underline-tabs";
+import { useDocumentMail } from "@/components/mail/useDocumentMail";
 import { cn } from "@/components/platform/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/Dialog";
@@ -19,7 +20,7 @@ import { InvoicePreview } from "@/components/templates/InvoicePreview";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
 import { PrintStyles } from "@/components/PrintStyles";
 import { usePageCrumb } from "@/components/shell/AppShell";
-import { formatDay, invoiceStatus } from "@/components/invoiceStatus";
+import { formatDay, invoiceStatus, quoteStatus } from "@/components/invoiceStatus";
 import type { Invoice, InvoiceLineItem } from "@/lib/domain";
 import type { EInvoiceError } from "@/lib/einvoice";
 import { waitForInvoicePrintReady } from "@/lib/printing";
@@ -27,33 +28,49 @@ import { buildPdfFilename } from "@/lib/filename";
 import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
 import { computeInvoiceBalance } from "@/lib/calc";
+import { todayLocalISO } from "@/lib/date";
+import { declarationFromInvoice, lacksSellerDefaults, withSellerDefaults } from "@/lib/documents";
+import { loadDeclarationDefaults } from "@/lib/declarationDefaults";
 import { usePersistedData } from "@/lib/storage/useStore";
 import {
+  addDeclaration,
+  convertQuoteToInvoice,
   createCreditNote,
   deleteInvoice,
+  deleteQuote,
   duplicateInvoiceById,
+  duplicateQuoteById,
   togglePaid,
   updateInvoice,
   updateSettings,
+  upsertCustomer,
   upsertInvoice,
 } from "@/lib/storage/store";
 import { PREVIEW_HASH, errorTarget, fieldId, tabHash, type EditorTab } from "./fields";
+import { DocumentDetails } from "./DocumentDetails";
 import { ExtrasTab } from "./ExtrasTab";
 import { LineItemsEditor } from "./LineItems";
 import { PAYMENT_AMOUNT_ID, PaymentsTab } from "./PaymentsTab";
+import { switchReverseCharge } from "./reverseCharge";
 
-const TAB_ORDER: EditorTab[] = ["edit", "payments", "einvoice", "extras"];
+const INVOICE_TABS: EditorTab[] = ["edit", "payments", "einvoice", "extras"];
+/** Quotes are neither paid nor sent as E-Rechnung. */
+const QUOTE_TABS: EditorTab[] = ["edit", "extras"];
 
 /** Width of the workspace from which inputs and preview stand side by side (1280px Mac windows and wider). */
 const SPLIT_MIN_WIDTH = 880;
 /** A4 width in CSS pixels. */
 const PAPER_WIDTH = (210 * 96) / 25.4;
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5];
+/** A tax number the sender typed into the footer or the sender block by hand is on the paper as well. */
+const TAX_NUMBER_IN_TEXT = /steuer[-\s]?n(?:umme)?r|st\.?[-\s]?nr|ust\.?[-\s]?id|umsatzsteuer[-\s]?id|vat[-\s]?(?:id|no)/i;
+const NOTE_LINK = "rounded-sm text-left underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
-function initialTab(): EditorTab {
+function initialTab(allowed: readonly EditorTab[]): EditorTab {
   if (typeof window === "undefined") return "edit";
   const hash = window.location.hash.slice(1);
-  return (Object.entries(tabHash).find(([, value]) => value === hash)?.[0] as EditorTab | undefined) ?? "edit";
+  const found = Object.entries(tabHash).find(([, value]) => value === hash)?.[0] as EditorTab | undefined;
+  return found && allowed.includes(found) ? found : "edit";
 }
 
 function initialNarrowView(): "form" | "preview" {
@@ -76,8 +93,15 @@ function focusLater(id: string) {
  * below the top bar, scrolls by itself and has fit/zoom controls. When the workspace is narrower than
  * SPLIT_MIN_WIDTH, an Eingaben/Vorschau switch shows one of the two columns over the same document. Every input is
  * saved immediately (no save/discard buttons). There is exactly one preview in the DOM; the PDF print uses it.
+ *
+ * Quotes (`kind="quote"`) are the same document in their own collection: the same editor without payments,
+ * E-Rechnung and corrections, plus the step that turns the quote into an invoice.
  */
-export function InvoiceEditorClient({ id }: { id: string }) {
+export function InvoiceEditorClient({ id, kind = "invoice" }: { id: string; kind?: "invoice" | "quote" }) {
+  const isQuote = kind === "quote";
+  const collection = isQuote ? "quotes" : "invoices";
+  const basePath = isQuote ? "/quotes" : "/invoices";
+  const TAB_ORDER = isQuote ? QUOTE_TABS : INVOICE_TABS;
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
   const de = language === "de";
@@ -86,11 +110,15 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
   const [pdfBusy, setPdfBusy] = useState(false);
   const pdfInFlight = useRef(false);
+  const documentMail = useDocumentMail(({ warning, to }) => {
+    setPdfError(false);
+    setPdfMessage(warning || `Die E-Mail an ${to} wurde gesendet.`);
+  });
   const [pdfMessage, setPdfMessage] = useState("");
   const [pdfError, setPdfError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [previewImmediate, setPreviewImmediate] = useState(false);
-  const [tab, setTab] = useState<EditorTab>(initialTab);
+  const [tab, setTab] = useState<EditorTab>(() => initialTab(isQuote ? QUOTE_TABS : INVOICE_TABS));
   const [einvoiceErrors, setEinvoiceErrors] = useState<EInvoiceError[]>([]);
   const [senderOpen, setSenderOpen] = useState<boolean | null>(null);
   const previewFrame = useRef<HTMLDivElement>(null);
@@ -101,7 +129,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const [split, setSplit] = useState(true);
   const [narrowView, setNarrowView] = useState<"form" | "preview">(initialNarrowView);
 
-  const invoice = useMemo(() => data?.invoices.find((inv) => inv.id === id) ?? null, [data?.invoices, id]);
+  const documents = data?.[collection];
+  const invoice = useMemo(() => documents?.find((inv) => inv.id === id) ?? null, [documents, id]);
   const deferredInvoice = useDeferredValue(invoice);
   usePageCrumb(invoice ? invoice.invoiceNumber || (de ? "Ohne Nummer" : "No number") : null);
 
@@ -161,14 +190,28 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const products = data?.products ?? [];
   const tags = data?.tags ?? [];
   const templateVariants = data?.templateVariants ?? [];
-  const creditNotes = useMemo(() => (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === id), [data?.creditNotes, id]);
+  const creditNotes = useMemo(() => (isQuote ? [] : (data?.creditNotes ?? []).filter((cn) => cn.linkedInvoiceId === id)), [data?.creditNotes, id, isQuote]);
+  const allInvoices = data?.invoices;
+  const allQuotes = data?.quotes;
+  // The customer's most recent other document offers its positions for reuse.
+  const previousDocument = useMemo(() => {
+    if (!invoice) return undefined;
+    const name = invoice.recipient.name.trim().toLocaleLowerCase("de-DE");
+    if (!invoice.customerId && !name) return undefined;
+    const sameCustomer = (other: Invoice) => other.id !== invoice.id && other.lineItems.some((item) => item.type === "item" && item.description.trim())
+      && (invoice.customerId ? other.customerId === invoice.customerId : other.recipient.name.trim().toLocaleLowerCase("de-DE") === name);
+    const pool = [...(allInvoices ?? []), ...(isQuote ? allQuotes ?? [] : [])].filter(sameCustomer);
+    return pool.sort((a, b) => `${b.invoiceDate}|${b.createdAt}`.localeCompare(`${a.invoiceDate}|${a.createdAt}`))[0];
+    // Only identity and customer decide; typing into this document must not re-sort the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allInvoices, allQuotes, isQuote, invoice?.id, invoice?.customerId, invoice?.recipient.name]);
   const balance = useMemo(() => (invoice ? computeInvoiceBalance(invoice, creditNotes) : null), [creditNotes, invoice]);
 
   const save = useCallback((next: Invoice | ((prev: Invoice) => Invoice)) => {
     if (!adapter) return;
-    if (typeof next === "function") updateInvoice(adapter, id, next);
-    else upsertInvoice(adapter, next);
-  }, [adapter, id]);
+    if (typeof next === "function") updateInvoice(adapter, id, next, collection);
+    else upsertInvoice(adapter, next, collection);
+  }, [adapter, id, collection]);
 
   const clearErrors = useCallback((match: (field: string) => boolean) => {
     setEinvoiceErrors((previous) => (previous.some((error) => match(error.field)) ? previous.filter((error) => !match(error.field)) : previous));
@@ -222,16 +265,19 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   if (!invoice || !balance) {
     return (
       <Page>
-        <PageHeader title={t(language, "invoice.notFound")} description={de ? "Die Rechnung wurde gelöscht oder der Link ist veraltet." : "The invoice was deleted or the link is outdated."} />
-        <div><Link href="/invoices" className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{de ? "Zu allen Rechnungen" : "All invoices"}</Link></div>
+        <PageHeader title={isQuote ? "Angebot nicht gefunden" : t(language, "invoice.notFound")} description={isQuote ? "Das Angebot wurde gelöscht oder der Link ist veraltet." : de ? "Die Rechnung wurde gelöscht oder der Link ist veraltet." : "The invoice was deleted or the link is outdated."} />
+        <div><Link href={basePath} className="font-sans text-lg font-medium tracking-snug text-link underline-offset-3 hover:underline">{isQuote ? "Zu allen Angeboten" : de ? "Zu allen Rechnungen" : "All invoices"}</Link></div>
       </Page>
     );
   }
 
   const currency = invoice.currency || defaultCurrency;
   const logoDataUrl = invoice.logoDataUrl || settings?.defaultLogoDataUrl;
-  const isDefaultInvoice = (settings?.defaultInvoiceId ?? null) === invoice.id;
-  const status = invoiceStatus(invoice, balance, language);
+  const isDefaultInvoice = !isQuote && (settings?.defaultInvoiceId ?? null) === invoice.id;
+  const status = isQuote ? quoteStatus(invoice, todayLocalISO(), language) : invoiceStatus(invoice, balance, language);
+  const convertedInvoice = isQuote && invoice.convertedInvoiceId ? allInvoices?.find((inv) => inv.id === invoice.convertedInvoiceId) : undefined;
+  const sourceQuote = !isQuote && invoice.sourceQuoteId ? allQuotes?.find((quote) => quote.id === invoice.sourceQuoteId) : undefined;
+  const pdfPattern = isQuote ? "Angebot-{invoiceNumber}.pdf" : settings?.pdfFilenamePattern ?? "Rechnung-{invoiceNumber}.pdf";
   const previewScale = zoom === "fit" ? fitScale : zoom;
   const zoomIn = () => setZoom(ZOOM_STEPS.find((step) => step > previewScale + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]);
   const zoomOut = () => setZoom([...ZOOM_STEPS].reverse().find((step) => step < previewScale - 0.001) ?? ZOOM_STEPS[0]);
@@ -239,8 +285,37 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     setNarrowView(view);
     window.history.replaceState(null, "", `#${view === "preview" ? PREVIEW_HASH : tabHash[tab]}`);
   };
-  const title = `${invoice.texts.documentTitle || (de ? "Rechnung" : "Invoice")} ${invoice.invoiceNumber || (de ? "ohne Nummer" : "without number")}`;
+  const title = `${invoice.texts.documentTitle || (isQuote ? "Angebot" : de ? "Rechnung" : "Invoice")} ${invoice.invoiceNumber || (de ? "ohne Nummer" : "without number")}`;
   const editTabLabel = de ? "Bearbeiten" : "Edit";
+
+  /** A reminder needs an issued invoice that is past its due date with something left to pay (as in the invoice list). */
+  const canRemind = !isQuote && !!invoice.invoiceNumber.trim() && balance.isOverdue && balance.remainingAmount > 0;
+  /** Declarations written for this invoice, newest first. */
+  const declarations = isQuote ? [] : (data?.contractorDeclarations ?? [])
+    .filter((declaration) => declaration.invoiceId === invoice.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const newestDeclaration = declarations[0];
+
+  // Reverse charge (§ 13b): never switched off silently. When the chosen customer is not marked for it, a note offers the way back.
+  const selectedCustomer = invoice.customerId ? customers.find((customer) => customer.id === invoice.customerId) : undefined;
+  const reverseChargeMismatch = invoice.reverseCharge === true && !!selectedCustomer && !selectedCustomer.reverseCharge;
+  const setReverseCharge = (enabled: boolean) => save((prev) => switchReverseCharge(prev, enabled, settings?.defaultTaxRate, products));
+
+  // Mandatory details of an invoice (§ 14 UStG). They live where the E-Rechnung check reads them (`prepareEInvoice`):
+  // tax number and VAT ID in `einvoice.seller`, the service date in `einvoice.serviceDate`. A hint only; nothing is blocked.
+  const hasStarted = !!invoice.recipient.name.trim() || invoice.lineItems.some((item) => (item.type ?? "item") === "item" && item.unitPrice !== 0);
+  const taxNumberInSettings = !!settings?.defaultEInvoice?.seller?.taxId?.trim() || !!settings?.defaultEInvoice?.seller?.vatId?.trim();
+  const hasTaxNumber = !!invoice.einvoice?.seller?.taxId?.trim() || !!invoice.einvoice?.seller?.vatId?.trim()
+    || TAX_NUMBER_IN_TEXT.test([invoice.footerText, invoice.footerLeftText, invoice.footerRightText, invoice.sender.address, invoice.sender.contact].join(" "));
+  const openSender = (field: "name" | "address") => { setSenderOpen(true); selectTab("edit", fieldId(`sender.${field}`)); };
+  const missingDetails = isQuote || !hasStarted ? [] : [
+    !invoice.invoiceNumber.trim() && { key: "number", label: "Rechnungsnummer", onJump: () => selectTab("edit", fieldId("invoiceNumber")) },
+    !invoice.einvoice?.serviceDate && { key: "serviceDate", label: "Leistungsdatum oder Leistungszeitraum", onJump: () => selectTab("edit", fieldId("einvoice.serviceDate.edit")) },
+    (!invoice.recipient.name.trim() || !invoice.recipient.address.trim()) && { key: "recipient", label: "Name und Anschrift des Empfängers", onJump: () => selectTab("edit", fieldId(invoice.recipient.name.trim() ? "recipient.address" : "recipient.name")) },
+    (!invoice.sender.name.trim() || !invoice.sender.address.trim()) && { key: "sender", label: "Name und Anschrift des Absenders", onJump: () => openSender(invoice.sender.name.trim() ? "address" : "name") },
+    !hasTaxNumber && { key: "tax", label: "Steuernummer oder USt-IdNr. des Absenders (§ 14 UStG)", onJump: undefined },
+  ].filter((entry): entry is { key: string; label: string; onJump: (() => void) | undefined } => !!entry);
+  const taxNumberMissing = missingDetails.some((entry) => entry.key === "tax");
 
   const editErrors = einvoiceErrors.filter((error) => error.field && errorTarget(error.field).tab === "edit");
 
@@ -251,7 +326,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     setPdfMessage("");
     setPdfError(false);
     setPreviewImmediate(true);
-    const filename = buildPdfFilename(settings?.pdfFilenamePattern ?? "Rechnung-{invoiceNumber}.pdf", invoice);
+    const filename = buildPdfFilename(pdfPattern, invoice);
     const api = window.electronAPI as typeof window.electronAPI & {
       saveDocument?: (payload: { filename: string; bytes: Uint8Array }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
     };
@@ -292,13 +367,21 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     if (!customerId) { save({ ...invoice, customerId: undefined }); return; }
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
-    save({
+    const taxId = customer.taxId?.replace(/\s+/g, "").toUpperCase() ?? "";
+    const customerVatId = /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(taxId) ? taxId : undefined;
+    const next: Invoice = {
       ...invoice,
       customerId,
       // Structured recipient details must not follow a different customer.
-      einvoice: invoice.einvoice ? { ...invoice.einvoice, buyer: undefined, buyerReference: undefined } : undefined,
+      // The customer's VAT ID comes along: the E-Rechnung needs it for reverse charge.
+      einvoice: invoice.einvoice || customerVatId
+        ? { ...(invoice.einvoice ?? {}), buyer: customerVatId ? { vatId: customerVatId } : undefined, buyerReference: undefined }
+        : undefined,
       recipient: { salutation: customer.salutation, name: customer.name, address: customer.address, contact: customer.contact },
-    });
+    };
+    // A customer marked for § 13b switches the document to reverse charge; it is never switched off silently.
+    // Choosing a customer without the mark afterwards keeps it on and shows the note above the workspace instead.
+    save(customer.reverseCharge && !invoice.reverseCharge ? switchReverseCharge(next, true, settings?.defaultTaxRate, products) : next);
     clearErrors((field) => field === "buyer");
   };
 
@@ -317,8 +400,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       `${de ? "Sehr geehrte Damen und Herren" : "Dear Sir or Madam"},\n\n` +
       `${de ? "anbei erhalten Sie" : "Please find attached"} ${invoice.texts.documentTitle} ${invoice.invoiceNumber}.\n\n` +
       `${de ? "Mit freundlichen Grüßen" : "Best regards"},\n${invoice.sender.name}`;
-    const pattern = settings?.pdfFilenamePattern ?? "Invoice-{invoiceNumber}.pdf";
-    const filename = buildPdfFilename(pattern, invoice);
+    const filename = buildPdfFilename(pdfPattern, invoice);
 
     setPdfBusy(true);
     setPdfMessage("");
@@ -328,6 +410,10 @@ export function InvoiceEditorClient({ id }: { id: string }) {
       await waitForInvoicePrintReady();
       // This is explicitly the ordinary PDF; validated E-invoice attachments
       // are prepared separately from the E-Rechnung area.
+      if (documentMail.available) {
+        await documentMail.composeWithPrint({ to, subject: subjectText, text: bodyText }, filename);
+        return;
+      }
       if (!window.electronAPI?.emailInvoiceWithPdf) {
         throw new Error("Ein E-Mailentwurf mit normaler PDF ist in der installierten Desktop-App verfügbar.");
       }
@@ -349,7 +435,17 @@ export function InvoiceEditorClient({ id }: { id: string }) {
     { value: "payments" as const, label: de ? "Zahlungen" : "Payments", count: (invoice.payments ?? []).length || undefined },
     { value: "einvoice" as const, label: de ? "E-Rechnung" : "E-invoice", count: einvoiceErrors.length ? (de ? `${einvoiceErrors.length} offen` : `${einvoiceErrors.length} open`) : undefined },
     { value: "extras" as const, label: de ? "Gestaltung und mehr" : "Layout and more" },
-  ];
+  ].filter((item) => TAB_ORDER.includes(item.value));
+
+  const handleConvert = () => {
+    const created = convertQuoteToInvoice(adapter, invoice.id);
+    if (created) window.location.assign(`/invoices/${created.id}`);
+  };
+
+  const handleCreateDeclaration = () => {
+    const declaration = addDeclaration(adapter, declarationFromInvoice(invoice, loadDeclarationDefaults(adapter)));
+    window.location.assign(`/fachunternehmer/${declaration.id}`);
+  };
 
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     const index = TAB_ORDER.indexOf(tab);
@@ -365,7 +461,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   };
 
   const sections = [
-    ["rechnungsdaten", de ? "Rechnungsdaten" : "Invoice details"],
+    ["rechnungsdaten", isQuote ? "Angebotsdaten" : de ? "Rechnungsdaten" : "Invoice details"],
     ["empfaenger", invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")],
     ["positionen", de ? "Positionen" : "Line items"],
     ["hinweise", invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")],
@@ -375,7 +471,8 @@ export function InvoiceEditorClient({ id }: { id: string }) {
   const description = [
     invoice.recipient.name || (de ? "Noch kein Empfänger" : "No recipient yet"),
     formatMoney(balance.effectiveTotal, currency, locale),
-    invoice.dueDate ? `${de ? "fällig am" : "due"} ${formatDay(invoice.dueDate, locale)}` : null,
+    invoice.projectReference?.trim() || null,
+    invoice.dueDate ? `${isQuote ? "gültig bis" : de ? "fällig am" : "due"} ${formatDay(invoice.dueDate, locale)}` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -398,13 +495,32 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         actions={(
           <>
             <Button variant="primary" loading={pdfBusy} onClick={onPrint}>{pdfBusy ? (de ? "PDF wird erstellt …" : "Creating PDF …") : (de ? "PDF speichern" : "Save PDF")}</Button>
-            <Button onClick={() => selectTab("einvoice")}>{de ? "E-Rechnung" : "E-invoice"}</Button>
+            {isQuote
+              ? <Button onClick={handleConvert}>{convertedInvoice ? "Rechnung öffnen" : "In Rechnung umwandeln"}</Button>
+              : <Button onClick={() => selectTab("einvoice")}>{de ? "E-Rechnung" : "E-invoice"}</Button>}
             <OverflowMenu
               label={de ? "Weitere Aktionen" : "More actions"}
               trigger={de ? "Weitere Aktionen" : "More actions"}
-              items={[
-                { label: de ? "Normale PDF per E-Mail vorbereiten" : "Prepare email with ordinary PDF", onSelect: () => { void handleEmailInvoice(); } },
+              items={isQuote ? [
+                { label: documentMail.available ? "PDF per E-Mail senden" : "PDF per E-Mail vorbereiten", onSelect: () => { void handleEmailInvoice(); } },
+                {
+                  label: t(language, "actions.duplicate"),
+                  onSelect: () => {
+                    const dup = duplicateQuoteById(adapter, invoice.id);
+                    if (dup) window.location.assign(`/quotes/${dup.id}`);
+                  },
+                },
+                !convertedInvoice && { kind: "separator" },
+                !convertedInvoice && { kind: "label", label: "Antwort des Kunden" },
+                !convertedInvoice && invoice.quoteStatus !== "accepted" && { label: "Als angenommen markieren", onSelect: () => save({ ...invoice, quoteStatus: "accepted" }) },
+                !convertedInvoice && invoice.quoteStatus !== "declined" && { label: "Als abgelehnt markieren", onSelect: () => save({ ...invoice, quoteStatus: "declined" }) },
+                !convertedInvoice && (invoice.quoteStatus === "accepted" || invoice.quoteStatus === "declined") && { label: "Wieder als offen markieren", onSelect: () => save({ ...invoice, quoteStatus: "open" }) },
+                { kind: "separator" },
+                { label: "Angebot löschen …", tone: "danger", onSelect: () => setConfirmDelete(true) },
+              ] : [
+                { label: documentMail.available ? (de ? "Normale PDF per E-Mail senden" : "Send ordinary PDF by email") : de ? "Normale PDF per E-Mail vorbereiten" : "Prepare email with ordinary PDF", onSelect: () => { void handleEmailInvoice(); } },
                 !balance.isFullyPaid && { label: t(language, "actions.addPayment"), onSelect: () => selectTab("payments", PAYMENT_AMOUNT_ID) },
+                canRemind && { kind: "link", label: "Zahlungserinnerung schreiben", href: `/invoices/${invoice.id}/reminder` },
                 {
                   label: t(language, "actions.duplicate"),
                   onSelect: () => {
@@ -413,6 +529,10 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   },
                 },
                 !isDefaultInvoice && { label: t(language, "actions.setDefaultInvoice"), onSelect: () => updateSettings(adapter, (prev) => ({ ...prev, defaultInvoiceId: invoice.id })) },
+                newestDeclaration
+                  ? { kind: "link", label: "Fachunternehmererklärung öffnen", href: `/fachunternehmer/${newestDeclaration.id}` }
+                  : { label: "Fachunternehmererklärung erstellen", onSelect: handleCreateDeclaration },
+                !!newestDeclaration && { label: "Weitere Erklärung erstellen", onSelect: handleCreateDeclaration },
                 { kind: "separator" },
                 { kind: "label", label: de ? "Korrektur erstellen" : "Create correction" },
                 { label: t(language, "creditNotes.storno"), onSelect: () => handleCreateCreditNote("storno") },
@@ -427,6 +547,77 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
       <div className="no-print mt-4 flex flex-col gap-3 empty:hidden">
         {pdfMessage && <StatusNote tone={pdfError ? "error" : "ok"} role={pdfError ? "alert" : "status"}>{pdfMessage}</StatusNote>}
+        {convertedInvoice && (
+          <StatusNote tone="ok" title="Aus diesem Angebot ist eine Rechnung entstanden.">
+            <Link href={`/invoices/${convertedInvoice.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+              Rechnung {convertedInvoice.invoiceNumber || "ohne Nummer"} öffnen
+            </Link>
+          </StatusNote>
+        )}
+        {sourceQuote && (
+          <StatusNote tone="info">
+            Erstellt aus{" "}
+            <Link href={`/quotes/${sourceQuote.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+              Angebot {sourceQuote.invoiceNumber || "ohne Nummer"}
+            </Link>
+            .
+          </StatusNote>
+        )}
+        {declarations.length > 0 && (
+          <StatusNote tone="info" title={declarations.length === 1 ? "Fachunternehmererklärung zu dieser Rechnung" : `Fachunternehmererklärungen zu dieser Rechnung (${declarations.length})`}>
+            <ul className="flex flex-col gap-0.5">
+              {declarations.map((declaration) => (
+                <li key={declaration.id}>
+                  <Link href={`/fachunternehmer/${declaration.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                    {declaration.kommission || "Ohne Bauvorhaben"} · {formatDay(declaration.date, locale)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </StatusNote>
+        )}
+        {reverseChargeMismatch && selectedCustomer && (
+          <StatusNote
+            tone="attention"
+            title={`${isQuote ? "Dieses Angebot wird ohne Umsatzsteuer erstellt" : "Diese Rechnung wird ohne Umsatzsteuer gestellt"} (§ 13b UStG), der gewählte Kunde ist dafür nicht vorgemerkt.`}
+            action={<>
+              <Button size="sm" onClick={() => setReverseCharge(false)}>Umsatzsteuer wieder berechnen</Button>
+              <Button size="sm" variant="ghost" onClick={() => upsertCustomer(adapter, { ...selectedCustomer, reverseCharge: true })}>Kunde für § 13b vormerken</Button>
+            </>}
+          >
+            „Umsatzsteuer wieder berechnen“ setzt die Positionen auf ihre vorherigen Steuersätze zurück und entfernt den Hinweis auf § 13b. Trifft § 13b bei {selectedCustomer.name || "diesem Kunden"} zu, merken Sie den Kunden dafür vor.
+          </StatusNote>
+        )}
+        {missingDetails.length > 0 && (
+          <StatusNote
+            tone="attention"
+            title="Für eine vollständige Rechnung fehlt noch:"
+            action={taxNumberMissing && taxNumberInSettings ? <Button size="sm" onClick={() => save((prev) => withSellerDefaults(prev, settings))}>Steuernummer aus den Einstellungen übernehmen</Button> : undefined}
+          >
+            <ul className="mt-1 flex flex-col gap-1">
+              {missingDetails.map((entry) => (
+                <li key={entry.key}>
+                  {entry.onJump
+                    ? <button type="button" onClick={entry.onJump} className={NOTE_LINK}>{entry.label}</button>
+                    : <>
+                      {entry.label}
+                      {!taxNumberInSettings && <>: einmal in den <Link href="/settings" className={NOTE_LINK}>Einstellungen unter „Steuer und Bankverbindung“</Link> eintragen oder nur für diese Rechnung im Bereich <button type="button" onClick={() => selectTab("einvoice")} className={NOTE_LINK}>E-Rechnung</button> unter „Ihre Angaben als Rechnungssteller“.</>}
+                    </>}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">Ein Klick auf eine Angabe führt zum passenden Feld. Speichern und PDF sind weiterhin möglich.{missingDetails.some((entry) => entry.key === "serviceDate") ? " Steht der Leistungszeitraum bereits im Text der Rechnung, ist das Leistungsdatum nicht zusätzlich nötig." : ""}</p>
+          </StatusNote>
+        )}
+        {!isQuote && invoice.layout.showFooter && lacksSellerDefaults(invoice, settings) && !(taxNumberMissing && taxNumberInSettings) && (
+          <StatusNote
+            tone="info"
+            title="Steuernummer oder Bankverbindung aus den Einstellungen fehlen auf dieser Rechnung."
+            action={<Button size="sm" onClick={() => save((prev) => withSellerDefaults(prev, settings))}>Aus den Einstellungen übernehmen</Button>}
+          >
+            Sie werden in der Fußzeile gedruckt und für die E-Rechnung verwendet.
+          </StatusNote>
+        )}
         {creditNotes.length > 0 && (
           <StatusNote tone="attention" title={`${t(language, "invoice.linkedCreditNotes")} (${creditNotes.length})`}>
             <ul className="flex flex-col gap-0.5">
@@ -444,9 +635,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
       <div className="no-print mt-5 mb-4 flex flex-wrap items-center justify-between gap-3">
         {!split && (
-          <div ref={narrowSwitch} role="group" aria-label={de ? "Ansicht des Rechnungsarbeitsplatzes" : "Invoice workspace view"} className="inline-flex rounded-md border border-line-control bg-surface-muted p-1">
+          <div ref={narrowSwitch} role="group" aria-label={de ? "Ansicht des Rechnungsarbeitsplatzes" : "Invoice workspace view"} className="inline-flex gap-0.5 rounded-md bg-surface-muted p-0.5">
             {(["form", "preview"] as const).map((view) => (
-              <button key={view} type="button" aria-pressed={narrowView === view} aria-controls={view === "form" ? "invoice-inputs" : "invoice-live-preview"} onClick={() => showNarrow(view)} className={cn("min-h-10 rounded-sm px-4 font-sans text-lg font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50", narrowView === view ? "bg-surface" : "text-ink-body hover:text-ink")}>
+              <button key={view} type="button" aria-pressed={narrowView === view} aria-controls={view === "form" ? "invoice-inputs" : "invoice-live-preview"} onClick={() => showNarrow(view)} className={cn("min-h-9 rounded-sm px-4 font-sans text-lg font-medium text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring/50", narrowView === view ? "bg-surface shadow-low" : "text-ink-body hover:text-ink")}>
                 {view === "form" ? (de ? "Eingaben" : "Inputs") : (de ? "Vorschau" : "Preview")}
               </button>
             ))}
@@ -460,7 +651,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         <div id="invoice-inputs" className={cn("invoice-input-pane no-print min-w-0", !split && narrowView !== "form" && "screen-hidden")}>
           <UnderlineTabs
             role="tablist"
-            aria-label={de ? "Bereiche der Rechnung" : "Invoice areas"}
+            aria-label={isQuote ? "Bereiche des Angebots" : de ? "Bereiche der Rechnung" : "Invoice areas"}
             size="lg"
             className="gap-x-4"
             items={tabs}
@@ -484,7 +675,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
 
           <div className="pt-6">
             <div role="tabpanel" id="panel-edit" aria-labelledby="tab-edit" hidden={tab !== "edit"}>
-              <nav aria-label={de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="mb-6 flex flex-wrap gap-x-4 gap-y-2 border-b border-line pb-4">
+              <nav aria-label={isQuote ? "Abschnitte dieses Angebots" : de ? "Abschnitte dieser Rechnung" : "Sections of this invoice"} className="mb-6 flex flex-wrap gap-x-4 gap-y-2 border-b border-line pb-4">
                 {sections.map(([anchor, label]) => (
                   <a key={anchor} href={`#${anchor}`} onClick={() => { if (anchor === "absender") setSenderOpen(true); }} className="inline-flex min-h-10 items-center rounded-sm font-sans text-lg font-medium tracking-snug text-ink-body underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-ring/50">
                     {label}
@@ -504,19 +695,23 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   </StatusNote>
                 )}
 
-                <FormSection id="rechnungsdaten" title={de ? "Rechnungsdaten" : "Invoice details"} description={de ? "Nummer, Rechnungsdatum und Zahlungsziel." : "Number, invoice date and due date."} columns={3}>
-                  <Field label={invoice.texts.invoiceNumberLabel || "Rechnungsnummer"} id={fieldId("invoiceNumber")} error={errorMap.invoiceNumber}>
-                    <Input value={invoice.invoiceNumber} onChange={(e) => { save({ ...invoice, invoiceNumber: e.target.value }); clearErrors((field) => field === "invoiceNumber"); }} />
-                  </Field>
-                  <Field label={invoice.texts.invoiceDateLabel || "Rechnungsdatum"} id={fieldId("invoiceDate")} error={errorMap.invoiceDate}>
-                    <Input type="date" value={invoice.invoiceDate} onChange={(e) => { save({ ...invoice, invoiceDate: e.target.value }); clearErrors((field) => field === "invoiceDate"); }} />
-                  </Field>
-                  <Field label={invoice.texts.dueDateLabel || "Fällig am"} id={fieldId("dueDate")} error={errorMap.dueDate}>
-                    <Input type="date" value={invoice.dueDate} onChange={(e) => { save({ ...invoice, dueDate: e.target.value }); clearErrors((field) => field === "dueDate"); }} />
-                  </Field>
-                </FormSection>
+                <DocumentDetails
+                  invoice={invoice}
+                  kind={kind}
+                  documents={documents ?? []}
+                  invoices={allInvoices ?? []}
+                  creditNotes={data?.creditNotes ?? []}
+                  settings={settings}
+                  currency={currency}
+                  locale={locale}
+                  de={de}
+                  errors={errorMap}
+                  save={save}
+                  onReverseCharge={setReverseCharge}
+                  clearErrors={clearErrors}
+                />
 
-                <FormSection id="empfaenger" title={invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")} description={de ? "An wen die Rechnung geht. Aus der Kundenliste übernehmen oder direkt eintragen." : "Who receives the invoice. Fill from the customer list or type directly."}>
+                <FormSection id="empfaenger" title={invoice.texts.recipientHeading || (de ? "Empfänger" : "Recipient")} description={isQuote ? "An wen das Angebot geht. Aus der Kundenliste übernehmen oder direkt eintragen." : de ? "An wen die Rechnung geht. Aus der Kundenliste übernehmen oder direkt eintragen." : "Who receives the invoice. Fill from the customer list or type directly."}>
                   {customers.length > 0 && (
                     <Field
                       label={de ? "Aus Kundenliste übernehmen" : "Fill from customer list"}
@@ -535,7 +730,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   <Field label="Name" id={fieldId("recipient.name")} error={errorMap.buyer}>
                     <Input value={invoice.recipient.name} onChange={(e) => { save({ ...invoice, recipient: { ...invoice.recipient, name: e.target.value } }); clearErrors((field) => field === "buyer"); }} />
                   </Field>
-                  <Field label="Adresse">
+                  <Field label="Adresse" id={fieldId("recipient.address")}>
                     <Textarea rows={3} value={invoice.recipient.address} onChange={(e) => save({ ...invoice, recipient: { ...invoice.recipient, address: e.target.value } })} />
                   </Field>
                   <Field label="Kontakt">
@@ -543,11 +738,12 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   </Field>
                 </FormSection>
 
-                <FormSection id="positionen" title={de ? "Positionen" : "Line items"} description={de ? "Mengen und Preise mit Komma eingeben, z. B. 12,50. Überschriften gliedern längere Rechnungen." : "Enter quantities and prices with a comma or dot. Headings structure longer invoices."} columns={1}>
+                <FormSection id="positionen" title={de ? "Positionen" : "Line items"} description={de ? `Mengen und Preise mit Komma eingeben, z. B. 12,50. Überschriften gliedern längere ${isQuote ? "Angebote" : "Rechnungen"}.` : "Enter quantities and prices with a comma or dot. Headings structure longer invoices."} columns={1}>
                   <LineItemsEditor
                     invoice={invoice}
                     products={products}
                     defaultTaxRate={settings?.defaultTaxRate}
+                    previous={previousDocument}
                     currency={currency}
                     locale={locale}
                     errors={errorMap}
@@ -558,7 +754,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                   />
                 </FormSection>
 
-                <FormSection id="hinweise" title={invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")} description={de ? "Steht auf der Rechnung unter der Summe, z. B. Zahlungsbedingungen." : "Printed below the totals, e.g. payment terms."} columns={1}>
+                <FormSection id="hinweise" title={invoice.texts.notesHeading || (de ? "Hinweistext" : "Notes")} description={isQuote ? "Steht auf dem Angebot unter der Summe, z. B. Ausführungszeitraum oder Zahlungsbedingungen." : de ? "Steht auf der Rechnung unter der Summe, z. B. Zahlungsbedingungen." : "Printed below the totals, e.g. payment terms."} columns={1}>
                   <Textarea aria-label={invoice.texts.notesHeading || "Hinweise"} rows={3} value={invoice.notesText || ""} placeholder={de ? "z. B. Zahlbar innerhalb von 14 Tagen ohne Abzug." : "e.g. Payable within 14 days."} onChange={(e) => save({ ...invoice, notesText: e.target.value })} />
                 </FormSection>
 
@@ -572,13 +768,13 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                     ? <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{invoice.sender.name}</span>
                     : <StatusPill tone="attention">{de ? "Bitte ergänzen" : "Please complete"}</StatusPill>}
                   className="@container"
-                  summary={de ? "Ihre eigenen Angaben. Neue Rechnungen übernehmen sie aus den Einstellungen." : "Your own details. New invoices take them from the settings."}
+                  summary={de ? `Ihre eigenen Angaben. Neue ${isQuote ? "Angebote" : "Rechnungen"} übernehmen sie aus den Einstellungen.` : "Your own details. New invoices take them from the settings."}
                 >
                   <div className="grid gap-4 @md:grid-cols-2">
                     <Field label="Name" id={fieldId("sender.name")} error={errorMap.seller} className="@md:col-span-2">
                       <Input value={invoice.sender.name} onChange={(e) => { setSenderOpen(true); save({ ...invoice, sender: { ...invoice.sender, name: e.target.value } }); clearErrors((field) => field === "seller"); }} />
                     </Field>
-                    <Field label="Adresse">
+                    <Field label="Adresse" id={fieldId("sender.address")}>
                       <Textarea rows={3} value={invoice.sender.address} onChange={(e) => save({ ...invoice, sender: { ...invoice.sender, address: e.target.value } })} />
                     </Field>
                     <Field label="Kontakt">
@@ -589,6 +785,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               </FormPage>
             </div>
 
+            {!isQuote && <>
             <div role="tabpanel" id="panel-payments" aria-labelledby="tab-payments" hidden={tab !== "payments"} className="no-print">
               <PaymentsTab
                 key={invoice.id}
@@ -599,6 +796,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 currency={currency}
                 locale={locale}
                 language={language}
+                canRemind={canRemind}
                 save={save}
                 onTogglePaid={() => togglePaid(adapter, invoice.id)}
                 onCreateCreditNote={handleCreateCreditNote}
@@ -610,7 +808,11 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 key={invoice.id}
                 invoice={{ ...invoice, logoDataUrl }}
                 onChange={(einvoice) => save((previous) => ({ ...previous, einvoice }))}
-                onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({ ...previous, defaultEInvoice }))}
+                onSaveDefaults={(defaultEInvoice) => updateSettings(adapter, (previous) => ({
+                  ...previous,
+                  // Reverse charge belongs to this invoice (or its customer), never to every new invoice.
+                  defaultEInvoice: invoice.reverseCharge ? { ...defaultEInvoice, taxCategory: undefined, taxExemptionReason: undefined } : defaultEInvoice,
+                }))}
                 errors={einvoiceErrors}
                 onErrors={(next) => setEinvoiceErrors((previous) => (previous.length === 0 && next.length === 0 ? previous : next))}
                 onJump={jumpTo}
@@ -618,12 +820,14 @@ export function InvoiceEditorClient({ id }: { id: string }) {
                 editTabLabel={editTabLabel}
               />
             </div>
+            </>}
 
             <div role="tabpanel" id="panel-extras" aria-labelledby="tab-extras" hidden={tab !== "extras"} className="no-print">
               <ExtrasTab
                 invoice={invoice}
                 templateVariants={templateVariants}
                 tags={tags}
+                kind={kind}
                 language={language}
                 locale={locale}
                 errors={errorMap}
@@ -633,7 +837,7 @@ export function InvoiceEditorClient({ id }: { id: string }) {
           </div>
         </div>
 
-        <section id="invoice-live-preview" aria-labelledby="invoice-preview-title" className={cn("invoice-preview-pane min-w-0 overflow-hidden rounded-card-sm border border-line bg-surface-muted", split && "sticky top-17 max-lg:top-27", !split && narrowView !== "preview" && "screen-hidden")}>
+        <section id="invoice-live-preview" aria-labelledby="invoice-preview-title" className={cn("invoice-preview-pane min-w-0 overflow-hidden rounded-card-sm shadow-medium bg-surface-muted", split && "sticky top-16 max-lg:top-26", !split && narrowView !== "preview" && "screen-hidden")}>
           <div className="no-print flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-rail px-3 py-2">
             <h2 id="invoice-preview-title" className="font-sans text-base font-semibold tracking-snug text-ink">{de ? "Live-Vorschau" : "Live preview"}</h2>
             <div role="group" aria-label={de ? "Vergrößerung der Vorschau" : "Preview zoom"} className="flex items-center gap-1">
@@ -643,9 +847,9 @@ export function InvoiceEditorClient({ id }: { id: string }) {
               <Button size="sm" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}>{de ? "Einpassen" : "Fit width"}</Button>
             </div>
           </div>
-          <div ref={previewFrame} tabIndex={0} role="region" aria-label={de ? "Rechnungsvorschau, scrollbar" : "Invoice preview, scrollable"} className="invoice-preview-frame max-h-[calc(100dvh-12rem)] min-w-0 overflow-auto overscroll-contain p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset lg:max-h-[calc(100dvh-9rem)]">
+          <div ref={previewFrame} tabIndex={0} role="region" aria-label={isQuote ? "Angebotsvorschau, scrollbar" : de ? "Rechnungsvorschau, scrollbar" : "Invoice preview, scrollable"} className="invoice-preview-frame max-h-[calc(100dvh-12rem)] min-w-0 overflow-auto overscroll-contain p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset lg:max-h-[calc(100dvh-9rem)]">
             <div id="invoice-preview" style={{ zoom: previewScale }} className="print-area invoice-paper mx-auto w-[210mm] min-h-[297mm] bg-white p-[12mm]">
-              <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} locale={locale} logoDataUrl={logoDataUrl} />
+              <InvoicePreview invoice={previewImmediate ? invoice : (deferredInvoice ?? invoice)} currency={currency} logoDataUrl={logoDataUrl} />
             </div>
           </div>
         </section>
@@ -655,16 +859,18 @@ export function InvoiceEditorClient({ id }: { id: string }) {
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         onConfirm={() => {
-          deleteInvoice(adapter, invoice.id);
-          window.location.assign("/invoices");
+          if (isQuote) deleteQuote(adapter, invoice.id);
+          else deleteInvoice(adapter, invoice.id);
+          window.location.assign(basePath);
         }}
-        title={t(language, "invoice.deleteTitle")}
-        description={t(language, "invoice.deleteDescription")}
+        title={isQuote ? "Angebot löschen?" : t(language, "invoice.deleteTitle")}
+        description={isQuote ? "Das Angebot wird endgültig entfernt. Eine daraus erstellte Rechnung bleibt erhalten." : t(language, "invoice.deleteDescription")}
         confirmLabel={t(language, "actions.delete")}
         cancelLabel={t(language, "common.cancel")}
         warningLabel={t(language, "common.cannotUndo")}
         variant="danger"
       />
+      {documentMail.dialog}
     </Page>
   );
 }

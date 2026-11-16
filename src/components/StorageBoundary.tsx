@@ -83,7 +83,7 @@ function RecoveryScreen() {
 
   return <main className="mx-auto flex max-w-[880px] flex-col gap-8 px-4 py-12 sm:px-8">
     <div className="flex flex-col gap-2">
-      <h1 className="font-sans text-display font-semibold tracking-snug text-ink">Helferlein konnte die Daten nicht sicher öffnen</h1>
+      <h1 className="font-sans text-display font-semibold tracking-title text-ink">Helferlein konnte die Daten nicht sicher öffnen</h1>
       <p className="max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">Die vorhandenen Daten werden nicht durch einen leeren Datenbestand ersetzt. Sichern Sie zuerst das Original und stellen Sie anschließend eine bekannte JSON-Sicherung wieder her.</p>
     </div>
     <div><Button variant="primary" disabled={busy} onClick={() => { void downloadOriginal(); }}>Originaldaten sichern</Button></div>
@@ -91,7 +91,7 @@ function RecoveryScreen() {
       <input type="file" disabled={busy} accept=".json,application/json" className="block w-full font-sans text-base text-ink-secondary file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-line-control file:bg-surface file:px-3.5 file:font-sans file:text-base file:font-medium file:text-ink-secondary hover:file:bg-surface-subtle" onChange={(event) => { void restore(event.target.files?.[0]); event.target.value = ""; }} />
     </label>
     {busy && <p role="status" className="font-sans text-base text-ink-muted">Daten werden gelesen und gesichert …</p>}
-    {message && <p role="alert" className="rounded-lg border border-danger/20 bg-danger/6 px-4 py-3 font-sans text-base tracking-snug text-danger">{message}</p>}
+    {message && <p role="alert" className="rounded-lg border border-danger-line bg-danger-tint px-4 py-3 font-sans text-base tracking-snug text-danger-ink">{message}</p>}
     <p className="font-sans text-base tracking-snug text-ink-muted">Auf dem Mac liegt der Datenordner unter Library / Application Support / Helferlein. Bei einer nicht lesbaren Datei bleibt diese am bisherigen Ort erhalten.</p>
   </main>;
 }

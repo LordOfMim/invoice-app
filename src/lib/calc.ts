@@ -42,6 +42,41 @@ export function computeInvoiceTotals(invoice: Invoice): InvoiceTotals {
   return { subtotal, taxTotal, total };
 }
 
+/** Gross amount of the advance invoices a final invoice deducts; other invoice kinds deduct nothing. */
+export function computeAdvanceDeductions(invoice: Invoice): { net: number; tax: number; gross: number } {
+  if (invoice.invoiceKind !== "final") return { net: 0, tax: 0, gross: 0 };
+  const deductions = invoice.advanceDeductions ?? [];
+  const net = roundMoney(deductions.reduce((sum, item) => sum + (Number.isFinite(item.net) ? item.net : 0), 0));
+  const tax = roundMoney(deductions.reduce((sum, item) => sum + (Number.isFinite(item.tax) ? item.tax : 0), 0));
+  return { net, tax, gross: roundMoney(net + tax) };
+}
+
+export type InvoicePayable = InvoiceTotals & {
+  /** Advance invoices deducted on a final invoice (gross). */
+  deducted: number;
+  deductedTax: number;
+  /** What the recipient still has to pay for this document: total minus deducted advances. */
+  payable: number;
+  /** VAT contained in the payable amount. */
+  payableTax: number;
+};
+
+/**
+ * The amount this document demands. For every invoice except a final invoice with deductions this equals
+ * `computeInvoiceTotals(...).total`, so historical invoices keep their amounts.
+ */
+export function computeInvoicePayable(invoice: Invoice): InvoicePayable {
+  const totals = computeInvoiceTotals(invoice);
+  const deductions = computeAdvanceDeductions(invoice);
+  return {
+    ...totals,
+    deducted: deductions.gross,
+    deductedTax: deductions.tax,
+    payable: roundMoney(totals.total - deductions.gross),
+    payableTax: roundMoney(totals.taxTotal - deductions.tax),
+  };
+}
+
 export function computeCreditTotal(creditNotes: CreditNote[] = []): number {
   return roundMoney(
     creditNotes.reduce((sum, creditNote) => sum + Math.max(0, creditNote.amount || 0), 0)
@@ -57,7 +92,7 @@ export function computeInvoiceBalance(
   creditNotes: CreditNote[] = [],
   today: string = todayLocalISO()
 ): InvoiceBalance {
-  const invoiceTotal = computeInvoiceTotals(invoice).total;
+  const invoiceTotal = computeInvoicePayable(invoice).payable;
   const creditTotal = computeCreditTotal(creditNotes);
   const effectiveTotal = roundMoney(Math.max(0, invoiceTotal - creditTotal));
   const ledgerPaidAmount = computePaymentTotal(invoice.payments ?? []);

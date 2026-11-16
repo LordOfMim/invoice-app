@@ -23,6 +23,8 @@ const robotoMono = localFont({
   variable: "--font-roboto-mono",
 });
 
+const UI_SCALE_SCRIPT = `try{var s=localStorage.getItem("helferlein:ui-scale");if(s==="large"||s==="xlarge")document.documentElement.setAttribute("data-ui-scale",s)}catch(e){}`;
+
 export const metadata: Metadata = {
   title: "Helferlein",
   description: "Lokale Rechnungen und geprüfte E-Rechnungsexporte",
@@ -34,7 +36,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className={`${inter.variable} ${robotoMono.variable}`}>
+    <html lang="de" className={`${inter.variable} ${robotoMono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* The chosen text size applies before the first paint; the app shell keeps this copy in step with the settings. */}
+        <script dangerouslySetInnerHTML={{ __html: UI_SCALE_SCRIPT }} />
+      </head>
       <body className="min-h-dvh bg-surface font-sans text-ink antialiased">
         <StorageBoundary><AppShell>{children}</AppShell></StorageBoundary>
       </body>

@@ -3,27 +3,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "./lib/cn";
 
-/*
- * Mono uppercase badge family. Styling source: flow-page DRAFT chip
- * (h-7, radius 8, dashed hairline, Roboto Mono 9px/12 +0.08em, ink-muted).
- * The Badge-Library artboard is inventory only — all variants here are
- * normalized to these flow-page values.
- */
+/* Pill badges: 24px high, 12px medium sans label, hairline (dashed for provisional states) or solid fill. */
 const badgeVariants = cva(
-  "inline-flex shrink-0 select-none items-center font-mono font-medium uppercase tracking-caps",
+  "inline-flex shrink-0 select-none items-center rounded-pill font-sans font-medium",
   {
     variants: {
       variant: {
         /** Stage indicator, e.g. DRAFT (top bar). */
         stage:
-          "h-7 rounded-md border border-dashed border-line-dash bg-surface px-2.25 text-3xs text-ink-muted",
+          "h-6 border border-dashed border-line-dash px-2 text-sm text-ink-secondary",
         /** Role badge, e.g. ADMIN / BUILDER (members tables). */
-        role: "h-6 rounded-md border border-line-control bg-surface px-2 text-3xs text-ink-secondary",
+        role: "h-6 border border-line px-2 text-sm text-ink-secondary",
         /** Highest role — inverted, e.g. OWNER. */
-        roleSolid: "h-6 rounded-md bg-ink px-2 text-3xs text-white",
+        roleSolid: "h-6 bg-fill px-2 text-sm text-white",
         /** Dormant/pending marker, dashed + faint. */
         pending:
-          "h-6 rounded-md border border-dashed border-line-dash bg-surface px-2 text-3xs text-ink-faint",
+          "h-6 border border-dashed border-line-dash px-2 text-sm text-ink-muted",
       },
     },
     defaultVariants: {
@@ -59,7 +54,7 @@ export function OverrideDelta({
     <span
       data-slot="override-delta"
       className={cn(
-        "inline-flex shrink-0 items-center rounded-sm border border-line-control bg-surface px-1.5 py-0.5 font-mono text-2xs font-medium tracking-loose",
+        "inline-flex shrink-0 items-center rounded-sm border border-line-control bg-surface px-1.5 py-0.5 font-sans text-2xs font-medium tabular-nums",
         value < 0 ? "text-warn-ink" : "text-ink-secondary",
         className,
       )}
@@ -72,8 +67,7 @@ export function OverrideDelta({
 
 /*
  * Plan plate — subscription plan + status segment ("Operate Plus · Hypercare
- * until Jul 15"). Segmented control-hairline plate like the flow-page
- * reference chips.
+ * until Jul 15"). Segmented plate with a control hairline.
  */
 export interface PlanPlateProps extends React.HTMLAttributes<HTMLSpanElement> {
   plan: string;

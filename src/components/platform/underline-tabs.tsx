@@ -5,29 +5,17 @@ import * as React from "react";
 import { cn } from "./lib/cn";
 
 /*
- * From humaify-platform `packages/ui/src/primitives/underline-tabs.tsx`
- * (cc5090a). Markup and classes are unchanged. Adapted: the active bar is a
- * plain element instead of a `motion` shared-layout element; Helferlein does
- * not add the `motion` dependency (docs/design-reference.md, deviation 5).
- * The bar therefore jumps instead of sliding, which is also what the source
- * does under prefers-reduced-motion. A `size="lg"` option sets the labels
- * to 14.5px for the Helferlein readability profile (deviation 2).
- *
- * Source: workspace overview v3 — the page-level section tabs (Überblick ·
- * Lines · Mitglieder & Zugriff · …): 13px labels on a full-width hairline,
- * the active tab semibold ink with a 1.5px ink bar sitting on the hairline,
- * inactive labels medium ink-muted, optional 10px mono counter (ink-faint).
- * A distinct pattern from the pill NavTabs (top-bar nav). Labels reserve
- * their semibold width so the row doesn't shift when the active weight
- * changes.
+ * Page-level section tabs: a 48px row on a full-width hairline, medium labels (13px, `size="lg"` 14px), the active
+ * tab in ink with a 2px bar sitting on the hairline, inactive labels in ink-muted, optional 12px counter. The active
+ * bar is a plain element and jumps instead of sliding (no `motion` dependency).
  */
 export interface UnderlineTabItem<T extends string> {
   value: T;
   label: React.ReactNode;
-  /** Optional mono counter next to the label, e.g. a line count. */
+  /** Optional counter next to the label, e.g. a line count. */
   count?: React.ReactNode;
   /** Non-interactive tab (e.g. its section doesn't exist yet) — renders
-   *  plain like Paper's inactive tabs, without hover or pointer cues. */
+   *  plain like an inactive tab, without hover or pointer cues. */
   disabled?: boolean;
 }
 
@@ -38,7 +26,7 @@ export interface UnderlineTabsProps<T extends string>
   onValueChange?: (value: T) => void;
   /** Right-aligned slot, e.g. "View as customer" + an ADMIN badge. */
   trailing?: React.ReactNode;
-  /** `lg` = 14.5px labels (Helferlein readability profile). */
+  /** `lg` = 14px labels. */
   size?: "md" | "lg";
   /** Render a tab item, e.g. as a Next.js Link. Defaults to a button. */
   renderItem?: (
@@ -64,7 +52,7 @@ export function UnderlineTabs<T extends string>({
         // flex-wrap: below the row's intrinsic width (~500px for six
         // labels) tabs wrap instead of forcing the page to scroll
         // sideways; the hairline stays under the whole block.
-        "flex w-full flex-wrap items-end gap-x-7 gap-y-2 border-b border-line",
+        "flex w-full flex-wrap items-end gap-x-4 gap-y-0 border-b border-line",
         className,
       )}
       {...props}
@@ -74,23 +62,23 @@ export function UnderlineTabs<T extends string>({
         const content = (
           <span
             className={cn(
-              "group relative flex items-center gap-1.75 pb-3",
+              "group relative flex h-12 items-center gap-1.5",
               !item.disabled && "cursor-pointer",
             )}
           >
-            <span className={cn("relative whitespace-nowrap font-sans tracking-snug", size === "lg" ? "text-lg/5" : "text-base/4")}>
-              {/* Invisible semibold twin reserves the active width. */}
-              <span aria-hidden className="invisible font-semibold">
+            <span className={cn("relative whitespace-nowrap font-sans tracking-snug", size === "lg" ? "text-lg" : "text-base")}>
+              {/* Invisible twin reserves the label width. */}
+              <span aria-hidden className="invisible font-medium">
                 {item.label}
               </span>
               <span
                 className={cn(
                   "absolute inset-0 transition-colors duration-100",
                   active
-                    ? "font-semibold text-ink"
+                    ? "font-medium text-ink"
                     : cn(
                         "font-medium text-ink-muted",
-                        !item.disabled && "group-hover:text-ink-secondary",
+                        !item.disabled && "group-hover:text-ink",
                       ),
                 )}
               >
@@ -98,15 +86,15 @@ export function UnderlineTabs<T extends string>({
               </span>
             </span>
             {item.count != null && (
-              <span className="font-mono text-2xs/3 tracking-loose text-ink-faint">
+              <span className="font-sans text-sm tabular-nums text-ink-muted">
                 {item.count}
               </span>
             )}
-            {/* 1.5px active bar sits on the row hairline. */}
+            {/* 2px active bar sits on the row hairline. */}
             {active && (
               <span
                 aria-hidden
-                className="absolute inset-x-0 -bottom-px h-[1.5px] bg-ink"
+                className="absolute inset-x-0 -bottom-px h-0.5 bg-fill"
               />
             )}
           </span>

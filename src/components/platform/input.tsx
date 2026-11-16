@@ -7,14 +7,13 @@ import { cn } from "./lib/cn";
 import { HugeiconsIcon } from "./icon";
 
 /*
- * Source: flow page — trigger/result prose fields (radius 10, #DFE3E9 hairline,
- * 15px/22 medium ink text, faint resize glyph bottom-right) and the inspector
- * message input (radius 8, 12.5px, disabled-ink placeholder, send icon).
+ * Text controls: 8px radius, white, edge from `shadow-control` (no border), 2px focus ring. The prose field has a
+ * faint resize glyph bottom-right, the message input a send icon.
  */
 
 export interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
-  /** lg = 36px auth-screen scale-up (formalized sign-in deviation). */
+  /** md = 28px with 13px text, lg = 38px. */
   size?: "md" | "lg";
 }
 
@@ -23,8 +22,8 @@ export function Input({ className, size = "md", ...props }: InputProps) {
     <input
       data-slot="input"
       className={cn(
-        "w-full rounded-md border border-line-input bg-surface px-3 font-sans font-medium text-ink outline-none transition-colors placeholder:font-normal placeholder:text-ink-disabled focus-visible:border-line-strong focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50",
-        size === "lg" ? "h-9 text-base" : "h-8 text-md",
+        "w-full rounded-md border-0 bg-surface px-2.5 font-sans text-ink shadow-control outline-none transition-[background-color,box-shadow] duration-150 placeholder:text-ink-faint hover:bg-surface-muted focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+        size === "lg" ? "h-9.5 text-base" : "h-7 text-md",
         className,
       )}
       {...props}
@@ -40,9 +39,9 @@ export function Input({ className, size = "md", ...props }: InputProps) {
 export interface ProseFieldProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   /**
-   * Type voice of the textarea. `prose` is the flow-page original (15px/22
-   * medium); `label` matches the `Input` recipe (12.5px medium) so the field
-   * sits quietly next to regular inputs in forms (workspace-create sheet).
+   * Type voice of the textarea. `prose` is the larger step (14px medium);
+   * `label` matches the `Input` recipe (13px medium) so the field sits quietly
+   * next to regular inputs in forms.
    */
   text?: "prose" | "label";
   /**
@@ -132,7 +131,7 @@ export function ProseField({
     <div
       data-slot="prose-field"
       className={cn(
-        "relative flex w-full rounded-lg border border-line-input bg-surface transition-colors focus-within:border-line-strong focus-within:ring-2 focus-within:ring-ring/30",
+        "relative flex w-full rounded-md bg-surface shadow-control transition-[background-color,box-shadow] focus-within:ring-2 focus-within:ring-ring/50",
         className,
       )}
     >
@@ -156,7 +155,7 @@ export function ProseField({
         ref={setRefs}
         rows={rows}
         className={cn(
-          "w-full resize-none bg-transparent font-sans text-ink outline-none placeholder:font-normal placeholder:text-ink-disabled",
+          "w-full resize-none bg-transparent font-sans text-ink outline-none placeholder:font-normal placeholder:text-ink-faint",
           proseFieldText[text],
           // The mirror paints the text; the textarea keeps caret, selection and editing.
           highlight && "relative text-transparent caret-ink [scrollbar-gutter:stable]",
@@ -210,13 +209,13 @@ export function MessageInput({
     <div
       data-slot="message-input"
       className={cn(
-        "flex items-center justify-between gap-2 rounded-md border border-line bg-surface py-2.25 pr-3 pl-3 transition-colors focus-within:border-line-strong focus-within:ring-2 focus-within:ring-ring/30",
+        "flex items-center justify-between gap-2 rounded-md bg-surface py-2.25 pr-3 pl-3 shadow-control transition-[background-color,box-shadow] focus-within:ring-2 focus-within:ring-ring/50",
         className,
       )}
     >
       <input
         placeholder={placeholder}
-        className="w-full min-w-0 bg-transparent font-sans text-md text-ink outline-none placeholder:text-ink-disabled"
+        className="w-full min-w-0 bg-transparent font-sans text-md text-ink outline-none placeholder:text-ink-faint"
         {...props}
         onKeyDown={(event) => {
           onKeyDown?.(event);
@@ -231,7 +230,7 @@ export function MessageInput({
         type="button"
         aria-label="Send message"
         onClick={onSend}
-        className="shrink-0 cursor-pointer text-ink-faint outline-none transition-colors hover:text-ink-secondary focus-visible:text-ink-secondary"
+        className="shrink-0 cursor-pointer text-ink-soft outline-none transition-colors hover:text-ink-secondary focus-visible:text-ink-secondary"
       >
         <HugeiconsIcon icon={SentIcon} size={13} />
       </button>

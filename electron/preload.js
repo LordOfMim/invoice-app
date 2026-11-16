@@ -258,11 +258,49 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // PDF generation
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
   saveDocument: (payload) => ipcRenderer.invoke('save-document', payload),
+  // Backup (JSON) or list (CSV) through the system save dialog; resolves with ok, canceled or error.
+  saveTextFile: (payload) => ipcRenderer.invoke('save-text-file', payload),
   exportEInvoice: (payload) => ipcRenderer.invoke('export-einvoice', payload),
 
   // Email with PDF attachment (best-effort; fully supported on macOS Apple Mail)
   emailInvoiceWithPdf: (payload) => ipcRenderer.invoke('email-invoice-with-pdf', payload),
   
+  // Automatic backups: the folder is chosen and remembered by the main process.
+  backup: {
+    getFolder: () => ipcRenderer.invoke('backup-folder-get'),
+    chooseFolder: () => ipcRenderer.invoke('backup-folder-choose'),
+    clearFolder: () => ipcRenderer.invoke('backup-folder-clear'),
+    openFolder: () => ipcRenderer.invoke('backup-folder-open'),
+    write: (json) => ipcRenderer.invoke('backup-write', { json }),
+  },
+
+  // Archive (ZIP) with PDFs and a list, e.g. for the tax advisor.
+  exportArchive: {
+    begin: (filename) => ipcRenderer.invoke('export-archive-begin', { filename }),
+    addPdf: (name) => ipcRenderer.invoke('export-archive-add-pdf', { name }),
+    addText: (name, extension, text) => ipcRenderer.invoke('export-archive-add-text', { name, extension, text }),
+    finish: (options) => ipcRenderer.invoke('export-archive-finish', options ?? {}),
+  },
+
+  // Built-in mailbox (IMAP/SMTP in the main process).
+  mail: {
+    status: () => ipcRenderer.invoke('mail-status'),
+    suggest: (email) => ipcRenderer.invoke('mail-suggest', { email }),
+    saveAccount: (account) => ipcRenderer.invoke('mail-account-save', account),
+    removeAccount: () => ipcRenderer.invoke('mail-account-remove'),
+    list: () => ipcRenderer.invoke('mail-list'),
+    sync: () => ipcRenderer.invoke('mail-sync'),
+    body: (id) => ipcRenderer.invoke('mail-body', { id }),
+    setSeen: (id, seen) => ipcRenderer.invoke('mail-set-seen', { id, seen }),
+    remove: (id) => ipcRenderer.invoke('mail-remove', { id }),
+    saveAttachment: (id, index) => ipcRenderer.invoke('mail-attachment-save', { id, index }),
+    attachFiles: (held) => ipcRenderer.invoke('mail-attach-files', { held }),
+    attachPrint: (filename) => ipcRenderer.invoke('mail-attach-print', { filename }),
+    discardAttachments: (ids) => ipcRenderer.invoke('mail-attach-discard', { ids }),
+    keepAttachments: (ids) => ipcRenderer.invoke('mail-attach-keep', { ids }),
+    send: (message) => ipcRenderer.invoke('mail-send', message),
+  },
+
   // Platform detection
   platform: process.platform,
   isElectron: true

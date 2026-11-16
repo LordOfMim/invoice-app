@@ -9,7 +9,7 @@ import { DataTable, Pagination, PrimaryCell, type DataTableColumn } from "@/comp
 import { FilterBar, FilterControl } from "@/components/ui/FormLayout";
 import { EmptyState, Page, PageHeader } from "@/components/ui/Layout";
 import { OverflowMenu } from "@/components/ui/Menu";
-import { DashedBadge, StatusPill } from "@/components/ui/Status";
+import { DashedBadge, KindBadge, StatusPill } from "@/components/ui/Status";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { t } from "@/lib/i18n";
 import { createInvoiceDirectory } from "@/lib/invoiceDirectory";
@@ -79,16 +79,27 @@ export default function InvoicesPage() {
         <PrimaryCell
           title={titleOf(row)}
           href={`/invoices/${row.invoice.id}`}
-          aside={(data?.settings.defaultInvoiceId ?? null) === row.invoice.id ? <DashedBadge title={de ? "Vorlage für neue Rechnungen" : "Default for new invoices"}>{de ? "Standard" : "Default"}</DashedBadge> : undefined}
+          aside={(
+            <>
+              {row.invoice.invoiceKind === "advance" && <KindBadge>Abschlag</KindBadge>}
+              {row.invoice.invoiceKind === "final" && <KindBadge>Schlussrechnung</KindBadge>}
+              {(data?.settings.defaultInvoiceId ?? null) === row.invoice.id && <DashedBadge title={de ? "Vorlage für neue Rechnungen" : "Default for new invoices"}>{de ? "Standard" : "Default"}</DashedBadge>}
+            </>
+          )}
         />
       ),
     },
     {
       key: "customer",
       header: de ? "Kunde" : "Customer",
-      render: (row) => row.invoice.recipient.name
-        ? <span className="text-ink">{row.invoice.recipient.name}</span>
-        : <span className="text-ink-muted">{de ? "Noch kein Empfänger" : "No recipient yet"}</span>,
+      render: (row) => (
+        <span className="flex min-w-0 flex-col">
+          {row.invoice.recipient.name
+            ? <span className="text-ink">{row.invoice.recipient.name}</span>
+            : <span className="text-ink-muted">{de ? "Noch kein Empfänger" : "No recipient yet"}</span>}
+          {row.invoice.projectReference?.trim() && <span className="font-sans text-base tracking-snug text-ink-muted">{row.invoice.projectReference}</span>}
+        </span>
+      ),
     },
     { key: "date", header: de ? "Datum" : "Date", width: "8.5rem", render: (row) => <span className="tabular-nums">{row.dateLabel}</span> },
     {
@@ -146,6 +157,7 @@ export default function InvoicesPage() {
                     if (dup) window.location.assign(`/invoices/${dup.id}`);
                   },
                 },
+                !isDraft && !!row.invoice.invoiceNumber.trim() && row.balance.isOverdue && { kind: "link", label: "Zahlungserinnerung schreiben", href: `/invoices/${row.invoice.id}/reminder` },
                 !isDraft && row.balance.isFullyPaid && (row.invoice.paid || (row.invoice.payments ?? []).some((payment) => payment.method === "manual_paid")) && { label: t(language, "actions.markUnpaid"), onSelect: () => adapter && togglePaid(adapter, row.invoice.id) },
                 { kind: "separator" },
                 { label: de ? "Rechnung löschen …" : "Delete invoice …", tone: "danger", onSelect: () => setDeleteConfirm(row.invoice.id) },
@@ -180,7 +192,7 @@ export default function InvoicesPage() {
           >
             <FilterControl width="grow">
               <Field label={de ? "Suchen" : "Search"}>
-                <SearchInput value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={de ? "Nummer, Kunde oder Datum" : "Number, customer or date"} />
+                <SearchInput value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={de ? "Nummer, Kunde, Bauvorhaben oder Datum" : "Number, customer, project or date"} />
               </Field>
             </FilterControl>
             <FilterControl width="sm">

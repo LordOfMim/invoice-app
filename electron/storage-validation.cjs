@@ -17,7 +17,7 @@ const validTexts = recordGuard(Object.fromEntries([
   "documentTitle", "senderHeading", "recipientHeading", "invoiceNumberLabel", "invoiceDateLabel", "dueDateLabel",
   "itemsDescriptionLabel", "itemsQuantityLabel", "itemsUnitPriceLabel", "itemsTaxRateLabel", "itemsLineTotalLabel",
   "subtotalLabel", "taxTotalLabel", "totalLabel", "notesHeading", "footerHeading", "creditNoteNumberLabel",
-  "creditNoteDateLabel", "linkedInvoiceLabel", "reasonLabel", "amountLabel",
+  "creditNoteDateLabel", "linkedInvoiceLabel", "reasonLabel", "amountLabel", "serviceDateLabel", "projectReferenceLabel",
 ].map((key) => [key, stringValue])));
 const validCustomization = recordGuard({
   fontSizeScale: numberValue, lineSpacing: numberValue, tablePadding: choices("compact", "normal", "spacious"),
@@ -68,6 +68,12 @@ const validPayment = recordGuard({
 const validAttachment = recordGuard({
   ...identityFields, name: stringValue, type: stringValue, size: numberValue, dataUrl: stringValue,
 });
+const validAdvanceDeduction = recordGuard({
+  id: stringValue, invoiceId: stringValue, invoiceNumber: stringValue, invoiceDate: stringValue, net: numberValue, tax: numberValue,
+});
+const validReminder = recordGuard({
+  id: stringValue, level: choices(1, 2, 3), date: stringValue, dueDate: stringValue, fee: numberValue, text: stringValue, createdAt: stringValue,
+});
 const documentFields = {
   ...identityFields, sender: validParty, recipient: validParty,
   lineItems: (value) => validRecords(value, validLineItem),
@@ -79,6 +85,10 @@ const validInvoice = recordGuard({
   paid: booleanValue, exchangeRate: numberValue, exchangeRateNote: stringValue, logoDataUrl: stringValue,
   tagIds: stringArray, creditNoteIds: stringArray, recurringInvoiceId: stringValue, einvoice: validEInvoice,
   payments: (items) => validRecords(items, validPayment), attachments: (items) => validRecords(items, validAttachment),
+  projectReference: stringValue, reverseCharge: booleanValue, invoiceKind: choices("standard", "advance", "final"),
+  advanceDeductions: (items) => validRecords(items, validAdvanceDeduction), reminders: (items) => validRecords(items, validReminder),
+  documentKind: choices("quote"), quoteStatus: choices("open", "accepted", "declined"),
+  convertedInvoiceId: stringValue, sourceQuoteId: stringValue,
 });
 const validSettings = recordGuard({
   language: choices("de", "en"), currency: stringValue, defaultTaxRate: numberValue,
@@ -88,10 +98,16 @@ const validSettings = recordGuard({
   defaultInvoiceId: stringValue, backupEnabled: booleanValue, backupPath: stringValue, lastBackupDate: stringValue,
   dashboardPeriod: choices("month", "quarter", "year"),
   backgroundChoice: choices("auto", "off", "threads", "light-rays", "shape-grid", "beams"),
+  uiScale: choices("normal", "large", "xlarge"), defaultPaymentTermDays: numberValue,
 });
 const collectionGuards = {
   invoices: validInvoice,
-  customers: recordGuard({ ...identityFields, ...partyFields, email: stringValue, phone: stringValue, taxId: stringValue, notes: stringValue }),
+  quotes: validInvoice,
+  contractorDeclarations: recordGuard({
+    ...identityFields, date: stringValue, senderAddress: stringValue, recipientName: stringValue, recipientAddress: stringValue,
+    kommission: stringValue, bodyText: stringValue, signatureName: stringValue, invoiceId: stringValue, customerId: stringValue,
+  }),
+  customers: recordGuard({ ...identityFields, ...partyFields, email: stringValue, phone: stringValue, taxId: stringValue, notes: stringValue, reverseCharge: booleanValue }),
   products: recordGuard({ ...identityFields, name: stringValue, description: stringValue, unit: stringValue, unitPrice: numberValue, taxRate: numberValue, category: stringValue }),
   tags: recordGuard({ ...identityFields, name: stringValue, color: stringValue }),
   creditNotes: recordGuard({
@@ -102,6 +118,7 @@ const collectionGuards = {
   recurringInvoices: recordGuard({
     ...documentFields, name: stringValue, frequency: choices("monthly", "quarterly", "yearly"),
     nextRunDate: stringValue, lastRunDate: stringValue, active: booleanValue, reminderDays: numberValue, autoGenerate: booleanValue,
+    anchorDay: numberValue,
   }),
   templateVariants: recordGuard({
     ...identityFields, name: stringValue, baseTemplateId: choices("classic", "modern", "minimal"), customization: validCustomization,

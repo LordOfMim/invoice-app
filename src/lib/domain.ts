@@ -31,6 +31,8 @@ export type Customer = {
   phone?: string;
   taxId?: string;
   notes?: string;
+  /** § 13b UStG: invoices to this customer shift the VAT liability to the recipient. */
+  reverseCharge?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -149,7 +151,9 @@ export type RecurringInvoice = {
   
   active: boolean;
   reminderDays: number; // days before nextRunDate to remind
-  autoGenerate: boolean; // auto-generate or just remind
+  autoGenerate: boolean; // create the invoice automatically on the run date instead of only reminding
+  /** Day of month the schedule was set up for; keeps "the 31st" from drifting to the 28th after February. */
+  anchorDay?: number;
   
   createdAt: string;
   updatedAt: string;
@@ -220,6 +224,10 @@ export type InvoiceTexts = {
 
   notesHeading: string; // "Hinweise" - shown under positions
   footerHeading: string; // Legacy, can be empty now
+
+  // Optional labels added later; templates fall back to German defaults when missing.
+  serviceDateLabel?: string;
+  projectReferenceLabel?: string;
 };
 
 export type LayoutPreferences = {
@@ -268,6 +276,35 @@ export type EInvoiceDetails = {
   taxCategory?: "S" | "Z" | "E" | "AE" | "K" | "G" | "O";
   unitCodes?: Record<string, string>; // item id -> UNECE Rec20 code, e.g. C62/HUR
 };
+
+/** "advance" = Abschlagsrechnung, "final" = Schlussrechnung that deducts earlier advance invoices. */
+export type InvoiceKind = "standard" | "advance" | "final";
+
+/** One advance invoice deducted on a final invoice. Amounts are a snapshot, so later edits cannot shift history. */
+export type AdvanceDeduction = {
+  id: string;
+  invoiceId?: string; // source invoice, if it still exists
+  invoiceNumber: string;
+  invoiceDate: string; // ISO date
+  net: number;
+  tax: number;
+  /** What the advance invoice itself amounted to when the deduction was taken or last confirmed (the deducted amounts may be changed by hand). */
+  sourceNet?: number;
+  sourceTax?: number;
+};
+
+/** A payment reminder or dunning letter issued for an invoice. */
+export type PaymentReminder = {
+  id: string;
+  level: 1 | 2 | 3; // 1 = Zahlungserinnerung, 2 = 1. Mahnung, 3 = 2. Mahnung
+  date: string; // ISO date of the letter
+  dueDate: string; // new payment deadline
+  fee?: number; // optional dunning fee, shown on the letter only
+  text?: string; // optional custom body text
+  createdAt: string;
+};
+
+export type QuoteStatus = "open" | "accepted" | "declined";
 
 export type Invoice = {
   einvoice?: EInvoiceDetails;
@@ -321,6 +358,34 @@ export type Invoice = {
   // Recurring invoice reference
   recurringInvoiceId?: string;
 
+  // ── Optional fields added in 1.3; older invoices simply do not have them ──
+
+  /** Bauvorhaben / Kommission: printed on the document, searchable, reused by the contractor declaration. */
+  projectReference?: string;
+  /** § 13b UStG: the recipient owes the VAT; lines carry 0 % and the document prints the mandatory note. */
+  reverseCharge?: boolean;
+  /**
+   * Tax rates the positions had before reverse charge was switched on (line id → rate, null = no rate). Kept with
+   * the invoice so a wrongly chosen § 13b customer can still be corrected after a reload; removed when it is switched off.
+   */
+  reverseChargePreviousRates?: Record<string, number | null>;
+  /**
+   * E-invoice tax category and exemption reason the invoice carried before reverse charge was switched on (for
+   * example "E" with the § 19 note). Put back and removed when it is switched off.
+   */
+  reverseChargePreviousTax?: Pick<EInvoiceDetails, "taxCategory" | "taxExemptionReason">;
+  invoiceKind?: InvoiceKind;
+  /** Advance invoices deducted on a final invoice (only used when invoiceKind is "final"). */
+  advanceDeductions?: AdvanceDeduction[];
+  reminders?: PaymentReminder[];
+
+  /** Records in the `quotes` collection are quotes; `dueDate` then means "valid until". */
+  documentKind?: "quote";
+  quoteStatus?: QuoteStatus;
+  /** On a quote: the invoice created from it. On an invoice: the quote it came from. */
+  convertedInvoiceId?: string;
+  sourceQuoteId?: string;
+
   createdAt: string; // ISO
   updatedAt: string; // ISO
 };
@@ -361,6 +426,32 @@ export type AppSettings = {
 
   // Appearance preferences
   backgroundChoice?: AppBackgroundChoice;
+  /** Text size of the app itself; printed documents are never affected. */
+  uiScale?: UiScale;
+
+  /** Days between invoice date and due date for new invoices. */
+  defaultPaymentTermDays?: number;
+};
+
+export type UiScale = "normal" | "large" | "xlarge";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contractor declarations (Fachunternehmererklärung), one per construction project
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ContractorDeclaration = {
+  id: string;
+  date: string; // ISO date printed on the declaration
+  senderAddress: string;
+  recipientName: string;
+  recipientAddress: string;
+  kommission: string;
+  bodyText: string;
+  signatureName: string;
+  invoiceId?: string;
+  customerId?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -377,4 +468,7 @@ export type PersistedDataV1 = {
   creditNotes: CreditNote[];
   recurringInvoices: RecurringInvoice[];
   templateVariants: TemplateVariant[];
+  /** Added in 1.3. Older app versions keep unknown collections untouched. */
+  quotes: Invoice[];
+  contractorDeclarations: ContractorDeclaration[];
 };

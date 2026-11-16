@@ -15,6 +15,8 @@ import type { CreditNote, Invoice, Language, Payment } from "@/lib/domain";
 import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
 import { addPaymentToInvoice, removePaymentFromInvoice } from "@/lib/storage/store";
+import { reminderTitle } from "@/lib/documents";
+import { LinkButton } from "@/components/ui/Button";
 import { formatDay } from "@/components/invoiceStatus";
 
 /** Accepts German comma input („12,50“) as well as a dot. */
@@ -33,10 +35,13 @@ export function PaymentsTab({
   currency,
   locale,
   language,
+  canRemind = false,
   save,
   onTogglePaid,
   onCreateCreditNote,
 }: {
+  /** The invoice is issued, past its due date and still has an open amount, so a reminder can be written. */
+  canRemind?: boolean;
   invoice: Invoice;
   balance: InvoiceBalance;
   status: { tone: Tone; label: string };
@@ -64,6 +69,7 @@ export function PaymentsTab({
     other: t(language, "common.other"),
   };
   const payments = invoice.payments ?? [];
+  const reminders = [...(invoice.reminders ?? [])].sort((a, b) => a.date.localeCompare(b.date) || a.level - b.level);
 
   const record = () => {
     const value = parseAmount(amount);
@@ -132,7 +138,7 @@ export function PaymentsTab({
                     </div>
                     {payment.notes && <div className="font-sans text-base tracking-snug text-ink-muted">{payment.notes}</div>}
                   </div>
-                  <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/5" aria-label={de ? `Zahlung vom ${when} über ${value} entfernen` : `Remove payment of ${value} from ${when}`} onClick={() => save(removePaymentFromInvoice(invoice, payment.id))}>
+                  <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={de ? `Zahlung vom ${when} über ${value} entfernen` : `Remove payment of ${value} from ${when}`} onClick={() => save(removePaymentFromInvoice(invoice, payment.id))}>
                     {t(language, "actions.remove")}
                   </Button>
                 </CardZone>
@@ -163,6 +169,37 @@ export function PaymentsTab({
             {recorded && <span role="status" className="font-sans text-base tracking-snug text-success-ink">{recorded}</span>}
           </div>
         </FormSection>
+      )}
+
+      {(canRemind || reminders.length > 0) && (
+        <Section
+          title="Zahlungserinnerungen und Mahnungen"
+          summary="Ein Schreiben an den Kunden, wenn die Rechnung nach dem Zahlungsziel noch offen ist. Als PDF speichern oder als E-Mail vorbereiten."
+          actions={canRemind ? <LinkButton size="sm" href={`/invoices/${invoice.id}/reminder`}>{reminders.length ? "Nächstes Schreiben erstellen" : "Zahlungserinnerung schreiben"}</LinkButton> : undefined}
+        >
+          {reminders.length > 0 ? (
+            <Card>
+              {reminders.map((reminder) => (
+                <CardZone key={reminder.id} padding="sm" className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/invoices/${invoice.id}/reminder?schreiben=${reminder.id}`} className="rounded-sm font-sans text-lg font-semibold tracking-snug text-ink underline-offset-3 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50">
+                      {reminderTitle(reminder.level)}
+                    </Link>
+                    <div className="font-sans text-base tracking-snug text-ink-muted">
+                      vom {formatDay(reminder.date, locale)} · Frist bis {formatDay(reminder.dueDate, locale)}
+                      {reminder.fee ? ` · Mahngebühr ${formatMoney(reminder.fee, currency, locale)}` : ""}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={`${reminderTitle(reminder.level)} vom ${formatDay(reminder.date, locale)} entfernen`} onClick={() => save({ ...invoice, reminders: (invoice.reminders ?? []).filter((entry) => entry.id !== reminder.id) })}>
+                    {t(language, "actions.remove")}
+                  </Button>
+                </CardZone>
+              ))}
+            </Card>
+          ) : (
+            <p className="font-sans text-base tracking-snug text-ink-muted">Zu dieser Rechnung wurde noch kein Schreiben erstellt.</p>
+          )}
+        </Section>
       )}
 
       <Section

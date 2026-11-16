@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { use, useMemo, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
+import { use, useMemo, useState, useSyncExternalStore } from "react";
+import { Button, LinkButton } from "@/components/ui/Button";
+import { Choice, Field } from "@/components/ui/Field";
 import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -11,6 +11,7 @@ import { Page, PageHeader, RecordStamp, initialsOf } from "@/components/ui/Layou
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { usePageCrumb } from "@/components/shell/AppShell";
 import { t } from "@/lib/i18n";
+import { getMailState, getServerMailState, subscribeMail } from "@/lib/mail";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { deleteCustomer, upsertCustomer } from "@/lib/storage/store";
 import type { Customer } from "@/lib/domain";
@@ -21,6 +22,8 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
   const language = data?.settings.language ?? "de";
   const de = language === "de";
   const [showDelete, setShowDelete] = useState(false);
+  const mailBox = useSyncExternalStore(subscribeMail, getMailState, getServerMailState);
+  const mailReady = mailBox.configured && !mailBox.needsPassword;
   const customer = useMemo(() => data?.customers.find((c) => c.id === id) ?? null, [data?.customers, id]);
   usePageCrumb(customer ? customer.name || t(language, "common.unnamed") : null);
 
@@ -44,7 +47,13 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
         title={customer.name || t(language, "customers.new")}
         initials={initialsOf(customer.name) || "K"}
         description={de ? "Kundendaten werden beim Übernehmen in neue Rechnungen eingesetzt. Änderungen werden automatisch lokal gespeichert." : "Customer details are filled into new invoices. Changes are saved locally automatically."}
-        actions={<Button variant="ghost" className="text-danger hover:bg-danger/5" onClick={() => setShowDelete(true)}>{de ? "Kunde löschen …" : "Delete customer …"}</Button>}
+        actions={<>
+          {mailReady && customer.email?.trim() && <>
+            <LinkButton href={`/mail?neu=${encodeURIComponent(customer.email.trim())}`}>E-Mail schreiben</LinkButton>
+            <LinkButton variant="ghost" href={`/mail?kontakt=${encodeURIComponent(customer.email.trim())}`}>E-Mails anzeigen</LinkButton>
+          </>}
+          <Button variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => setShowDelete(true)}>{de ? "Kunde löschen …" : "Delete customer …"}</Button>
+        </>}
       />
 
       <FormPage>
@@ -64,6 +73,14 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
           <Field label={t(language, "customers.taxId")}>
             <Input value={customer.taxId || ""} onChange={(e) => save({ ...customer, taxId: e.target.value })} placeholder="DE123456789" />
           </Field>
+          <div className="@md:col-span-2">
+            <Choice
+              label="Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG)"
+              hint="Für Bauunternehmen, denen Sie Bauleistungen ohne Umsatzsteuer berechnen. Rechnungen und Angebote an diesen Kunden starten ohne Umsatzsteuer und mit dem Pflichthinweis."
+              checked={customer.reverseCharge === true}
+              onChange={(e) => save({ ...customer, reverseCharge: e.target.checked || undefined })}
+            />
+          </div>
         </FormSection>
 
         <FormSection title={t(language, "customers.addressContact")}>
