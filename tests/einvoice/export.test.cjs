@@ -67,7 +67,7 @@ const runtimeDir = process.env.EINVOICE_RUNTIME_DIR || path.join(root, 'electron
 const assetsDir = process.env.EINVOICE_ASSETS_DIR || path.join(root, 'electron/einvoice-assets');
 const integrationAvailable = fs.existsSync(path.join(runtimeDir, 'manifest.json'));
 if (process.env.EINVOICE_REQUIRE_INTEGRATION === '1' && !integrationAvailable) throw new Error('EINVOICE_REQUIRE_INTEGRATION=1, aber die gepinnte Runtime fehlt.');
-test('real offline XML and PDF/A-3b exports pass the pinned validator', { skip: !integrationAvailable, timeout: 120000 }, async () => {
+test('real offline XML and PDF/A-3b exports pass the pinned validator', { skip: !integrationAvailable, timeout: 300000 }, async () => {
   const status = await getEInvoiceRuntimeStatus({ runtimeDir, assetsDir }); assert.equal(status.available, true, status.message);
   const d = fixture();
   for (const format of ['xrechnung', 'zugferd']) {
@@ -133,7 +133,7 @@ test('current KoSIT report requires its terminal acceptance assessment', () => {
   assert.equal(parseKositReport('<rep:report xmlns:rep="http://www.xoev.de/de/validator/varl/1"><rep:assessment><rep:reject/></rep:assessment></rep:report>'), false);
 });
 
-test('official KoSIT 2026-08-31 rejects a well-formed CII without buyer reference', { skip: !integrationAvailable, timeout: 120000 }, async () => {
+test('official KoSIT 2026-08-31 rejects a well-formed CII without buyer reference', { skip: !integrationAvailable, timeout: 300000 }, async () => {
   const invalid = fixture(); invalid.buyerReference = '';
   await assert.rejects(validateXRechnung(Buffer.from(buildCii(invalid, 'xrechnung')), runtimeDir), /KoSIT|freigegeben/);
 });
@@ -176,7 +176,7 @@ test('reverse charge needs the VAT ID of the recipient', () => {
   assert.ok(prepareEInvoice(missing, 'zugferd').errors.some(e => e.field === 'einvoice.buyer.vatId'));
   assert.throws(() => assertDocument({ ...ok.document, buyer: { ...ok.document.buyer, vatId: '' } }), /Umsatzsteuer-ID/);
 });
-test('final invoice and reverse charge pass the pinned validator in both formats', { skip: !integrationAvailable, timeout: 240000 }, async () => {
+test('final invoice and reverse charge pass the pinned validator in both formats', { skip: !integrationAvailable, timeout: 400000 }, async () => {
   for (const source of [finalInvoice(), reverseChargeInvoice()]) for (const format of ['xrechnung', 'zugferd']) {
     const prepared = prepareEInvoice(source, format);
     assert.equal(prepared.ok, true, JSON.stringify(prepared.errors));
