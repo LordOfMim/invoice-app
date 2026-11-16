@@ -121,7 +121,7 @@
     "@radix-ui/react-slot": "1.4.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "electron-store": "11.0.2",
+    "electron-store": "12.0.0",
     "html-to-text": "10.0.1",
     "imapflow": "2.12.1",
     "mailparser": "3.14.5",
