@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import type { EInvoiceDetails, EInvoiceParty, InvoiceTemplateId, Language, UiScale } from "@/lib/domain";
 import { formatIban } from "@/lib/documents";
+import { splitPostalAddress } from "@/lib/einvoice";
 import { createDefaultTextsDe } from "@/lib/defaults";
 import { t } from "@/lib/i18n";
 import { roundMoney } from "@/lib/money";
@@ -34,6 +35,7 @@ export default function SettingsPage() {
   const details = settings.defaultEInvoice ?? {};
   const setDetails = (patch: Partial<EInvoiceDetails>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), ...patch } }));
   const setSeller = (patch: Partial<EInvoiceParty>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), seller: { ...(prev.defaultEInvoice?.seller ?? {}), ...patch } } }));
+  const senderAddressParts = splitPostalAddress(settings.defaultSender.address);
   const ibanCompact = (details.iban ?? "").replace(/\s+/g, "");
   const ibanLooksWrong = ibanCompact !== "" && !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(ibanCompact.toUpperCase());
   const setLayout = (next: Partial<typeof layout>) => updateSettings(adapter, (prev) => ({ ...prev, defaultLayout: { ...prev.defaultLayout, ...next } }));
@@ -77,6 +79,26 @@ export default function SettingsPage() {
           <Field label="Kontoinhaber (optional)" hint="Nur nötig, wenn er vom Absender abweicht." className="@md:col-span-2">
             <Input value={details.accountName ?? ""} onChange={(e) => setDetails({ accountName: e.target.value || undefined })} />
           </Field>
+        </FormSection>
+
+        <FormSection
+          title="Anschrift für die E-Rechnung"
+          description="Die E-Rechnung braucht Straße, Postleitzahl und Ort einzeln. Sie werden aus der Adresse oben gelesen; tragen Sie hier nur etwas ein, wenn das nicht passt."
+        >
+          {([
+            ["street", "Straße und Hausnummer", "@md:col-span-2"],
+            ["postalCode", "Postleitzahl", ""],
+            ["city", "Ort", ""],
+            ["countryCode", "Ländercode", ""],
+          ] as const).map(([key, label, className]) => (
+            <Field key={key} label={label} className={className} hint={key === "countryCode" ? "Zweistellig, für Deutschland: DE" : undefined}>
+              <Input
+                value={details.seller?.[key] ?? ""}
+                placeholder={senderAddressParts[key]}
+                onChange={(e) => setSeller({ [key]: (key === "countryCode" ? e.target.value.trim().toUpperCase() : e.target.value) || undefined })}
+              />
+            </Field>
+          ))}
         </FormSection>
 
         <FormSection title={t(language, "settings.defaults")} description={de ? "Werte, mit denen neue Rechnungen und Positionen starten." : "Values new invoices and line items start with."}>
@@ -174,9 +196,15 @@ export default function SettingsPage() {
           )}
         </FormSection>
 
-        <FormSection title={t(language, "settings.defaultFooter")} description="Steht mittig am Seitenende neuer Rechnungen, solange dort keine eigene Fußzeile links oder rechts eingetragen ist. Steuernummer und Bankverbindung müssen hier nicht wiederholt werden." columns={1}>
-          <Field label={t(language, "settings.defaultFooter")} hideLabel>
-            <Textarea rows={6} value={settings.defaultFooterText} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultFooterText: e.target.value }))} />
+        <FormSection title={t(language, "settings.defaultFooter")} description="Steht mittig am Seitenende neuer Rechnungen, solange links und rechts nichts eingetragen ist. Steuernummer und Bankverbindung müssen hier nicht wiederholt werden.">
+          <Field label={de ? "Mittig" : "Centred"} className="@md:col-span-2">
+            <Textarea rows={4} value={settings.defaultFooterText} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultFooterText: e.target.value }))} />
+          </Field>
+          <Field label={de ? "Links (statt mittig)" : "Left (instead of centred)"} hint={de ? "Zum Beispiel Geschäftsführung und Handelsregister." : "For example management and register."}>
+            <Textarea rows={4} value={settings.defaultFooterLeftText ?? ""} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultFooterLeftText: e.target.value || undefined }))} />
+          </Field>
+          <Field label={de ? "Rechts (statt mittig)" : "Right (instead of centred)"} hint={de ? "Zum Beispiel Telefon und Internetseite." : "For example phone and website."}>
+            <Textarea rows={4} value={settings.defaultFooterRightText ?? ""} onChange={(e) => updateSettings(adapter, (prev) => ({ ...prev, defaultFooterRightText: e.target.value || undefined }))} />
           </Field>
         </FormSection>
 

@@ -162,9 +162,10 @@
   --tracking-loose: 0em;
   --tracking-title: -0.25px;
 
-  /* Motion: 150ms on Palermo's default curve. */
-  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Motion: entries arrive on a strong ease-out (quint), exits are shorter. Drawers use a softer curve. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer base {

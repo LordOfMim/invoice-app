@@ -97,7 +97,7 @@ const validInvoice = recordGuard({
 });
 const validSettings = recordGuard({
   language: choices("de", "en"), currency: stringValue, defaultTaxRate: numberValue,
-  defaultSender: validParty, defaultEInvoice: validEInvoice, defaultFooterText: stringValue,
+  defaultSender: validParty, defaultEInvoice: validEInvoice, defaultFooterText: stringValue, defaultFooterLeftText: stringValue, defaultFooterRightText: stringValue,
   defaultTemplateId: choices("classic", "modern", "minimal"), defaultLayout: validLayout,
   defaultLogoDataUrl: stringValue, defaultLogoFile: isFileRef, pdfFilenamePattern: stringValue, defaultTexts: validTexts,
   defaultInvoiceId: stringValue, backupEnabled: booleanValue, backupPath: stringValue, lastBackupDate: stringValue,
@@ -112,7 +112,7 @@ const collectionGuards = {
     ...identityFields, date: stringValue, senderAddress: stringValue, recipientName: stringValue, recipientAddress: stringValue,
     kommission: stringValue, bodyText: stringValue, signatureName: stringValue, invoiceId: stringValue, customerId: stringValue,
   }),
-  customers: recordGuard({ ...identityFields, ...partyFields, email: stringValue, phone: stringValue, taxId: stringValue, notes: stringValue, reverseCharge: booleanValue }),
+  customers: recordGuard({ ...identityFields, ...partyFields, email: stringValue, phone: stringValue, taxId: stringValue, buyerReference: stringValue, notes: stringValue, reverseCharge: booleanValue }),
   products: recordGuard({ ...identityFields, name: stringValue, description: stringValue, unit: stringValue, unitPrice: numberValue, taxRate: numberValue, category: stringValue }),
   tags: recordGuard({ ...identityFields, name: stringValue, color: stringValue }),
   creditNotes: recordGuard({

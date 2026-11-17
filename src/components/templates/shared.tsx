@@ -88,6 +88,19 @@ export function ContinuationHeader({ invoice }: { invoice: Invoice }) {
   );
 }
 
+/**
+ * The reason for an invoice without VAT (e.g. "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."), entered once
+ * for the E-Rechnung, is printed under the totals as well. Not when the same sentence already stands in the notes or
+ * footer, and not for § 13b, which has its own line.
+ */
+function exemptionNote(invoice: Invoice): string | undefined {
+  const reason = invoice.einvoice?.taxExemptionReason?.trim();
+  const category = invoice.einvoice?.taxCategory;
+  if (!reason || invoice.reverseCharge || reason === REVERSE_CHARGE_NOTE || !category || category === "S" || category === "AE") return undefined;
+  const printed = [invoice.notesText, invoice.footerText, invoice.footerLeftText, invoice.footerRightText].join(" ").replace(/\s+/g, " ").toLowerCase();
+  return printed.includes(reason.replace(/\s+/g, " ").toLowerCase()) ? undefined : reason;
+}
+
 export function TotalsBlock({ invoice, currency, locale }: { invoice: Invoice; currency: string; locale: string }) {
   const totals = computeInvoicePayable(invoice);
   const t = invoice.texts;
@@ -130,6 +143,7 @@ export function TotalsBlock({ invoice, currency, locale }: { invoice: Invoice; c
         </>
       )}
       {invoice.reverseCharge && <div className="pt-2 text-xs text-zinc-600">{REVERSE_CHARGE_NOTE}</div>}
+      {exemptionNote(invoice) && <div className="pt-2 text-xs text-zinc-600">{exemptionNote(invoice)}</div>}
     </div>
   );
 }

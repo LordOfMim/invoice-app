@@ -56,7 +56,7 @@ function Row({ id, selected, unread, person, date, subject, marks, onSelect }: {
           <span className={cn("min-w-0 break-words font-sans text-base tracking-snug", unread ? "text-ink" : "text-ink-muted")}>
             {unread && <span className="sr-only">Ungelesen: </span>}{subject || "(ohne Betreff)"}
           </span>
-          {marks.length > 0 && <span className="font-sans text-base tracking-snug text-ink-muted">{marks.join(" · ")}</span>}
+          {marks.length > 0 && <span className="font-sans text-base tracking-snug text-ink-muted">{marks.join(", ")}</span>}
         </span>
       </button>
     </li>
@@ -225,7 +225,7 @@ export default function MailPage() {
     <Page>
       <PageHeader
         title="E-Mail"
-        description={mail.email ? `${mail.email} · ${mail.syncing ? "Wird abgerufen …" : lastSync}` : undefined}
+        description={mail.email ? `${mail.email}, ${mail.syncing ? "Wird abgerufen …" : lastSync}` : undefined}
         actions={<>
           <Button variant="primary" onClick={compose}>Neue E-Mail</Button>
           <Button loading={mail.syncing} disabled={mail.syncing} onClick={() => { setNotice(null); void syncMail(); }}>Abrufen</Button>

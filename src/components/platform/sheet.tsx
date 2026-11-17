@@ -88,8 +88,8 @@ function SheetContent({
         className={cn(
           "fixed inset-y-0 z-50 flex h-full max-w-[calc(100%-2rem)] flex-col bg-surface outline-none",
           size === "wide" ? "w-140" : "w-100",
-          "data-[state=open]:animate-in data-[state=open]:duration-250 data-[state=closed]:animate-out data-[state=closed]:duration-200",
-          "ease-out motion-reduce:animate-none",
+          "data-[state=open]:animate-in data-[state=open]:duration-400 data-[state=open]:ease-(--ease-drawer) data-[state=closed]:animate-out data-[state=closed]:duration-150 data-[state=closed]:ease-out",
+          "motion-reduce:animate-none",
           side === "right"
             ? "right-0 border-l border-line data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right"
             : "left-0 border-r border-line data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left",

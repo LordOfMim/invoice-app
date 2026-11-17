@@ -1,6 +1,7 @@
 import { isFileRef } from "../../electron/file-refs.cjs";
 import type { DeclarationDefaults } from "@/lib/documents";
-import type { FileRef } from "@/lib/domain";
+import type { AppSettings, FileRef, Invoice } from "@/lib/domain";
+import { getCurrentData } from "@/lib/storage/store";
 import type { StorageAdapter } from "@/lib/storage/types";
 
 /*
@@ -26,8 +27,9 @@ const EMPTY: StoredDeclarationDefaults = {
 };
 
 /**
- * What the declaration page showed before anyone saved standard values (versions up to 1.2). An installation that
- * relied on these keeps them; saving standard values replaces them.
+ * What the declaration page showed before anyone saved standard values (versions up to 1.2). They are the details
+ * of the one business the app was first written for. That installation keeps them until it saves its own standard
+ * values; every other installation starts empty and takes its sender from the settings (see `isOriginalInstallation`).
  */
 const BUILT_IN: StoredDeclarationDefaults = {
   senderAddress: "Fa.Dembiany Schwirrammerweg 39 13129 Berlin",
@@ -38,10 +40,21 @@ const BUILT_IN: StoredDeclarationDefaults = {
   signatureImage: null,
 };
 
-export function loadDeclarationDefaults(adapter: StorageAdapter): StoredDeclarationDefaults {
+type InstallationData = { settings?: Pick<AppSettings, "defaultSender">; invoices?: readonly Pick<Invoice, "sender">[] };
+
+/**
+ * True only for the installation the built-in values belong to: its own sender, in the settings or on one of its
+ * invoices, is that business. Every other installation, including a fresh one, gets empty standard values.
+ */
+function isOriginalInstallation(data: InstallationData | null | undefined): boolean {
+  const mentions = (party: { name?: string; address?: string } | undefined) => !!party && /dembiany/i.test(`${party.name ?? ""}\n${party.address ?? ""}`);
+  return mentions(data?.settings?.defaultSender) || (data?.invoices ?? []).some((invoice) => mentions(invoice.sender));
+}
+
+export function loadDeclarationDefaults(adapter: StorageAdapter, data: InstallationData | null | undefined = getCurrentData()): StoredDeclarationDefaults {
   try {
     const stored = adapter.getItem(DECLARATION_DEFAULTS_KEY);
-    if (stored === null || stored === "") return BUILT_IN;
+    if (stored === null || stored === "") return isOriginalInstallation(data) ? BUILT_IN : EMPTY;
     const parsed: unknown = JSON.parse(stored);
     if (!parsed || typeof parsed !== "object") return EMPTY;
     const record = parsed as Record<string, unknown>;

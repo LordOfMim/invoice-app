@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
-import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
+import { Facts, Page, PageHeader, StatusNote } from "@/components/ui/Layout";
 import { OverflowMenu } from "@/components/ui/Menu";
 import { Textarea } from "@/components/ui/Textarea";
 import { LetterPaper } from "@/components/LetterPaper";
@@ -111,7 +111,7 @@ function DeclarationEditor({ adapter, declaration, invoice }: { adapter: Storage
       <PageHeader
         className="no-print"
         title="Fachunternehmererklärung"
-        description={[declaration.kommission || "Ohne Bauvorhaben", declaration.recipientName.split("\n")[0], formatDocumentDate(declaration.date, "de-DE")].filter(Boolean).join(" · ")}
+        description={<Facts items={[declaration.kommission || "Ohne Bauvorhaben", declaration.recipientName.split("\n")[0], formatDocumentDate(declaration.date, "de-DE")].filter(Boolean)} />}
         meta={["Änderungen werden automatisch lokal gespeichert."]}
         actions={<>
           <Button variant="primary" loading={busy} onClick={() => { void onPdf(); }}>PDF speichern</Button>

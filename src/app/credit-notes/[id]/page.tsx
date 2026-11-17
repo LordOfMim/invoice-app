@@ -88,7 +88,7 @@ export default function CreditNoteEditorPage({ params }: { params: Promise<{ id:
         </FormSection>
 
         <RecordStamp>
-          {t(language, "common.created")}: {new Date(creditNote.createdAt).toLocaleString(de ? "de-DE" : "en-US")} · {t(language, "common.updated")}: {new Date(creditNote.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
+          {t(language, "common.created")}: {new Date(creditNote.createdAt).toLocaleString(de ? "de-DE" : "en-US")}, {t(language, "common.updated")}: {new Date(creditNote.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
         </RecordStamp>
       </FormPage>
 

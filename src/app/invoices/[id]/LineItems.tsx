@@ -114,7 +114,7 @@ const LineItemRow = memo(function LineItemRow({ item, index, count, texts, curre
                     productId: product.id,
                   }))}
                 >
-                  {product.name} · {formatMoney(product.unitPrice, currency, locale)}
+                  {product.name}, {formatMoney(product.unitPrice, currency, locale)}
                 </Button>
               ))}
             </div>
@@ -305,7 +305,7 @@ export function LineItemsEditor({
             Positionen aus {previousName} {hasContent ? "anfügen" : "übernehmen"}
           </Button>
           <span className="font-sans text-base tracking-snug text-ink-muted">
-            vom {formatDocumentDate(previous.invoiceDate, locale)} · {previousPositions === 1 ? "1 Position" : `${previousPositions} Positionen`}
+            vom {formatDocumentDate(previous.invoiceDate, locale)}, {previousPositions === 1 ? "1 Position" : `${previousPositions} Positionen`}
           </span>
         </div>
       )}
@@ -324,7 +324,7 @@ export function LineItemsEditor({
             >
               <option value="">Aus Produkten übernehmen …</option>
               {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} · {formatMoney(p.unitPrice, currency, locale)}</option>
+                <option key={p.id} value={p.id}>{p.name}, {formatMoney(p.unitPrice, currency, locale)}</option>
               ))}
             </Select>
           </Field>

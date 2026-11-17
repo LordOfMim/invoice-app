@@ -73,7 +73,8 @@ export function StatCell({
           size === "lg" ? "gap-2.25" : "gap-1.75",
         )}
       >
-        <span aria-hidden className={tickVariants({ tone, size })} />
+        {/* The tick carries a status colour; a plain figure (tone null) has none, so it cannot read as a cursor. */}
+        {tone !== null && <span aria-hidden className={tickVariants({ tone, size })} />}
         <span
           className={cn(
             "font-sans font-semibold tracking-snug text-ink",

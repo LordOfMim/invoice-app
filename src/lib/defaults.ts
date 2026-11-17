@@ -170,8 +170,8 @@ export function createInvoiceFromDefaults(settings: AppSettings): Invoice {
 
     notesText: "",
     footerText: settings.defaultFooterText,
-    footerLeftText: "",
-    footerRightText: "",
+    footerLeftText: settings.defaultFooterLeftText ?? "",
+    footerRightText: settings.defaultFooterRightText ?? "",
     paid: false,
     payments: [],
     
@@ -197,6 +197,7 @@ export function createInvoiceFromCustomer(settings: AppSettings, customer: Custo
     ...invoice,
     customerId: customer.id,
     recipient: {
+      salutation: customer.salutation,
       name: customer.name,
       address: customer.address,
       contact: customer.contact,

@@ -68,7 +68,7 @@ export function MobileNav({ groups, badges = {}, group, item: page, title, close
                             current ? "bg-surface-pressed font-medium text-ink" : "font-medium text-ink-secondary hover:bg-surface-muted hover:text-ink",
                           )}
                         >
-                          <span>{item.label}{badges[item.key]?.count ? <span className="font-normal text-ink-muted"> · {badges[item.key].label}</span> : null}</span>
+                          <span>{item.label}{badges[item.key]?.count ? <span className="ml-2 font-normal text-ink-muted">{badges[item.key].label}</span> : null}</span>
                           <span className="font-sans text-base font-normal tracking-snug text-ink-muted">{item.hint}</span>
                         </Link>
                       </li>

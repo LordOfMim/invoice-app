@@ -1,6 +1,9 @@
 import type { EInvoiceParty, Invoice } from "../domain";
 import { computeInvoicePayable, computeLineTotal } from "../calc";
 import { roundMoney } from "../money";
+import { derivedPaymentTerms, effectiveParty, unitCodeFor } from "./derived";
+
+export { derivedPaymentTerms, effectiveParty, firstEmail, firstPhone, splitPostalAddress, unitCodeFor } from "./derived";
 
 export type EInvoiceFormat = "xrechnung" | "zugferd";
 export type EInvoiceError = { field: string; message: string };
@@ -23,8 +26,7 @@ export type EInvoiceDocument = {
   presentation: { title: string; sellerAddress: string; buyerAddress: string; sellerContact: string; buyerContact: string; notes: string; footer: string; logoDataUrl?: string; labels: Invoice["texts"] };
 };
 
-const units: Record<string, string> = { stück: "C62", stk: "C62", st: "C62", piece: "C62", stunde: "HUR", stunden: "HUR", std: "HUR", h: "HUR", hour: "HUR", tag: "DAY", tage: "DAY", day: "DAY", monat: "MON", monate: "MON", month: "MON", kg: "KGM", m: "MTR", km: "KMT", liter: "LTR", l: "LTR", pauschal: "C62" };
-const supportedUnits = new Set(["C62", "H87", "HUR", "DAY", "MON", "ANN", "KGM", "GRM", "MTR", "MTK", "MTQ", "KMT", "LTR", "MIN", "SEC", "SET", "NAR"]);
+const supportedUnits = new Set(["C62", "H87", "HUR", "DAY", "WEE", "MON", "ANN", "KGM", "GRM", "TNE", "MTR", "MTK", "MTQ", "KMT", "LTR", "MIN", "SEC", "SET", "NAR"]);
 function validDate(value: string): boolean { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value; }
 const text = (value?: string) => (value ?? "").trim();
 
@@ -33,8 +35,9 @@ export function prepareEInvoice(invoice: Invoice, format: EInvoiceFormat): { ok:
   const errors: EInvoiceError[] = [];
   const add = (field: string, message: string) => errors.push({ field, message });
   const details = invoice.einvoice ?? {};
+  // Entered values first; gaps are filled from the invoice's own address and contact lines (see derived.ts).
   const party = (side: "seller" | "buyer", name: string): EInvoicePartyData => {
-    const p = details[side] ?? {};
+    const p = effectiveParty(invoice, side).party;
     const prefix = side === "seller" ? "Rechnungssteller" : "Rechnungsempfänger";
     if (!text(name)) add(side, `${prefix}: Name fehlt.`);
     for (const [key, label] of [["street", "Straße und Hausnummer"], ["postalCode", "Postleitzahl"], ["city", "Ort"], ["countryCode", "Ländercode"]] as const) if (!text(p[key])) add(`einvoice.${side}.${key}`, `${prefix}: ${label} fehlt.`);
@@ -80,7 +83,7 @@ export function prepareEInvoice(invoice: Invoice, format: EInvoiceFormat): { ok:
     const category = rate > 0 ? "S" : details.taxCategory;
     if (!category || !["S", "Z", "E", "AE", "K", "G", "O"].includes(category) || category === "S" && rate === 0) add("einvoice.taxCategory", `${label}: Für 0 % Steuer eine Steuerkategorie auswählen.`);
     if (category && !["S", "Z"].includes(category) && !text(details.taxExemptionReason)) add("einvoice.taxExemptionReason", "Begründung für die Steuerbefreiung fehlt.");
-    const unitCode = details.unitCodes?.[item.id] ?? units[text(item.unit).toLowerCase()] ?? (item.unit ? "" : "C62");
+    const unitCode = details.unitCodes?.[item.id] ?? unitCodeFor(item.unit) ?? "";
     if (!supportedUnits.has(unitCode)) add(`einvoice.unitCodes.${item.id}`, `${label}: Einheit als UNECE-Code angeben (z. B. HUR für Stunden, C62 für Stück).`);
     const { net, tax } = computeLineTotal(item);
     const key = `${category}:${rate}`;
@@ -112,7 +115,7 @@ export function prepareEInvoice(invoice: Invoice, format: EInvoiceFormat): { ok:
   if (deductions.length) extraNotes.push(`Abzüglich bereits gestellter Abschlagsrechnungen: ${deductions.map((item) => `${item.number || "ohne Nummer"}${item.date ? ` vom ${germanDate(item.date)}` : ""} über ${amountText(item.gross)} (darin Umsatzsteuer ${amountText(item.tax)})`).join("; ")}. Restbetrag: ${amountText(totals.payable)}.`);
   const document: EInvoiceDocument = {
     number: text(invoice.invoiceNumber), date: invoice.invoiceDate, dueDate: invoice.dueDate, currency,
-    seller, buyer, buyerReference: text(details.buyerReference), paymentMeansCode, iban, bic: text(details.bic), accountName: text(details.accountName), paymentTerms: text(details.paymentTerms), serviceDate: details.serviceDate ?? "", taxExemptionReason: text(details.taxExemptionReason), lines, taxes: [...groups.values()].map(({ rate, category, basis, amount }) => ({ rate, category, basis, amount })), totals, deductions, projectReference, extraNotes,
+    seller, buyer, buyerReference: text(details.buyerReference), paymentMeansCode, iban, bic: text(details.bic), accountName: text(details.accountName), paymentTerms: text(details.paymentTerms) || derivedPaymentTerms(invoice) || "", serviceDate: details.serviceDate ?? "", taxExemptionReason: text(details.taxExemptionReason), lines, taxes: [...groups.values()].map(({ rate, category, basis, amount }) => ({ rate, category, basis, amount })), totals, deductions, projectReference, extraNotes,
     presentation: { title: invoice.texts.documentTitle, sellerAddress: invoice.sender.address, buyerAddress: invoice.recipient.address, sellerContact: invoice.sender.contact, buyerContact: invoice.recipient.contact, notes: invoice.notesText, footer: [invoice.footerLeftText ?? invoice.footerText, invoice.footerRightText].filter(Boolean).join("\n"), logoDataUrl: invoice.layout.showLogo ? invoice.logoDataUrl : undefined, labels: invoice.texts },
   };
   return { ok: errors.length === 0, errors, ...(errors.length ? {} : { document }) };

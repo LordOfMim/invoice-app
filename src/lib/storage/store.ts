@@ -15,11 +15,12 @@ import type {
 } from "@/lib/domain";
 import { 
   computeInvoiceBalance,
+  isDraftInvoice,
   computeInvoicePayable,
   convertInvoiceAmountToCurrency,
 } from "@/lib/calc";
 import { isDateOnly, addMonthsAnchored, dateToLocalISO, daysBetweenDateOnly, monthKey, parseDateOnly, todayLocalISO } from "@/lib/date";
-import { createDeclaration, createQuoteFromDefaults, invoiceFromQuote, switchReverseCharge, withSellerDefaults, type DeclarationDefaults } from "@/lib/documents";
+import { createDeclaration, createQuoteFromDefaults, currentSender, invoiceFromQuote, switchReverseCharge, withSellerDefaults, type DeclarationDefaults } from "@/lib/documents";
 import { roundMoney } from "@/lib/money";
 import { 
   createDefaultSettings, 
@@ -613,6 +614,7 @@ export function createInvoice(adapter: StorageAdapter): Invoice {
   const invoice = defaultInvoice
     ? withSellerDefaults({
         ...duplicateInvoice(defaultInvoice),
+        sender: currentSender(defaultInvoice.sender, data.settings),
         invoiceDate: today,
         dueDate: dueDateFor(today, data.settings),
       }, data.settings)
@@ -1057,7 +1059,18 @@ function writeRecurringRun(
     return { invoice: existingForRun, created: false };
   }
 
-  // Create invoice from recurring template
+  // Create invoice from recurring template. Sender and recipient are read now: the settings and the customer record
+  // may have changed since the schedule was set up. The customer's E-Rechnung details come along as on every invoice.
+  const customer = recurring.customerId ? data.customers.find((entry) => entry.id === recurring.customerId) : undefined;
+  const customerVatId = customer?.taxId?.replace(/\s+/g, "").toUpperCase();
+  const buyer = {
+    ...(customerVatId && /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(customerVatId) ? { vatId: customerVatId } : {}),
+    ...(customer?.email?.trim() ? { email: customer.email.trim() } : {}),
+  };
+  const baseEInvoice = data.settings.defaultEInvoice ? structuredClone(data.settings.defaultEInvoice) : undefined;
+  const einvoice = customer && (Object.keys(buyer).length || customer.buyerReference?.trim())
+    ? { ...(baseEInvoice ?? {}), ...(Object.keys(buyer).length ? { buyer } : {}), ...(customer.buyerReference?.trim() ? { buyerReference: customer.buyerReference.trim() } : {}) }
+    : baseEInvoice;
   const draft: Invoice = {
     schemaVersion: 1,
     id: newId(),
@@ -1065,12 +1078,16 @@ function writeRecurringRun(
     invoiceDate: runDate,
     dueDate: dueDateFor(runDate, data.settings),
     // Tax numbers and bank details for the printed footer and the E-Rechnung, as on every new invoice.
-    einvoice: data.settings.defaultEInvoice ? structuredClone(data.settings.defaultEInvoice) : undefined,
-    sender: { ...recurring.sender },
-    recipient: { ...recurring.recipient },
+    einvoice,
+    sender: currentSender(recurring.sender, data.settings),
+    recipient: customer
+      ? { salutation: customer.salutation, name: customer.name, address: customer.address, contact: customer.contact }
+      : { ...recurring.recipient },
     customerId: recurring.customerId,
     lineItems: recurring.lineItems.map((li) => ({ ...li, id: newId() })),
     footerText: recurring.footerText,
+    footerLeftText: data.settings.defaultFooterLeftText ?? "",
+    footerRightText: data.settings.defaultFooterRightText ?? "",
     notesText: "",
     paid: false,
     payments: [],
@@ -1086,12 +1103,11 @@ function writeRecurringRun(
   };
   // A customer marked for § 13b gets the invoice without VAT, exactly as when the customer is chosen in the editor
   // (the tax rates of the schedule are remembered, so the switch can still be taken back on the draft).
-  const customer = recurring.customerId ? data.customers.find((entry) => entry.id === recurring.customerId) : undefined;
   let invoice = draft;
   if (customer?.reverseCharge) {
     // The E-Rechnung needs the customer's VAT ID for reverse charge; it comes along as in the editor.
     const taxId = customer.taxId?.replace(/\s+/g, "").toUpperCase() ?? "";
-    const withBuyer = /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(taxId) ? { ...draft, einvoice: { ...(draft.einvoice ?? {}), buyer: { vatId: taxId } } } : draft;
+    const withBuyer = /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(taxId) ? { ...draft, einvoice: { ...(draft.einvoice ?? {}), buyer: { ...(draft.einvoice?.buyer ?? {}), vatId: taxId } } } : draft;
     invoice = switchReverseCharge(withBuyer, true, data.settings.defaultTaxRate, data.products);
   }
 
@@ -1334,6 +1350,8 @@ export function searchInvoices(adapter: StorageAdapter, query: string): Invoice[
 
 export type DashboardStats = {
   unpaidTotal: number;
+  /** Issued invoices with an amount still open. */
+  openCount: number;
   overdueCount: number;
   overdueTotal: number;
   paidThisPeriod: number;
@@ -1376,6 +1394,8 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   const dueSoonLimit = dateToLocalISO(dueSoonDate);
   
   let unpaidTotal = 0;
+  let openCount = 0;
+  let issuedCount = 0;
   let overdueCount = 0;
   let overdueTotal = 0;
   let paidThisPeriod = 0;
@@ -1413,6 +1433,9 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   
   for (const inv of data.invoices) {
     invoicesById.set(inv.id, inv);
+    // A draft (no number, nothing paid) has not been issued: it is no receivable and no revenue yet.
+    if (isDraftInvoice(inv)) continue;
+    issuedCount++;
     const linkedCreditNotes = creditNotesByInvoiceId.get(inv.id) ?? [];
     const balance = computeInvoiceBalance(inv, linkedCreditNotes, today);
     const remaining = convertInvoiceAmountToCurrency(balance.remainingAmount, inv, baseCurrency);
@@ -1422,8 +1445,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
 
     totalBilled += effectiveTotal;
     totalPaid += Math.min(paidAmount, effectiveTotal);
-    // A blank, unnumbered draft has a zero balance but is not a paid invoice (see invoiceStatus).
-    if (inv.invoiceNumber || balance.invoiceTotal !== 0) statusCounts[balance.status]++;
+    statusCounts[balance.status]++;
 
     if (invoiceMonth === currentMonth) {
       issuedThisMonthCount++;
@@ -1437,6 +1459,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
     
     if (remaining > 0) {
       unpaidTotal += remaining;
+      openCount++;
       if (balance.isOverdue) {
         overdueCount++;
         overdueTotal += remaining;
@@ -1508,6 +1531,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
   
   return {
     unpaidTotal: roundMoney(unpaidTotal),
+    openCount,
     overdueCount,
     overdueTotal: roundMoney(overdueTotal),
     paidThisPeriod: roundMoney(paidThisPeriod),
@@ -1532,7 +1556,7 @@ export function getDashboardStats(adapter: StorageAdapter): DashboardStats {
         outstanding: roundMoney(customer.outstanding),
       })),
     revenueByMonth,
-    invoiceCount: data.invoices.length,
+    invoiceCount: issuedCount,
     customerCount: data.customers.length,
   };
 }

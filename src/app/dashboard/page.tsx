@@ -6,12 +6,13 @@ import { t } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { createInvoice, getDashboardStats, getUpcomingReminders, getDueRecurringInvoices } from "@/lib/storage/store";
-import { computeInvoiceBalance } from "@/lib/calc";
+import { computeInvoiceBalance, isDraftInvoice } from "@/lib/calc";
 import { dateToLocalISO, daysBetweenDateOnly, formatDateOnly, formatMonthKey, todayLocalISO } from "@/lib/date";
-import { Card, CardZone, EmptyState, KeyFigures, Page, PageHeader, Section, StatusNote } from "@/components/ui/Layout";
+import { Card, CardZone, EmptyState, Page, PageHeader, Section, StatusNote } from "@/components/ui/Layout";
 import { StatusPill } from "@/components/ui/Status";
 import { Button } from "@/components/ui/Button";
 import { StatusRing } from "@/components/platform/status-ring";
+import { StatCell } from "@/components/platform/stat-cell";
 import { cn } from "@/components/platform/lib/cn";
 import { checkAdvanceDeductions } from "@/lib/documents";
 import type { CreditNote, Language } from "@/lib/domain";
@@ -36,11 +37,6 @@ const dashboardLabels: Record<Language, {
   invoicesSuffix: (count: number) => string;
   avgDaysToPay: string;
   noPaidInvoices: string;
-  paymentMix: string;
-  paid: string;
-  partial: string;
-  overdue: string;
-  unpaid: string;
   receivablesAging: string;
   current: string;
   topCustomers: string;
@@ -50,6 +46,10 @@ const dashboardLabels: Record<Language, {
   noDueSoon: string;
   noDueSoonDescription: string;
   cashFlow: string;
+  openTotal: string;
+  openNone: string;
+  openSummary: (count: number) => string;
+  overduePart: (amount: string, count: number) => string;
 }> = {
   de: {
     description: "Zahlungen, offene Forderungen und Kundenaktivität auf einen Blick.",
@@ -62,7 +62,7 @@ const dashboardLabels: Record<Language, {
     next: "Nächste",
     noRevenue: "Noch keine Umsätze",
     noRevenueDescription: "Sobald Zahlungen erfasst werden, erscheinen sie hier.",
-    noInvoicesDescription: "Erstelle deine erste Rechnung, um loszulegen.",
+    noInvoicesDescription: "Legen Sie Ihre erste Rechnung an, um loszulegen.",
     collectedThisMonth: "Eingegangen diesen Monat",
     issuedThisMonth: "Gestellt diesen Monat",
     dueNextSevenDays: "Fällig in 7 Tagen",
@@ -71,11 +71,6 @@ const dashboardLabels: Record<Language, {
     invoicesSuffix: (count) => `${count} Rechnung${count === 1 ? "" : "en"}`,
     avgDaysToPay: "Durchschn. Zahlungsdauer",
     noPaidInvoices: "Noch keine bezahlten Rechnungen",
-    paymentMix: "Zahlungsstatus",
-    paid: "Bezahlt",
-    partial: "Teilweise",
-    overdue: "Überfällig",
-    unpaid: "Unbezahlt",
     receivablesAging: "Forderungsalter",
     current: "Nicht überfällig",
     topCustomers: "Top-Kunden",
@@ -85,6 +80,10 @@ const dashboardLabels: Record<Language, {
     noDueSoon: "Nichts bald fällig",
     noDueSoonDescription: "Keine offenen Rechnungen in den nächsten sieben Tagen.",
     cashFlow: "Cashflow",
+    openTotal: "Offene Forderungen",
+    openNone: "Alle gestellten Rechnungen sind bezahlt.",
+    openSummary: (count) => `aus ${count} ${count === 1 ? "Rechnung" : "Rechnungen"}`,
+    overduePart: (amount, count) => `davon ${amount} überfällig (${count} ${count === 1 ? "Rechnung" : "Rechnungen"})`,
   },
   en: {
     description: "Payments, receivables, and customer activity at a glance.",
@@ -106,11 +105,6 @@ const dashboardLabels: Record<Language, {
     invoicesSuffix: (count) => `${count} invoice${count === 1 ? "" : "s"}`,
     avgDaysToPay: "Avg. days to pay",
     noPaidInvoices: "No paid invoices yet",
-    paymentMix: "Payment status",
-    paid: "Paid",
-    partial: "Partial",
-    overdue: "Overdue",
-    unpaid: "Unpaid",
     receivablesAging: "Receivables aging",
     current: "Not overdue",
     topCustomers: "Top customers",
@@ -120,6 +114,10 @@ const dashboardLabels: Record<Language, {
     noDueSoon: "Nothing due soon",
     noDueSoonDescription: "No open invoices are due in the next seven days.",
     cashFlow: "Cash flow",
+    openTotal: "Outstanding",
+    openNone: "All issued invoices are paid.",
+    openSummary: (count) => `from ${count} invoice${count === 1 ? "" : "s"}`,
+    overduePart: (amount, count) => `${amount} of it overdue (${count} invoice${count === 1 ? "" : "s"})`,
   },
 };
 
@@ -163,27 +161,6 @@ function AgingBars({ buckets, locale, currency, labels }: { buckets: NonNullable
             <span className="block font-medium text-ink">{formatMoney(bucket.total, currency, locale)}</span>
             <span className="block text-ink-muted">{labels.invoicesSuffix(bucket.count)}</span>
           </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function StatusMix({ counts, labels }: { counts: NonNullable<ReturnType<typeof getDashboardStats>>["statusCounts"]; labels: (typeof dashboardLabels)[Language] }) {
-  const total = Math.max(Object.values(counts).reduce((sum, count) => sum + count, 0), 1);
-  const items = [
-    { key: "paid" as const, label: labels.paid, value: counts.paid, tone: "success" as const },
-    { key: "partial" as const, label: labels.partial, value: counts.partial, tone: "warn" as const },
-    { key: "overdue" as const, label: labels.overdue, value: counts.overdue, tone: "danger" as const },
-    { key: "unpaid" as const, label: labels.unpaid, value: counts.unpaid, tone: "ink" as const },
-  ];
-  return (
-    <ul className="flex flex-col gap-3">
-      {items.map((item) => (
-        <li key={item.key} className="grid grid-cols-[8rem_minmax(0,1fr)_3rem] items-center gap-3">
-          <span className="font-sans text-base font-medium tracking-snug text-ink-secondary">{item.label}</span>
-          <Bar share={item.value / total} tone={item.tone} />
-          <span className="text-right font-sans text-base font-semibold tracking-snug text-ink tabular-nums">{item.value}</span>
         </li>
       ))}
     </ul>
@@ -244,18 +221,20 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapter, data]);
   const creditNotesByInvoiceId = useMemo(() => buildCreditNoteMap(data?.creditNotes ?? []), [data?.creditNotes]);
+  // Drafts (no number yet) are no receivables: they appear only among the recent invoices.
   const invoiceRows = useMemo(() => (data?.invoices ?? []).map((invoice) => ({
     invoice,
+    draft: isDraftInvoice(invoice),
     balance: computeInvoiceBalance(invoice, creditNotesByInvoiceId.get(invoice.id) ?? [], today),
   })), [creditNotesByInvoiceId, data?.invoices, today]);
   const recentInvoices = useMemo(() => invoiceRows.slice().sort((a, b) => b.invoice.createdAt.localeCompare(a.invoice.createdAt)).slice(0, 5), [invoiceRows]);
-  const overdueInvoices = useMemo(() => invoiceRows.filter(({ balance }) => balance.isOverdue).sort((a, b) => a.invoice.dueDate.localeCompare(b.invoice.dueDate)), [invoiceRows]);
+  const overdueInvoices = useMemo(() => invoiceRows.filter(({ draft, balance }) => !draft && balance.isOverdue).sort((a, b) => a.invoice.dueDate.localeCompare(b.invoice.dueDate)), [invoiceRows]);
   const dueSoonInvoices = useMemo(() => {
     const dueSoonDate = new Date(`${today}T00:00:00`);
     dueSoonDate.setDate(dueSoonDate.getDate() + 7);
     const dueSoonLimit = dateToLocalISO(dueSoonDate);
     return invoiceRows
-      .filter(({ invoice, balance }) => !balance.isFullyPaid && invoice.dueDate >= today && invoice.dueDate <= dueSoonLimit)
+      .filter(({ invoice, draft, balance }) => !draft && !balance.isFullyPaid && invoice.dueDate >= today && invoice.dueDate <= dueSoonLimit)
       .sort((a, b) => a.invoice.dueDate.localeCompare(b.invoice.dueDate))
       .slice(0, 5);
   }, [invoiceRows, today]);
@@ -288,7 +267,43 @@ export default function DashboardPage() {
         )}
       />
 
-      <Section title={de ? "Braucht Aufmerksamkeit" : "Needs attention"} summary={attention ? undefined : (de ? "Nichts ist überfällig und keine wiederkehrende Rechnung ist fällig." : "Nothing is overdue and no recurring invoice is due.")}>
+      {/* One strong number: what customers still owe. The other figures follow in one quiet row. */}
+      <section aria-label={labels.openTotal} className="flex flex-col gap-6 rounded-card-sm bg-surface p-5 shadow-medium sm:p-6">
+        <Link href="/invoices" className="-m-2 flex flex-col gap-1 rounded-lg p-2 outline-none transition-colors duration-150 hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-ring/50">
+          <span className="font-sans text-base tracking-snug text-ink-muted">{labels.openTotal}</span>
+          <span className="font-sans text-display font-semibold tracking-snug text-ink tabular-nums">{formatMoney(stats.unpaidTotal, currency, locale)}</span>
+          <span className={cn("font-sans text-base tracking-snug tabular-nums", stats.overdueCount > 0 ? "text-danger-ink" : "text-ink-muted")}>
+            {stats.unpaidTotal <= 0
+              ? labels.openNone
+              : stats.overdueCount > 0
+                ? labels.overduePart(formatMoney(stats.overdueTotal, currency, locale), stats.overdueCount)
+                : labels.openSummary(stats.openCount)}
+          </span>
+        </Link>
+        <div className="grid grid-cols-1 gap-6 border-t border-line pt-5 min-[25rem]:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: labels.collectedThisMonth, value: formatMoney(stats.paidThisPeriod, currency, locale) },
+            { label: labels.issuedThisMonth, value: formatMoney(stats.issuedThisMonthTotal, currency, locale), hint: labels.invoicesSuffix(stats.issuedThisMonthCount) },
+            { label: labels.dueNextSevenDays, value: formatMoney(stats.dueSoonTotal, currency, locale), hint: labels.invoicesSuffix(stats.dueSoonCount) },
+            {
+              label: labels.avgDaysToPay,
+              value: stats.averageDaysToPay === null ? "–" : `${stats.averageDaysToPay} ${de ? "Tage" : "days"}`,
+              hint: stats.averageDaysToPay === null ? labels.noPaidInvoices : `${stats.collectionRate} % ${labels.paidOfBilled}`,
+            },
+          ].map((item) => (
+            <StatCell
+              key={item.label}
+              tone={null}
+              label={<span className="text-base text-ink-muted">{item.label}</span>}
+              value={<span className="text-xl tabular-nums">{item.value}</span>}
+              footer={item.hint ? <span className="font-sans text-base tracking-snug text-ink-muted">{item.hint}</span> : undefined}
+              className="min-w-0"
+            />
+          ))}
+        </div>
+      </section>
+
+      {attention > 0 && <Section title={de ? "Braucht Aufmerksamkeit" : "Needs attention"}>
         {dueRecurring.length > 0 && (
           <StatusNote tone="attention" title={`${dueRecurring.length} ${t(language, "recurring.dueToday")}`}>
             <ul className="flex flex-col gap-0.5">
@@ -307,7 +322,7 @@ export default function DashboardPage() {
               {staleDeductions.map((inv) => (
                 <li key={inv.id}>
                   <Link href={`/invoices/${inv.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-                    {inv.invoiceNumber || labels.noNumber}{inv.recipient.name ? ` · ${inv.recipient.name}` : ""}
+                    {inv.invoiceNumber || labels.noNumber}{inv.recipient.name ? `, ${inv.recipient.name}` : ""}
                   </Link>
                 </li>
               ))}
@@ -345,32 +360,7 @@ export default function DashboardPage() {
             </ul>
           </Card>
         )}
-      </Section>
-
-      <Section title={de ? "Kennzahlen" : "Key figures"}>
-        <KeyFigures
-          items={[
-            { label: t(language, "dashboard.unpaidTotal"), value: formatMoney(stats.unpaidTotal, currency, locale), href: "/invoices" },
-            { label: t(language, "dashboard.overdueCount"), value: String(stats.overdueCount), hint: formatMoney(stats.overdueTotal, currency, locale), tone: stats.overdueCount > 0 ? "error" : "neutral" },
-            { label: t(language, "dashboard.invoiceCount"), value: String(stats.invoiceCount), href: "/invoices" },
-            { label: t(language, "dashboard.customerCount"), value: String(stats.customerCount), href: "/customers" },
-          ]}
-        />
-        <KeyFigures
-          items={[
-            { label: labels.collectedThisMonth, value: formatMoney(stats.paidThisPeriod, currency, locale), tone: stats.paidThisPeriod > 0 ? "ok" : "neutral" },
-            { label: labels.issuedThisMonth, value: formatMoney(stats.issuedThisMonthTotal, currency, locale), hint: labels.invoicesSuffix(stats.issuedThisMonthCount) },
-            { label: labels.dueNextSevenDays, value: formatMoney(stats.dueSoonTotal, currency, locale), hint: labels.invoicesSuffix(stats.dueSoonCount), tone: stats.dueSoonCount > 0 ? "attention" : "neutral" },
-            { label: labels.collectionRate, value: `${stats.collectionRate} %`, hint: labels.paidOfBilled, tone: stats.collectionRate >= 80 ? "ok" : stats.collectionRate >= 50 ? "attention" : "neutral" },
-          ]}
-        />
-        <KeyFigures
-          items={[
-            { label: labels.avgDaysToPay, value: stats.averageDaysToPay === null ? "–" : String(stats.averageDaysToPay), hint: stats.averageDaysToPay === null ? labels.noPaidInvoices : undefined },
-            { label: t(language, "dashboard.overdueTotal"), value: formatMoney(stats.overdueTotal, currency, locale), hint: labels.invoicesSuffix(stats.overdueCount), tone: stats.overdueCount > 0 ? "error" : "neutral" },
-          ]}
-        />
-      </Section>
+      </Section>}
 
       <div className="grid gap-10 lg:grid-cols-2">
         <Section title={labels.cashFlow}>
@@ -386,7 +376,7 @@ export default function DashboardPage() {
                   <LedgerRow
                     key={inv.id}
                     href={`/invoices/${inv.id}`}
-                    title={inv.invoiceNumber || labels.noNumber}
+                    title={inv.invoiceNumber || (de ? "Entwurf" : "Draft")}
                     sub={inv.recipient.name || labels.unnamedCustomer}
                     value={formatMoney(balance.effectiveTotal, inv.currency ?? currency, locale)}
                     valueSub={balance.isPartiallyPaid ? `${formatMoney(balance.remainingAmount, inv.currency ?? currency, locale)} ${labels.remaining}` : undefined}
@@ -398,9 +388,6 @@ export default function DashboardPage() {
         </Section>
         <Section title={labels.receivablesAging}>
           <Card><CardZone><AgingBars buckets={stats.agingBuckets} locale={locale} currency={currency} labels={labels} /></CardZone></Card>
-        </Section>
-        <Section title={labels.paymentMix} summary={labels.invoicesSuffix(Object.values(stats.statusCounts).reduce((sum, count) => sum + count, 0))}>
-          <Card><CardZone><StatusMix counts={stats.statusCounts} labels={labels} /></CardZone></Card>
         </Section>
         <Section title={labels.dueSoon}>
           {dueSoonInvoices.length > 0 ? (

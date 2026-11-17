@@ -2,6 +2,37 @@
 
 Alle nennenswerten Änderungen an Helferlein. Versionen folgen [Semantic Versioning](https://semver.org/lang/de/).
 
+## 1.4.1 – 2026-11-17
+
+Ergebnisse einer Prüfung auf Bedienbarkeit und doppelte Eingaben. Bestehende Daten bleiben unverändert; neue Angaben sind freiwillig.
+
+### Behoben
+
+- **Entwürfe** (Rechnungen ohne Nummer) galten als offen, sobald ein Betrag eingetragen war: Sie zählten zu den offenen Forderungen, konnten überfällig werden und ließen sich als bezahlt markieren. Jetzt bleiben sie „Entwurf“, bis sie eine Nummer bekommen. Eine Rechnung ohne Nummer mit erfasster Zahlung zählt weiterhin als gestellt.
+- Die **Fachunternehmererklärung** schlug bei jeder neuen Installation Absender und Empfänger einer bestimmten Firma vor. Diese Vorgaben gelten nur noch dort, wo sie hingehören; sonst kommt der Absender aus den Einstellungen.
+- Wurde in einer Rechnung derselbe Kunde erneut gewählt, gingen die eingetragenen E-Rechnungsangaben des Empfängers und die Leitweg-ID verloren.
+
+### Nur einmal eintragen
+
+- **E-Rechnung ohne Doppeltippen**: Straße, Postleitzahl, Ort und Land werden aus der Adresse gelesen, E-Mail und Telefon aus der Kontaktangabe, die elektronische Adresse aus der E-Mail. Im Reiter „E-Rechnung“ stehen diese Werte grau vorbelegt; eingetragen wird nur, was abweichen soll. Für ZUGFeRD genügen damit Rechnung, Steuernummer und IBAN.
+- Bei der Kundenwahl kommen **E-Mail-Adresse und Leitweg-ID** des Kunden in die E-Rechnung. Die Leitweg-ID wird beim Kunden hinterlegt. Das Kundenfeld „Steuernummer“ heißt jetzt „USt-IdNr.“, weil es als solche verwendet wird.
+- **Einheiten** wie m², qm, lfm, m³, Std., Stk., psch, t und Woche werden erkannt; unbekannte Einheiten sind im Reiter markiert.
+- **Zahlungsbedingungen** der E-Rechnung ergeben sich aus dem Fälligkeitsdatum, wenn nichts eingetragen ist und die Hinweise keine nennen.
+- In den Einstellungen gibt es die **Anschrift für die E-Rechnung** (vorbelegt aus der Absenderadresse) und eine **Fußzeile links und rechts** für neue Rechnungen.
+- Neue Rechnungen aus einer Standard-Rechnung, umgewandelte Angebote und **wiederkehrende Rechnungen** übernehmen den aktuellen Absender aus den Einstellungen. Wiederkehrende Rechnungen nehmen außerdem die aktuellen Kundendaten samt Anrede, E-Mail und Leitweg-ID.
+- Fehlt der Absender auf einer Rechnung, führt der Hinweis in die Einstellungen oder übernimmt ihn von dort.
+- Das Feld „Bauvorhaben“ schlägt frühere Bauvorhaben desselben Kunden vor. „Für weiteres Bauvorhaben kopieren“ übernimmt die alte Kommission nicht mehr.
+- Ein Steuerbefreiungsgrund aus der E-Rechnung (z. B. § 19 UStG) wird auch auf der normalen Rechnung gedruckt, sofern er dort nicht schon steht.
+
+### Geändert
+
+- **Rechnungseditor**: Der Empfänger steht zuerst; die zweite Navigationszeile unter den Reitern entfällt; „E-Rechnung“ gibt es nur noch als Reiter.
+- **Auswertung**: eine Hauptzahl (offene Forderungen, davon überfällig) mit vier Kennzahlen darunter; „Braucht Aufmerksamkeit“ erscheint nur, wenn etwas ansteht. Die doppelten Überfällig-Kennzahlen und die Statusbalken entfallen.
+- **Rechnungsliste**: „Als bezahlt markieren“ steht im Zeilenmenü statt als Knopf in jeder Zeile; neuer Filter „Entwurf“; die Blätterleiste erscheint erst ab zwei Seiten.
+- Die Erinnerung an eine fehlende Sicherung steht als kleiner Hinweis oben rechts statt als Kasten über jeder Seite.
+- Seitentitel heißen wie die Menüpunkte („Kunden“, „Vorlagen“, „Schlagwörter“ …); Angaben werden durch Abstand statt durch „·“ getrennt; Kennzahlen ohne Statusfarbe tragen keinen Strich mehr.
+- **Bewegung**: Eintritte laufen auf einer kräftigen Ease-out-Kurve, Austritte sind kürzer; aufklappbare Abschnitte wachsen auf statt zu springen; Hinweise blenden kurz ein. Bei reduzierter Bewegung bleibt alles still.
+
 ## 1.4.0 – 2026-11-17
 
 Bestehende Daten werden beim ersten Start automatisch umgestellt. Vorher legt Helferlein eine Wiederherstellungskopie des bisherigen Stands an.

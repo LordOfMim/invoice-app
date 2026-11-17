@@ -43,7 +43,8 @@ export default function DeclarationsPage() {
     open(addDeclaration(adapter, createDeclaration({ ...defaults, senderAddress, signatureName: defaults.signatureName || data.settings.defaultSender.name })));
   };
   const duplicate = (source: ContractorDeclaration) => {
-    const copy = createDeclaration(source);
+    // "For another project": same parties and wording, the project itself is new.
+    const copy = createDeclaration({ ...source, kommission: "" });
     open(addDeclaration(adapter, { ...copy, bodyText: source.bodyText, customerId: source.customerId }));
   };
 

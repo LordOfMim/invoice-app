@@ -87,6 +87,15 @@ export function computePaymentTotal(payments: Payment[] = []): number {
   return roundMoney(payments.reduce((sum, payment) => sum + (payment.amount || 0), 0));
 }
 
+/**
+ * An invoice without a number is a draft: it has not been issued, so it is no receivable, cannot be overdue and is
+ * not marked as paid from a list. A recorded payment or the "paid" mark makes it count as issued, so older data that
+ * was paid without a number keeps its history.
+ */
+export function isDraftInvoice(invoice: Pick<Invoice, "invoiceNumber" | "payments" | "paid">): boolean {
+  return !(invoice.invoiceNumber ?? "").trim() && !invoice.paid && !(invoice.payments ?? []).length;
+}
+
 export function computeInvoiceBalance(
   invoice: Invoice,
   creditNotes: CreditNote[] = [],

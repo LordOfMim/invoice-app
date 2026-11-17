@@ -3,7 +3,7 @@
 import { useDocumentMail } from "@/components/mail/useDocumentMail";
 import { useRef, useState, type ReactNode } from "react";
 import type { EInvoiceDetails, EInvoiceParty, Invoice } from "@/lib/domain";
-import { prepareEInvoice, type EInvoiceError, type EInvoiceFormat } from "@/lib/einvoice";
+import { derivedPaymentTerms, effectiveParty, prepareEInvoice, unitCodeFor, type EInvoiceError, type EInvoiceFormat } from "@/lib/einvoice";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Field } from "@/components/ui/Field";
@@ -37,7 +37,7 @@ const address: PartyField[] = [
   ["countryCode", "Ländercode", "Zweistellig, für Deutschland: DE"],
 ];
 const electronic: PartyField[] = [
-  ["electronicAddress", "Elektronische Adresse", "Meist die E-Mail-Adresse für Rechnungen."],
+  ["electronicAddress", "Elektronische Adresse", "Ohne Eintrag gilt die E-Mail-Adresse."],
   ["electronicAddressScheme", "Adressschema", "Für eine E-Mail-Adresse: EM"],
 ];
 const partyFields: Record<"seller" | "buyer", { title: string; fields: PartyField[]; extra: { legend: string; hint?: string; fields: PartyField[] }[] }> = {
@@ -82,6 +82,9 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
   const [defaultsSaved, setDefaultsSaved] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<Group>>(() => new Set(errors.map((error) => groupOf(error.field)).filter((group): group is Group => group !== null)));
   const items = invoice.lineItems.filter((item) => item.type === "item");
+  // What the E-Rechnung will use: entries from this tab, gaps filled from the invoice's address and contact lines.
+  const effective = { seller: effectiveParty(invoice, "seller"), buyer: effectiveParty(invoice, "buyer") };
+  const buyerParty = effective.buyer.party;
   const errorFor = (field: string) => errors.find((error) => error.field === field)?.message;
 
   function change(key: keyof EInvoiceDetails, value: string) {
@@ -143,7 +146,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
     onErrors([]);
     try {
       const email = {
-        to: details.buyer?.email || (details.buyer?.electronicAddressScheme === "EM" ? details.buyer.electronicAddress : "") || "",
+        to: buyerParty.email || (buyerParty.electronicAddressScheme === "EM" ? buyerParty.electronicAddress : "") || "",
         subject: `${invoice.texts.documentTitle || "Rechnung"} ${invoice.invoiceNumber}`.trim(),
         body: `Anbei erhalten Sie die E-Rechnung ${invoice.invoiceNumber}.\n\n${invoice.sender.name}`,
       };
@@ -196,9 +199,11 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
 
   function partyInput(side: "seller" | "buyer", [key, label, hint]: PartyField) {
     const field = `einvoice.${side}.${key}`;
+    // A value taken from the invoice shows as placeholder: the field stays empty and follows the address.
+    const suggestion = effective[side].derived.has(key) ? effective[side].party[key] : undefined;
     return (
-      <Field key={key} label={label} hint={hint} error={errorFor(field)} id={fieldId(field)} className={key === "street" ? "@lg:col-span-2" : ""}>
-        <Input value={details[side]?.[key] ?? ""} onChange={(event) => changeParty(side, key, event.target.value)} />
+      <Field key={key} label={label} hint={suggestion ? "Aus der Rechnung übernommen. Nur eintragen, wenn es abweichen soll." : hint} error={errorFor(field)} id={fieldId(field)} className={key === "street" ? "@lg:col-span-2" : ""}>
+        <Input value={details[side]?.[key] ?? ""} placeholder={suggestion} onChange={(event) => changeParty(side, key, event.target.value)} />
       </Field>
     );
   }
@@ -206,7 +211,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
   function partyGroup(side: "seller" | "buyer") {
     const config = partyFields[side];
     const all = [...config.fields, ...config.extra.flatMap((extra) => extra.fields)];
-    const count = filled(all.map(([key]) => details[side]?.[key]));
+    const count = filled(all.map(([key]) => effective[side].party[key]));
     const name = side === "seller" ? invoice.sender.name : invoice.recipient.name;
     return group(side, config.title, count ? `${count} von ${all.length} Angaben` : "Noch nicht ausgefüllt", <>
       <p className="font-sans text-base tracking-snug text-ink-muted">
@@ -223,7 +228,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
         </fieldset>
       ))}
       {side === "buyer" && (
-        <Field label="Käuferreferenz / Leitweg-ID" hint="Für XRechnung erforderlich. Bitte genau so übernehmen, wie der Empfänger sie mitgeteilt hat." error={errorFor("einvoice.buyerReference")} id={fieldId("einvoice.buyerReference")}>
+        <Field label="Käuferreferenz / Leitweg-ID" hint="Für XRechnung erforderlich. Bitte genau so übernehmen, wie der Empfänger sie mitgeteilt hat. Beim Kunden hinterlegt, wird sie bei der Kundenwahl übernommen." error={errorFor("einvoice.buyerReference")} id={fieldId("einvoice.buyerReference")}>
           <Input value={details.buyerReference ?? ""} onChange={(event) => change("buyerReference", event.target.value)} />
         </Field>
       )}
@@ -232,12 +237,13 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
 
   const paymentLabel = { "58": "SEPA-Überweisung", "30": "Überweisung", "10": "Barzahlung" }[details.paymentMeansCode ?? "58"];
   const unitCount = items.filter((item) => details.unitCodes?.[item.id]).length;
+  const unknownUnits = items.filter((item) => !details.unitCodes?.[item.id] && !unitCodeFor(item.unit)).length;
 
   return (
     <FormPage>
       <p className="max-w-[72ch] font-sans text-lg/6 tracking-snug text-ink-muted">
-        Ergänzen Sie einmalig die strukturierten Angaben. Danach speichern Sie die Rechnung als PDF mit eingebetteten
-        Rechnungsdaten oder als XML-Datei für Behörden. Ihre normale PDF-Rechnung bleibt unverändert.
+        Anschrift, E-Mail und Telefon kommen aus der Rechnung; ergänzen Sie hier nur, was fehlt oder abweichen soll.
+        Danach speichern Sie die Rechnung als PDF mit eingebetteten Rechnungsdaten oder als XML-Datei für Behörden.
       </p>
 
       <Section title="E-Rechnung speichern" summary="Die Datei wird vorher auf diesem Gerät geprüft. Fehlen Angaben, wird nichts gespeichert und Sie sehen hier, was zu ergänzen ist. Das ZUGFeRD-PDF verwendet ein festes Archivlayout mit den hier erfassten Adressen.">
@@ -291,7 +297,7 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
                 <Input value={details.iban ?? ""} onChange={(event) => change("iban", event.target.value)} />
               </Field>
               <Field label="BIC (optional)" id={fieldId("einvoice.bic")}><Input value={details.bic ?? ""} onChange={(event) => change("bic", event.target.value)} /></Field>
-              <Field label="Zahlungsbedingungen" className="@lg:col-span-2" id={fieldId("einvoice.paymentTerms")}><Input value={details.paymentTerms ?? ""} onChange={(event) => change("paymentTerms", event.target.value)} /></Field>
+              <Field label="Zahlungsbedingungen" hint={details.paymentTerms ? undefined : derivedPaymentTerms(invoice) ? "Ohne Eintrag ergibt sie sich aus dem Fälligkeitsdatum." : "Ohne Eintrag gelten die Hinweise der Rechnung."} className="@lg:col-span-2" id={fieldId("einvoice.paymentTerms")}><Input value={details.paymentTerms ?? ""} placeholder={derivedPaymentTerms(invoice)} onChange={(event) => change("paymentTerms", event.target.value)} /></Field>
             </div>
           ))}
           {group("tax", "Leistungsdatum und Steuer", details.serviceDate || details.taxCategory ? "Angaben eingetragen" : "Nur bei Bedarf", (
@@ -310,18 +316,18 @@ export function EInvoicePanel({ invoice, onChange, onSaveDefaults, errors, onErr
               </Field>
             </div>
           ))}
-          {group("units", "Einheiten der Positionen", unitCount ? `${unitCount} von ${items.length} angepasst` : "Automatisch erkannt", (
+          {group("units", "Einheiten der Positionen", unknownUnits ? `${unknownUnits} nicht erkannt` : unitCount ? `${unitCount} von ${items.length} angepasst` : "Automatisch erkannt", (
             items.length === 0
               ? <p className="font-sans text-base tracking-snug text-ink-muted">Noch keine Positionen vorhanden.</p>
               : <>
-                <p className="font-sans text-base tracking-snug text-ink-muted">Die Einheit wird aus der Position übernommen. Nur ändern, wenn die Prüfung eine Einheit bemängelt.</p>
+                <p className="font-sans text-base tracking-snug text-ink-muted">Die Einheit wird aus der Position übernommen. Nur ändern, wenn sie nicht erkannt wird.</p>
                 <div className="flex flex-col gap-3">
                   {items.map((item, index) => {
                     const field = `einvoice.unitCodes.${item.id}`;
                     return (
                       <Field key={item.id} label={`${index + 1}. ${item.description || "Position ohne Beschreibung"}`} error={errorFor(field)} id={fieldId(field)}>
                         <Select value={details.unitCodes?.[item.id] ?? ""} onChange={(event) => { onChange({ ...details, unitCodes: { ...details.unitCodes, [item.id]: event.target.value || undefined } as Record<string, string> }); onErrors([]); }}>
-                          <option value="">Automatisch aus „{item.unit || "Stück"}“</option><option value="C62">Stück</option><option value="HUR">Stunde</option><option value="DAY">Tag</option><option value="MON">Monat</option><option value="MTR">Meter</option><option value="MTK">Quadratmeter</option><option value="MTQ">Kubikmeter</option><option value="KGM">Kilogramm</option><option value="LTR">Liter</option><option value="KMT">Kilometer</option>
+                          <option value="">{unitCodeFor(item.unit) ? `Automatisch aus „${item.unit || "Stück"}“` : `„${item.unit}“ nicht erkannt, bitte wählen`}</option><option value="C62">Stück / pauschal</option><option value="HUR">Stunde</option><option value="DAY">Tag</option><option value="WEE">Woche</option><option value="MON">Monat</option><option value="MTR">Meter / laufender Meter</option><option value="MTK">Quadratmeter</option><option value="MTQ">Kubikmeter</option><option value="KGM">Kilogramm</option><option value="TNE">Tonne</option><option value="LTR">Liter</option><option value="KMT">Kilometer</option><option value="SET">Satz</option>
                         </Select>
                       </Field>
                     );

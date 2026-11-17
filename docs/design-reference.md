@@ -45,7 +45,9 @@ Die Token-Namen (`ink`, `surface`, `line` …) stammen aus der früheren Gestalt
 - Schaltflächen und Felder: Radius 8px, Text 13–14px, mittel. Karten: Radius 12px, `shadow-medium`. Dialoge und Menüs: `shadow-high`.
 - Tabs: 48px hohe Zeile, aktiver Reiter mit 2px-Unterstrich. Tabellen: 48px-Zeilen, Kopf 13px mittel in Sekundärtext, Zahlen tabellarisch.
 - Badges und Statusangaben sind Pillen mit Haarlinie; Status immer als Wort mit Farbpunkt.
-- Bewegung: 150ms, `cubic-bezier(0.4, 0, 0.2, 1)`; keine dauerhaften Animationen.
+- Bewegung: Eintritt 150 bis 200 ms auf `--ease-out` (`cubic-bezier(0.23, 1, 0.32, 1)`), Austritt kürzer (Menü 100 ms, Dialog und Sheet 150 ms); das Sheet öffnet in 400 ms auf `--ease-drawer`. Aufklappbare Abschnitte wachsen über `grid-template-rows`. Häufig Benutztes (Reiter, Tastatur) bewegt sich nicht; keine dauerhaften Animationen; bei reduzierter Bewegung keine.
+- Angaben in einer Zeile trennt Abstand (`Facts` in `src/components/ui/Layout.tsx`), kein „·“. Kundendokumente (Druckfläche) sind davon ausgenommen.
+- Eine Kennzahl trägt den farbigen Strich nur, wenn sie einen Status ausdrückt.
 
 ## Bewusste Abweichungen
 

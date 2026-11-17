@@ -19,7 +19,7 @@ import { usePersistedData } from "@/lib/storage/useStore";
 import { createInvoice, deleteInvoice, duplicateInvoiceById, togglePaid } from "@/lib/storage/store";
 
 type SortKey = "date" | "number" | "total";
-type FilterKey = "all" | "paid" | "unpaid" | "overdue";
+type FilterKey = "all" | "draft" | "paid" | "unpaid" | "overdue";
 const PAGE_SIZE = 50;
 
 export default function InvoicesPage() {
@@ -45,8 +45,9 @@ export default function InvoicesPage() {
   const invoices = useMemo(() => {
     const filtered = rows.filter(({ balance, status }) => {
       if (filterKey === "paid") return status.key === "paid";
-      if (filterKey === "unpaid") return !balance.isFullyPaid;
-      if (filterKey === "overdue") return balance.isOverdue;
+      if (filterKey === "draft") return status.key === "draft";
+      if (filterKey === "unpaid") return status.key !== "draft" && !balance.isFullyPaid;
+      if (filterKey === "overdue") return status.key === "overdue";
       return true;
     });
     const normalizedQuery = deferredQuery.trim().toLocaleLowerCase(locale);
@@ -131,24 +132,21 @@ export default function InvoicesPage() {
       key: "actions",
       header: de ? "Aktionen" : "Actions",
       hideHeader: true,
-      width: "15rem",
+      width: "11rem",
       className: "text-right",
       render: (row) => {
         const title = titleOf(row);
         const isDraft = row.status.key === "draft";
         return (
           <span className="flex items-center justify-end gap-2">
-            {isDraft ? (
+            {isDraft && (
               <LinkButton size="sm" href={`/invoices/${row.invoice.id}`} aria-label={`${de ? "Weiter bearbeiten" : "Continue editing"}: ${title}`}>{de ? "Weiter bearbeiten" : "Continue editing"}</LinkButton>
-            ) : !row.balance.isFullyPaid ? (
-              <Button size="sm" aria-label={`${t(language, "actions.markPaid")}: ${title}`} onClick={() => adapter && togglePaid(adapter, row.invoice.id)}>
-                {t(language, "actions.markPaid")}
-              </Button>
-            ) : null}
+            )}
             <OverflowMenu
               label={`${de ? "Weitere Aktionen für" : "More actions for"} ${title}`}
               items={[
                 { kind: "link", label: de ? "Öffnen" : "Open", href: `/invoices/${row.invoice.id}` },
+                !isDraft && !row.balance.isFullyPaid && { label: t(language, "actions.markPaid"), onSelect: () => adapter && togglePaid(adapter, row.invoice.id) },
                 {
                   label: t(language, "actions.duplicate"),
                   onSelect: () => {
@@ -202,6 +200,7 @@ export default function InvoicesPage() {
                   <option value="unpaid">{de ? "Offen" : "Open"}</option>
                   <option value="overdue">{de ? "Überfällig" : "Overdue"}</option>
                   <option value="paid">{t(language, "filters.paid")}</option>
+                  <option value="draft">{de ? "Entwurf" : "Draft"}</option>
                 </Select>
               </Field>
             </FilterControl>

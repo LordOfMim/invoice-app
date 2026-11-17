@@ -249,7 +249,7 @@ function ComposeForm({ draft, onClose, onSent, closeRequest }: { draft: ComposeD
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className={`font-sans text-base font-medium tracking-snug ${attachmentProblem ? "text-danger-ink" : "text-ink-secondary"}`}>
-                {attachments.length === 0 ? "Keine Anhänge" : `${attachments.length} ${attachments.length === 1 ? "Anhang" : "Anhänge"} · ${formatBytes(totalSize) || "0 KB"} von höchstens ${LIMIT_MB} MB`}
+                {attachments.length === 0 ? "Keine Anhänge" : `${attachments.length} ${attachments.length === 1 ? "Anhang" : "Anhänge"}, ${formatBytes(totalSize) || "0 KB"} von höchstens ${LIMIT_MB} MB`}
               </span>
               <Button size="sm" loading={busy === "attach"} disabled={busy !== null || atFileLimit} aria-describedby={atFileLimit ? attachHint : undefined} onClick={() => { void attach(); }}>Datei anhängen</Button>
             </div>

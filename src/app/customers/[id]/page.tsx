@@ -73,6 +73,9 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
           <Field label={t(language, "customers.taxId")}>
             <Input value={customer.taxId || ""} onChange={(e) => save({ ...customer, taxId: e.target.value })} placeholder="DE123456789" />
           </Field>
+          <Field label="Leitweg-ID (nur für Behörden)" hint="Für die XRechnung an öffentliche Auftraggeber. Wird in jede neue Rechnung an diesen Kunden übernommen.">
+            <Input value={customer.buyerReference || ""} onChange={(e) => save({ ...customer, buyerReference: e.target.value || undefined })} placeholder="z. B. 991-01234-56" />
+          </Field>
           <div className="@md:col-span-2">
             <Choice
               label="Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG)"
@@ -99,7 +102,7 @@ export default function CustomerEditorPage({ params }: { params: Promise<{ id: s
         </FormSection>
 
         <RecordStamp>
-          {t(language, "common.created")}: {new Date(customer.createdAt).toLocaleString(de ? "de-DE" : "en-US")} · {t(language, "common.updated")}: {new Date(customer.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
+          {t(language, "common.created")}: {new Date(customer.createdAt).toLocaleString(de ? "de-DE" : "en-US")}, {t(language, "common.updated")}: {new Date(customer.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
         </RecordStamp>
       </FormPage>
 

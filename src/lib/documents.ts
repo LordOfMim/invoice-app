@@ -6,6 +6,7 @@ import type {
   Invoice,
   InvoiceKind,
   InvoiceLineItem,
+  PartyDetails,
   PaymentReminder,
   Product,
 } from "@/lib/domain";
@@ -72,6 +73,16 @@ export function lacksSellerDefaults(invoice: Pick<Invoice, "einvoice">, settings
  * Fill tax number, VAT ID and bank details from the settings where the document has none. Values already on the
  * document always win, so an invoice issued with an older bank account keeps it.
  */
+/**
+ * The sender for a new document: the one from the settings, as soon as it has a name. A template, quote or schedule
+ * written earlier keeps its own sender only while the settings have none, so a move or new phone number entered in
+ * the settings reaches every new invoice.
+ */
+export function currentSender(fallback: PartyDetails, settings: Pick<AppSettings, "defaultSender"> | undefined): PartyDetails {
+  const sender = settings?.defaultSender;
+  return sender?.name?.trim() ? { ...sender } : { ...fallback };
+}
+
 export function withSellerDefaults<T extends Pick<Invoice, "einvoice">>(invoice: T, settings: Pick<AppSettings, "defaultEInvoice"> | undefined): T {
   const defaults = settings?.defaultEInvoice;
   if (!defaults || !lacksSellerDefaults(invoice, settings)) return invoice;
@@ -405,6 +416,7 @@ export function invoiceFromQuote(quote: Invoice, settings: AppSettings, today = 
   }
   return withSellerDefaults({
     ...quote,
+    sender: currentSender(quote.sender, settings),
     id: newId(),
     // The remembered rates follow their positions to the new ids (see `duplicateInvoice`).
     reverseChargePreviousRates: remapLineIdKeys(quote.reverseChargePreviousRates, quote.lineItems, lineItems),
