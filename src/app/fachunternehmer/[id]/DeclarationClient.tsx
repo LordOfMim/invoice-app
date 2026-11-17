@@ -17,6 +17,7 @@ import { formatDocumentDate, todayLocalISO } from "@/lib/date";
 import { loadDeclarationDefaults, saveDeclarationDefaults } from "@/lib/declarationDefaults";
 import type { ContractorDeclaration } from "@/lib/domain";
 import { safeFilePart, savePrintAreaAsPdf } from "@/lib/pdf";
+import { imageUrl, keepFile } from "@/lib/storage/files";
 import { deleteDeclaration, updateDeclaration } from "@/lib/storage/store";
 import type { StorageAdapter } from "@/lib/storage/types";
 import { usePersistedData } from "@/lib/storage/useStore";
@@ -44,7 +45,13 @@ export function DeclarationClient({ id }: { id: string }) {
 }
 
 function DeclarationEditor({ adapter, declaration, invoice }: { adapter: StorageAdapter; declaration: ContractorDeclaration; invoice?: { id: string; number: string } }) {
-  const [signatureImage, setSignatureImage] = useState<string | null>(() => loadDeclarationDefaults(adapter).signatureImage);
+  // The signature is a stored file (desktop app) or a data URL (older data, browser); see declarationDefaults.
+  const [signature, setSignature] = useState(() => {
+    const defaults = loadDeclarationDefaults(adapter);
+    return { signatureImage: defaults.signatureImage, signatureFile: defaults.signatureFile };
+  });
+  const hasSignature = !!(signature.signatureImage || signature.signatureFile);
+  const signatureUrl = imageUrl(signature.signatureFile, signature.signatureImage);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
@@ -73,11 +80,13 @@ function DeclarationEditor({ adapter, declaration, invoice }: { adapter: Storage
     recipientAddress: declaration.recipientAddress,
     kommission: "",
     signatureName: declaration.signatureName,
-    signatureImage,
+    ...signature,
   }, "Absender, Empfänger und Unterschrift sind als Standard für neue Erklärungen gespeichert.");
 
-  const setImage = (image: string | null) => {
-    if (storeDefaults({ ...loadDeclarationDefaults(adapter), signatureImage: image }, image ? "Unterschrift gespeichert. Sie erscheint auf allen Erklärungen." : "Unterschrift entfernt.")) setSignatureImage(image);
+  const setImage = async (image: string | null) => {
+    const kept = image ? await keepFile(image) : null;
+    const next = { signatureImage: kept?.dataUrl ?? null, signatureFile: kept?.file };
+    if (storeDefaults({ ...loadDeclarationDefaults(adapter), ...next }, image ? "Unterschrift gespeichert. Sie erscheint auf allen Erklärungen." : "Unterschrift entfernt.")) setSignature(next);
   };
 
   const onPdf = async () => {
@@ -160,13 +169,13 @@ function DeclarationEditor({ adapter, declaration, invoice }: { adapter: Storage
                   e.target.value = ""; // allow choosing the same file again after removing it
                   if (!file) return;
                   const reader = new FileReader();
-                  reader.onload = () => { if (typeof reader.result === "string") setImage(reader.result); };
+                  reader.onload = () => { if (typeof reader.result === "string") void setImage(reader.result); };
                   reader.onerror = () => setNotice({ tone: "error", text: "Die Bilddatei konnte nicht gelesen werden." });
                   reader.readAsDataURL(file);
                 }}
               />
-              <Button size="sm" onClick={() => fileInput.current?.click()}>{signatureImage ? "Anderes Bild wählen" : "Bild wählen"}</Button>
-              {signatureImage && <Button size="sm" variant="ghost" onClick={() => setImage(null)}>Bild entfernen</Button>}
+              <Button size="sm" onClick={() => fileInput.current?.click()}>{hasSignature ? "Anderes Bild wählen" : "Bild wählen"}</Button>
+              {hasSignature && <Button size="sm" variant="ghost" onClick={() => { void setImage(null); }}>Bild entfernen</Button>}
             </div>
           </Field>
         </FormSection>
@@ -203,9 +212,9 @@ function DeclarationEditor({ adapter, declaration, invoice }: { adapter: Storage
             <p className="mb-8">Mit freundlichen Grüßen</p>
             <p className="font-medium">{declaration.signatureName}</p>
           </div>
-          {signatureImage && (
+          {signatureUrl && (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={signatureImage} alt="Unterschrift / Stempel" className="max-h-40 max-w-xs object-contain" />
+            <img src={signatureUrl} alt="Unterschrift / Stempel" className="max-h-40 max-w-xs object-contain" />
           )}
         </div>
       </LetterPaper>

@@ -22,12 +22,20 @@ type RecoveryStore = NonNullable<Window["electronAPI"]>["store"] & {
 
 const noSubscribe = () => () => {};
 
+/** Says that a backup lacks files the data refers to (an attachment folder that was not kept with its JSON). */
+function missingFilesText(count: number, de: boolean) {
+  return de
+    ? `${count} ${count === 1 ? "Anhang oder Bild fehlt" : "Anhänge oder Bilder fehlen"} in der Sicherung und ${count === 1 ? "lässt" : "lassen"} sich daraus nicht wiederherstellen.`
+    : `${count} ${count === 1 ? "attachment or image is" : "attachments or images are"} missing from the backup and cannot be restored from it.`;
+}
+
 export default function BackupPage() {
   const { adapter, data } = usePersistedData();
   const language = data?.settings.language ?? "de";
   const de = language === "de";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
+  const [importMessage, setImportMessage] = useState("");
   const [exportWarning, setExportWarning] = useState("");
   const [exportMessage, setExportMessage] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,7 +92,9 @@ export default function BackupPage() {
     setFolderMessage(null);
     try {
       const written = await writeFolderBackup(adapter);
-      setFolderMessage({ tone: "ok", text: `Sicherung gespeichert${written.file ? `: ${written.file}` : ""}.` });
+      setFolderMessage(written.missingFiles
+        ? { tone: "attention", text: `Sicherung gespeichert${written.file ? `: ${written.file}` : ""}. ${missingFilesText(written.missingFiles, true)}` }
+        : { tone: "ok", text: `Sicherung gespeichert${written.file ? `: ${written.file}` : ""}.` });
     } catch (error) {
       setFolderMessage({ tone: "error", text: error instanceof Error ? error.message : "Die Sicherung ist fehlgeschlagen." });
       void loadFolder();
@@ -172,7 +182,32 @@ export default function BackupPage() {
         if (pending !== false) persisted = await flushElectronStoreSync();
       } catch { /* A disk failure must not block rescuing the in-memory state. */ }
       const json = exportData(adapter);
-      // The desktop app reports whether the file was really written; only then the backup counts as done.
+      // The desktop app saves one ZIP with the data and every attachment, logo and image it refers to.
+      const saveArchive = window.electronAPI?.backup?.saveArchive;
+      if (saveArchive) {
+        const result = await saveArchive(json, `Helferlein-Sicherung-${todayLocalISO()}`);
+        if (result.canceled) {
+          setExportMessage({ tone: "info", text: de ? "Nicht gespeichert. Es wurde keine Sicherungsdatei angelegt." : "Not saved. No backup file was created." });
+          return;
+        }
+        if (!result.ok) {
+          setExportWarning(result.error || (de ? "Die Sicherung konnte nicht gespeichert werden. Bitte die App geöffnet lassen und erneut versuchen." : "The backup could not be saved. Leave the app open and try again."));
+          return;
+        }
+        markBackupDone(adapter);
+        const files = result.files ?? 0;
+        setExportMessage({ tone: "ok", text: de
+          ? `Die Sicherung wurde gespeichert${files > 0 ? ` (mit ${files} ${files === 1 ? "Anhang oder Bild" : "Anhängen und Bildern"})` : ""}.`
+          : `The backup was saved${files > 0 ? ` (with ${files} ${files === 1 ? "attachment or image" : "attachments and images"})` : ""}.` });
+        const warnings: string[] = [];
+        if (result.missingFiles) warnings.push(missingFilesText(result.missingFiles, de));
+        if (!persisted) warnings.push(de
+          ? "Die Speicherung der App-Daten ist nicht bestätigt. Die Sicherung enthält den aktuellen Stand aus dem Arbeitsspeicher. Bitte die Sicherungsdatei sicher aufbewahren und die App geöffnet lassen."
+          : "Saving the app data could not be confirmed. The backup contains the current in-memory state. Keep the file safe and leave the app open.");
+        if (warnings.length) setExportWarning(warnings.join(" "));
+        return;
+      }
+      // The browser reports only that a download started.
       const outcome = await saveTextFile(`invoice-app-backup-${todayLocalISO()}.json`, "json", json);
       if (outcome === "canceled") {
         setExportMessage({ tone: "info", text: de ? "Nicht gespeichert. Es wurde keine Sicherungsdatei angelegt." : "Not saved. No backup file was created." });
@@ -192,6 +227,33 @@ export default function BackupPage() {
     } finally {
       operation.current = false;
       setBusy(false);
+    }
+  };
+
+  /** Desktop app: pick a ZIP or JSON backup in the system dialog; its attachments are taken over with the data. */
+  const handleOpenBackup = async () => {
+    const open = window.electronAPI?.backup?.open;
+    if (!adapter || !open || operation.current) return;
+    operation.current = true;
+    setBusy(true);
+    setImportStatus("idle");
+    setImportMessage("");
+    try {
+      const result = await open();
+      if (result.canceled) return;
+      if (!result.ok || typeof result.json !== "string") {
+        setImportMessage(result.error || "");
+        throw new Error(result.error || "Backup could not be read");
+      }
+      if (result.missingFiles && !window.confirm(`${missingFilesText(result.missingFiles, de)} ${de ? "Die übrigen Daten trotzdem wiederherstellen?" : "Restore the remaining data anyway?"}`)) return;
+      await importSnapshot(result.json);
+    } catch {
+      setImportStatus("error");
+    } finally {
+      if (!reloadScheduled.current) {
+        operation.current = false;
+        setBusy(false);
+      }
     }
   };
 
@@ -238,7 +300,7 @@ export default function BackupPage() {
         {desktop && (
           <Section
             title="Automatische Sicherung"
-            summary={`Helferlein speichert alle ${AUTO_BACKUP_INTERVAL_DAYS} Tage beim Öffnen der App eine Sicherungsdatei in einen Ordner Ihrer Wahl, am besten auf einem USB-Stick, einer externen Festplatte oder in einem Cloud-Ordner. Die letzten zwölf Sicherungen bleiben erhalten.`}
+            summary={`Helferlein speichert alle ${AUTO_BACKUP_INTERVAL_DAYS} Tage beim Öffnen der App eine Sicherungsdatei in einen Ordner Ihrer Wahl, am besten auf einem USB-Stick, einer externen Festplatte oder in einem Cloud-Ordner. Die letzten zwölf Sicherungen bleiben erhalten. Anhänge, Logos und Bilder liegen daneben im Unterordner „attachments“; bitte beides zusammen aufbewahren.`}
             actions={<StatusPill tone={autoBackup && folder?.available ? "success" : autoBackup ? "attention" : "muted"}>{autoBackup && folder?.available ? "Eingeschaltet" : autoBackup ? "Ordner nicht erreichbar" : "Ausgeschaltet"}</StatusPill>}
           >
             <KeyValueList
@@ -267,14 +329,15 @@ export default function BackupPage() {
         )}
 
         <Section title={t(language, "backup.export")} summary={t(language, "backup.downloadDescription")}>
-          <div><Button variant="primary" disabled={busy} onClick={() => { void handleExport(); }}>{de ? "Sicherung speichern (.json)" : `${t(language, "actions.export")} (.json)`}</Button></div>
+          <div><Button variant="primary" disabled={busy} onClick={() => { void handleExport(); }}>{de ? `Sicherung speichern (${desktop ? ".zip" : ".json"})` : `${t(language, "actions.export")} (${desktop ? ".zip" : ".json"})`}</Button></div>
           {exportMessage && <StatusNote tone={exportMessage.tone} role="status">{exportMessage.text}</StatusNote>}
           {exportWarning && <StatusNote tone="attention" role="alert">{exportWarning}</StatusNote>}
         </Section>
 
         <Section title={t(language, "backup.import")} summary={t(language, "backup.restoreDescription")}>
           <StatusNote tone="attention">{t(language, "backup.replaceWarning")}</StatusNote>
-          <Field label={de ? "Sicherungsdatei wählen" : "Choose backup file"} className="max-w-xl">
+          {desktop && <div><Button disabled={busy} onClick={() => { void handleOpenBackup(); }}>{de ? "Sicherungsdatei wählen …" : "Choose backup file …"}</Button></div>}
+          {!desktop && <Field label={de ? "Sicherungsdatei wählen" : "Choose backup file"} className="max-w-xl">
             <input
               ref={fileInputRef}
               type="file"
@@ -283,10 +346,10 @@ export default function BackupPage() {
               onChange={handleImport}
               className="block w-full font-sans text-base text-ink-secondary file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-line-control file:bg-surface file:px-3.5 file:font-sans file:text-base file:font-medium file:text-ink-secondary hover:file:bg-surface-subtle"
             />
-          </Field>
+          </Field>}
           {busy && <p role="status" className="font-sans text-base text-ink-muted">{de ? "Daten werden gelesen und gesichert …" : "Reading and saving data …"}</p>}
           {importStatus === "success" && <StatusNote tone="ok">{t(language, "backup.importSuccess")}</StatusNote>}
-          {importStatus === "error" && <StatusNote tone="error">{t(language, "backup.importError")}</StatusNote>}
+          {importStatus === "error" && <StatusNote tone="error">{importMessage || t(language, "backup.importError")}</StatusNote>}
         </Section>
 
         {desktop && (

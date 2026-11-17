@@ -4,6 +4,11 @@ const numberValue = (value) => typeof value === "number" && Number.isFinite(valu
 const booleanValue = (value) => typeof value === "boolean";
 const choices = (...values) => (value) => values.includes(value);
 const stringArray = (value) => Array.isArray(value) && value.every(stringValue);
+// A stored file: SHA-256 of its bytes, media type, size. Kept in step with isFileRef in file-refs.cjs (this file
+// stays free of imports so the storage worker can check data without loading anything else).
+const isFileRef = (value) => isRecord(value) && typeof value.id === "string" && /^[a-f0-9]{64}$/.test(value.id)
+  && typeof value.type === "string" && /^[\x21-\x2b\x2d-\x7e]{1,255}$/.test(value.type)
+  && Number.isSafeInteger(value.size) && value.size >= 0;
 function recordGuard(fields) {
   const entries = Object.entries(fields);
   return (value) => isRecord(value)
@@ -66,7 +71,7 @@ const validPayment = recordGuard({
   method: stringValue, reference: stringValue, notes: stringValue,
 });
 const validAttachment = recordGuard({
-  ...identityFields, name: stringValue, type: stringValue, size: numberValue, dataUrl: stringValue,
+  ...identityFields, name: stringValue, type: stringValue, size: numberValue, dataUrl: stringValue, file: isFileRef,
 });
 const validAdvanceDeduction = recordGuard({
   id: stringValue, invoiceId: stringValue, invoiceNumber: stringValue, invoiceDate: stringValue, net: numberValue, tax: numberValue,
@@ -82,7 +87,7 @@ const documentFields = {
 const validInvoice = recordGuard({
   ...documentFields, invoiceNumber: stringValue, invoiceDate: stringValue, dueDate: stringValue,
   notesText: stringValue, footerLeftText: stringValue, footerRightText: stringValue,
-  paid: booleanValue, exchangeRate: numberValue, exchangeRateNote: stringValue, logoDataUrl: stringValue,
+  paid: booleanValue, exchangeRate: numberValue, exchangeRateNote: stringValue, logoDataUrl: stringValue, logoFile: isFileRef,
   tagIds: stringArray, creditNoteIds: stringArray, recurringInvoiceId: stringValue, einvoice: validEInvoice,
   payments: (items) => validRecords(items, validPayment), attachments: (items) => validRecords(items, validAttachment),
   projectReference: stringValue, reverseCharge: booleanValue, invoiceKind: choices("standard", "advance", "final"),
@@ -94,7 +99,7 @@ const validSettings = recordGuard({
   language: choices("de", "en"), currency: stringValue, defaultTaxRate: numberValue,
   defaultSender: validParty, defaultEInvoice: validEInvoice, defaultFooterText: stringValue,
   defaultTemplateId: choices("classic", "modern", "minimal"), defaultLayout: validLayout,
-  defaultLogoDataUrl: stringValue, pdfFilenamePattern: stringValue, defaultTexts: validTexts,
+  defaultLogoDataUrl: stringValue, defaultLogoFile: isFileRef, pdfFilenamePattern: stringValue, defaultTexts: validTexts,
   defaultInvoiceId: stringValue, backupEnabled: booleanValue, backupPath: stringValue, lastBackupDate: stringValue,
   dashboardPeriod: choices("month", "quarter", "year"),
   backgroundChoice: choices("auto", "off", "threads", "light-rays", "shape-grid", "beams"),

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AppSettings } from "@/lib/domain";
 import { getBrowserLocalStorageAdapter } from "@/lib/storage/localStorageAdapter";
 import { clearDataCache, getCurrentData, loadData, parsePersistedData, primeDataCache, subscribe } from "@/lib/storage/store";
+import { isEmbeddedFile } from "../../../electron/file-refs.cjs";
+import type { PersistedDataV1 } from "@/lib/domain";
+import { moveEmbeddedFiles, type FilesApi } from "@/lib/storage/files";
 import { createDataPatches, type DataPatch } from "@/lib/storage/patches";
 import type { StorageAdapter } from "@/lib/storage/types";
 import { STORAGE_KEY } from "@/lib/storage/keys";
@@ -20,6 +23,7 @@ type ElectronAPI = {
     applyPatches?: (patches: DataPatch[]) => boolean;
     flush?: () => Promise<boolean>;
   };
+  files?: FilesApi;
   platform?: string;
   isElectron: boolean;
 };
@@ -69,6 +73,45 @@ async function adoptAuxiliaryDefaults(api: ElectronAPI) {
   }
 }
 
+/**
+ * Versions up to 1.3 kept attachments and logos as base64 inside the data, so every save rewrote all of them. Move
+ * them into the file store once and save the data without them. `raw` is the snapshot on disk; unless this start
+ * has already preserved it (`preserved`), it is kept as a recovery copy before the data is changed. A file that
+ * cannot be stored stays in the data, and a failure here never blocks the app: the next start tries again.
+ */
+async function adoptStoredFiles(api: ElectronAPI, data: PersistedDataV1, raw: string | null, preserved: boolean): Promise<PersistedDataV1> {
+  if (!api.files || !api.store.applyPatches) return data;
+  try {
+    const moved = await moveEmbeddedFiles(data, api.files.put);
+    if (moved === data) return data;
+    if (!preserved) await backupElectronData(api, raw, "before-file-extraction");
+    const patches = createDataPatches(data, moved);
+    if (patches.length && api.store.applyPatches(patches) !== true) return data;
+    return moved;
+  } catch (err) {
+    console.error("Attachments could not be moved into files; they stay in the data for now:", err);
+    return data;
+  }
+}
+
+/** The signature image of the contractor declarations lives beside the main data; move it into a file as well. */
+async function adoptSignatureFile(api: ElectronAPI) {
+  if (!api.files) return;
+  try {
+    const stored = await api.store.get(AUX_KEY);
+    if (typeof stored !== "string" || !stored) return;
+    const defaults: unknown = JSON.parse(stored);
+    if (!defaults || typeof defaults !== "object" || Array.isArray(defaults)) return;
+    const image = (defaults as Record<string, unknown>).signatureImage;
+    if (!isEmbeddedFile(image)) return;
+    const result = await api.files.put(image);
+    if (!result.ok || !result.file) return;
+    await api.store.set(AUX_KEY, JSON.stringify({ ...defaults, signatureImage: null, signatureFile: result.file }));
+  } catch (err) {
+    console.error("The signature image could not be moved into a file; it stays in the data for now:", err);
+  }
+}
+
 // Load from electron-store on startup (only once)
 let electronStoreLoaded = false;
 let electronLoadPromise: Promise<void> | null = null;
@@ -100,17 +143,21 @@ async function reconcileElectronStore(): Promise<void> {
     if (electronParsed) {
       // Only a cold bootstrap serializes the canonical migration once. Future
       // keystrokes send small patches; the background worker owns disk writes.
+      let preserved = false;
       if (api.store.applyPatches) {
         const canonical = JSON.stringify(electronParsed);
         if (canonical !== electronRaw) {
           await backupElectronData(api, electronRaw, "before-schema-adoption");
           if (!await writeElectronStore(canonical)) throw new Error("Migration konnte nicht sicher gespeichert werden.");
+          preserved = true;
         }
       }
       await adoptAuxiliaryDefaults(api);
+      await adoptSignatureFile(api);
+      const current = await adoptStoredFiles(api, electronParsed, electronRaw, preserved);
       electronStoreLoaded = true;
       clearDataCache();
-      primeDataCache(electronParsed);
+      primeDataCache(current);
       return;
     }
 
@@ -125,9 +172,12 @@ async function reconcileElectronStore(): Promise<void> {
       if (!api.store.applyPatches) api.store.setSync?.(STORAGE_KEY, localRaw);
     }
     await adoptAuxiliaryDefaults(api);
+    await adoptSignatureFile(api);
     if (electronData == null && localParsed && localRaw) {
+      // The local original was preserved above ("before-local-migration").
+      const current = await adoptStoredFiles(api, localParsed, localRaw, true);
       clearDataCache();
-      primeDataCache(localParsed);
+      primeDataCache(current);
     }
     electronStoreLoaded = true;
   } catch (err) {

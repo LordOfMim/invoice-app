@@ -239,16 +239,21 @@ function migratePayment(value: unknown): Payment {
 }
 
 function migrateAttachment(value: unknown): Attachment {
-  if (!isRecord(value)) return { id: newId(), name: "Attachment", type: "", size: 0, dataUrl: "", createdAt: nowIso() };
-  return {
+  if (!isRecord(value)) return { id: newId(), name: "Attachment", type: "", size: 0, createdAt: nowIso() };
+  // The content is a stored file (`file`) or, in older data, a data URL. An empty data URL carries nothing and is
+  // dropped; a real one keeps its place, so data that needs no change is not rewritten.
+  const dataUrl = typeof value.dataUrl === "string" && value.dataUrl ? value.dataUrl : undefined;
+  const attachment: Attachment = {
     ...value,
     id: asString(value.id, newId),
     name: asString(value.name, "Attachment"),
     type: asString(value.type),
     size: asNumber(value.size, 0),
-    dataUrl: asString(value.dataUrl),
+    dataUrl,
     createdAt: asString(value.createdAt, nowIso),
   };
+  if (dataUrl === undefined) delete attachment.dataUrl;
+  return attachment;
 }
 
 function migrateInvoice(invoice: unknown): Invoice {

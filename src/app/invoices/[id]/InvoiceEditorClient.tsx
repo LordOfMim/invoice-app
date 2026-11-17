@@ -31,6 +31,7 @@ import { computeInvoiceBalance } from "@/lib/calc";
 import { todayLocalISO } from "@/lib/date";
 import { declarationFromInvoice, lacksSellerDefaults, withSellerDefaults } from "@/lib/documents";
 import { loadDeclarationDefaults } from "@/lib/declarationDefaults";
+import { logoUrl } from "@/lib/storage/files";
 import { usePersistedData } from "@/lib/storage/useStore";
 import {
   addDeclaration,
@@ -272,7 +273,9 @@ export function InvoiceEditorClient({ id, kind = "invoice" }: { id: string; kind
   }
 
   const currency = invoice.currency || defaultCurrency;
-  const logoDataUrl = invoice.logoDataUrl || settings?.defaultLogoDataUrl;
+  // The logo as a data URL for the preview, the PDF and the e-invoice, whether it is a stored file or older data.
+  const logoDataUrl = logoUrl(invoice, settings);
+  const logoMissing = invoice.layout.showLogo && !logoDataUrl && !!(invoice.logoFile ?? settings?.defaultLogoFile);
   const isDefaultInvoice = !isQuote && (settings?.defaultInvoiceId ?? null) === invoice.id;
   const status = isQuote ? quoteStatus(invoice, todayLocalISO(), language) : invoiceStatus(invoice, balance, language);
   const convertedInvoice = isQuote && invoice.convertedInvoiceId ? allInvoices?.find((inv) => inv.id === invoice.convertedInvoiceId) : undefined;
@@ -547,6 +550,11 @@ export function InvoiceEditorClient({ id, kind = "invoice" }: { id: string; kind
 
       <div className="no-print mt-4 flex flex-col gap-3 empty:hidden">
         {pdfMessage && <StatusNote tone={pdfError ? "error" : "ok"} role={pdfError ? "alert" : "status"}>{pdfMessage}</StatusNote>}
+        {logoMissing && (
+          <StatusNote tone="attention" title={de ? "Die Logo-Datei ist nicht mehr vorhanden." : "The logo file is no longer available."}>
+            {de ? "Das Dokument wird ohne Logo gedruckt. Bitte das Logo neu wählen oder eine Sicherung mit Anhängen wiederherstellen." : "The document prints without a logo. Choose the logo again or restore a backup with attachments."}
+          </StatusNote>
+        )}
         {convertedInvoice && (
           <StatusNote tone="ok" title="Aus diesem Angebot ist eine Rechnung entstanden.">
             <Link href={`/invoices/${convertedInvoice.id}`} className="underline underline-offset-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">

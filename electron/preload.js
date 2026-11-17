@@ -272,6 +272,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearFolder: () => ipcRenderer.invoke('backup-folder-clear'),
     openFolder: () => ipcRenderer.invoke('backup-folder-open'),
     write: (json) => ipcRenderer.invoke('backup-write', { json }),
+    // A backup by hand is one ZIP with the data and its attachments; restoring reads a ZIP or a JSON backup.
+    saveArchive: (json, filename) => ipcRenderer.invoke('backup-save-archive', { json, filename }),
+    open: () => ipcRenderer.invoke('backup-open'),
+  },
+
+  // Attachments, logos and images are files beside the data. The window hands over content once (as a data URL)
+  // and gets a reference { id, type, size }; afterwards it names a file only by that reference.
+  files: {
+    put: (dataUrl) => ipcRenderer.invoke('files-put', { dataUrl }),
+    dataUrlSync: (file) => {
+      const result = ipcRenderer.sendSync('files-data-url-sync', file);
+      return result?.ok && typeof result.value === 'string' ? result.value : null;
+    },
+    save: (file, name) => ipcRenderer.invoke('files-save', { file, name }),
   },
 
   // Archive (ZIP) with PDFs and a list, e.g. for the tax advisor.

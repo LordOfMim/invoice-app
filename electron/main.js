@@ -6,7 +6,9 @@ const fs = require('fs');
 const { createDurableStoreClass, createSnapshotVerifier, ensurePrivateDirectory, syncDirectory } = require(path.join(__dirname, 'durable-store.cjs'));
 const { StorageClient } = require(path.join(__dirname, 'storage-client.cjs'));
 const { deliverEInvoice } = require(path.join(__dirname, 'einvoice-delivery.cjs'));
-const { ArchiveSession, folderStatus, safeEntryName, writeBackup } = require(path.join(__dirname, 'local-files.cjs'));
+const { ArchiveSession, folderStatus, readBackup, safeEntryName, writeBackup, writeBackupArchive, writeFileAtomic } = require(path.join(__dirname, 'local-files.cjs'));
+const { FileStore } = require(path.join(__dirname, 'file-store.cjs'));
+const { isFileRef } = require(path.join(__dirname, 'file-refs.cjs'));
 const { isValidPersistedData } = require(path.join(__dirname, 'storage-validation.cjs'));
 const { MailService } = require(path.join(__dirname, 'mail-service.cjs'));
 const mailCore = require(path.join(__dirname, 'mail-core.cjs'));
@@ -926,10 +928,95 @@ ipcMain.handle('backup-write', async (event, payload) => {
     if (!status.folder) return { ok: false, error: 'Es ist noch kein Sicherungsordner gewählt.' };
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const result = await writeBackup({ folder: status.folder, json: payload?.json, today, validate: isValidPersistedData });
+    const result = await writeBackup({ folder: status.folder, json: payload?.json, today, validate: isValidPersistedData, store: fileStore() });
     return { ok: true, ...result };
   } catch (error) { return { ok: false, error: error.message || 'Die Sicherung ist fehlgeschlagen.' }; }
   finally { backupRunning = false; }
+});
+
+// A backup by hand: one ZIP with the data and every attachment, logo and image it refers to.
+ipcMain.handle('backup-save-archive', async (event, payload) => {
+  ensureTrustedSender(event);
+  if (backupRunning) return { ok: false, error: 'Es läuft bereits eine Sicherung.' };
+  backupRunning = true;
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Sicherung speichern',
+      defaultPath: path.join(app.getPath('documents'), safeEntryName(payload?.filename || 'Helferlein-Sicherung', 'zip')),
+      filters: [{ name: 'Helferlein-Sicherung (ZIP)', extensions: ['zip'] }],
+    });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    const target = filePath.toLowerCase().endsWith('.zip') ? filePath : `${filePath}.zip`;
+    const result = await writeBackupArchive({ target, json: payload?.json, store: fileStore(), validate: isValidPersistedData });
+    syncDirectory(path.dirname(target));
+    return { ok: true, file: path.basename(target), files: result.files, missingFiles: result.missingFiles };
+  } catch (error) { return { ok: false, error: error.message || 'Die Sicherung ist fehlgeschlagen.' }; }
+  finally { backupRunning = false; }
+});
+
+// Restoring: the user picks a ZIP backup or a JSON backup (older versions, or one from the backup folder with its
+// "attachments" folder beside it). The files it refers to are taken over here; the window receives only the data.
+ipcMain.handle('backup-open', async (event) => {
+  ensureTrustedSender(event);
+  if (backupRunning) return { ok: false, error: 'Es läuft bereits eine Sicherung.' };
+  backupRunning = true;
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const folder = await backupFolderStatus().catch(() => ({ available: false }));
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Sicherung wählen',
+      buttonLabel: 'Sicherung einlesen',
+      defaultPath: folder.available ? folder.folder : app.getPath('documents'),
+      filters: [{ name: 'Helferlein-Sicherung', extensions: ['zip', 'json'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || !filePaths?.[0]) return { ok: false, canceled: true };
+    const result = await readBackup({ file: filePaths[0], store: fileStore(), validate: isValidPersistedData });
+    return { ok: true, json: result.json, missingFiles: result.missingFiles.length };
+  } catch (error) { return { ok: false, error: error.message || 'Die Sicherung konnte nicht gelesen werden.' }; }
+  finally { backupRunning = false; }
+});
+
+// ── Attachments, logos and images ────────────────────────────────────────────────────────────────────────────────
+// Their bytes are files in "attachments/" beside the data file, named by checksum; the data holds a reference. The
+// window hands over content once and afterwards names files only by that checked reference, never by a path.
+
+let attachmentFiles = null;
+function fileStore() {
+  if (!attachmentFiles) attachmentFiles = new FileStore(path.join(app.getPath('userData'), 'attachments'));
+  return attachmentFiles;
+}
+
+ipcMain.handle('files-put', async (event, payload) => {
+  ensureTrustedSender(event);
+  try { return { ok: true, file: await fileStore().putDataUrl(payload?.dataUrl) }; }
+  catch (error) { return { ok: false, error: error.message || 'Die Datei konnte nicht gespeichert werden.' }; }
+});
+
+// Synchronous on purpose: previews and printed pages show a logo the moment they render, as they did while the
+// logo was part of the data. The window caches the answer, so each file is read once per session.
+ipcMain.on('files-data-url-sync', (event, ref) => {
+  try {
+    ensureTrustedSender(event);
+    event.returnValue = { ok: true, value: fileStore().dataUrl(ref) };
+  } catch (error) {
+    event.returnValue = { ok: false, error: error.message || String(error) };
+  }
+});
+
+ipcMain.handle('files-save', async (event, payload) => {
+  ensureTrustedSender(event);
+  try {
+    if (!isFileRef(payload?.file)) throw new Error('Ungültige Dateikennung.');
+    const bytes = fileStore().read(payload.file.id);
+    const name = String(payload.name || 'Anhang').replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').replace(/^\.+/, '').trim().slice(0, 160) || 'Anhang';
+    const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), { defaultPath: path.join(app.getPath('downloads'), name) });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    await writeFileAtomic(filePath, bytes);
+    syncDirectory(path.dirname(filePath));
+    return { ok: true };
+  } catch (error) { return { ok: false, error: error.message || 'Die Datei konnte nicht gespeichert werden.' }; }
 });
 
 // ── Archive for the tax advisor ──────────────────────────────────────────────────────────────────────────────────

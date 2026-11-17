@@ -83,12 +83,25 @@ export type Payment = {
 // Attachments
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A file kept in the folder "attachments" beside the data file. The data holds only this reference: `id` is the
+ * SHA-256 of the bytes, so equal files (the same logo on many invoices) are stored once.
+ */
+export type FileRef = {
+  id: string;
+  type: string; // MIME type
+  size: number; // bytes
+};
+
 export type Attachment = {
   id: string;
   name: string;
   type: string; // MIME type
   size: number; // bytes
-  dataUrl: string; // base64 data URL
+  /** The stored file (desktop app). */
+  file?: FileRef;
+  /** The content as a base64 data URL: data from versions up to 1.3 until it is moved into a file, and the browser. */
+  dataUrl?: string;
   createdAt: string;
 };
 
@@ -349,7 +362,8 @@ export type Invoice = {
 
   layout: LayoutPreferences;
 
-  // Optional per-invoice logo override (Data URL)
+  // Optional per-invoice logo override: a stored file (desktop app), or a data URL (older data, browser)
+  logoFile?: FileRef;
   logoDataUrl?: string;
 
   // Credit notes linked to this invoice
@@ -404,7 +418,8 @@ export type AppSettings = {
   defaultTemplateId: InvoiceTemplateId;
   defaultLayout: Omit<LayoutPreferences, "templateId">;
 
-  // Global logo (Data URL)
+  // Global logo: a stored file (desktop app), or a data URL (older data, browser)
+  defaultLogoFile?: FileRef;
   defaultLogoDataUrl?: string;
 
   // PDF filename pattern, supports tokens: {invoiceNumber}, {invoiceDate}, {dueDate}

@@ -15,6 +15,7 @@ import { formatIban } from "@/lib/documents";
 import { createDefaultTextsDe } from "@/lib/defaults";
 import { t } from "@/lib/i18n";
 import { roundMoney } from "@/lib/money";
+import { imageUrl, keepFile } from "@/lib/storage/files";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { updateSettings } from "@/lib/storage/store";
 
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   if (!adapter || !settings) return <p className="font-sans text-lg tracking-snug text-ink-muted">{t(language, "common.loading")}</p>;
 
   const layout = settings.defaultLayout;
+  const defaultLogo = imageUrl(settings.defaultLogoFile, settings.defaultLogoDataUrl);
   const details = settings.defaultEInvoice ?? {};
   const setDetails = (patch: Partial<EInvoiceDetails>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), ...patch } }));
   const setSeller = (patch: Partial<EInvoiceParty>) => updateSettings(adapter, (prev) => ({ ...prev, defaultEInvoice: { ...(prev.defaultEInvoice ?? {}), seller: { ...(prev.defaultEInvoice?.seller ?? {}), ...patch } } }));
@@ -152,16 +154,20 @@ export default function SettingsPage() {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const result = reader.result;
-                  if (typeof result === "string") updateSettings(adapter, (prev) => ({ ...prev, defaultLogoDataUrl: result }));
+                  if (typeof result !== "string") return;
+                  // The desktop app keeps the image as a file and the settings refer to it; the browser embeds it.
+                  void keepFile(result).then((kept) => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoFile: kept.file, defaultLogoDataUrl: kept.dataUrl })));
                 };
                 reader.readAsDataURL(file);
               }}
             />
           </Field>
-          {settings.defaultLogoDataUrl && (
+          {(settings.defaultLogoDataUrl || settings.defaultLogoFile) && (
             <div className="flex flex-wrap items-center gap-4">
-              <Image src={settings.defaultLogoDataUrl} alt={t(language, "settings.logoPreview")} width={128} height={64} unoptimized className="h-16 w-auto rounded-md border border-line bg-surface p-1" />
-              <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoDataUrl: undefined }))}>
+              {defaultLogo
+                ? <Image src={defaultLogo} alt={t(language, "settings.logoPreview")} width={128} height={64} unoptimized className="h-16 w-auto rounded-md border border-line bg-surface p-1" />
+                : <StatusNote tone="attention">{de ? "Die Logo-Datei ist nicht mehr vorhanden. Bitte das Logo neu wählen oder eine Sicherung mit Anhängen wiederherstellen." : "The logo file is no longer available. Choose the logo again or restore a backup with attachments."}</StatusNote>}
+              <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" onClick={() => updateSettings(adapter, (prev) => ({ ...prev, defaultLogoFile: undefined, defaultLogoDataUrl: undefined }))}>
                 {t(language, "settings.removeLogo")}
               </Button>
             </div>
