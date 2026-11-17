@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an Helferlein. Versionen folgen [Semantic Versioning](https://semver.org/lang/de/).
 
-## Unveröffentlicht
+## 1.4.0 – 2026-11-17
 
 Bestehende Daten werden beim ersten Start automatisch umgestellt. Vorher legt Helferlein eine Wiederherstellungskopie des bisherigen Stands an.
 
