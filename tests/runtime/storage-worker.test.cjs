@@ -264,3 +264,69 @@ test('a rejected multi-batch commit cannot publish an earlier partial batch duri
   assert.equal(await client.flush(), true);
   assert.equal(sha(fs.readFileSync(primary(location))), before);
 });
+
+// The whole history is parsed and validated once per content, not on every write. These checks must still notice
+// everything they noticed before.
+test('repeated edits stay exact and keep one readable daily generation without re-reading it', async t => {
+  const location = await directory(t);
+  const client = clientAt(t, location);
+  let current = JSON.parse(await client.get(key));
+  for (let sequence = 1; sequence <= 6; sequence++) {
+    const next = { ...current, settings: { ...current.settings, qaRepeatedEdit: sequence } };
+    assert.equal(await client.commit([batch('repeated-edits', sequence, current, next)]), true);
+    current = next;
+  }
+  assert.deepEqual(JSON.parse(await client.get(key)), current);
+  const generations = fs.readdirSync(path.join(location, 'recovery')).filter(file => /^auto-\d{4}-\d{2}-\d{2}\.json$/.test(file));
+  assert.equal(generations.length, 1);
+  const automatic = (await client.listRecoveries()).filter(entry => entry.kind === 'automatic');
+  assert.equal(automatic.length, 1);
+  // The daily generation is the state before the first write of the day, not a later one.
+  assert.deepEqual(JSON.parse(await client.getRecovery(automatic[0].id)), fixturePayload);
+  await client.close();
+  const reopened = clientAt(t, location);
+  assert.deepEqual(JSON.parse(await reopened.get(key)), current);
+  assert.deepEqual(JSON.parse((await readConf(location)).get(key)), current, 'the same legacy encryption remains readable');
+});
+
+test('a daily generation that changes after it was checked is read again and blocks the next write', async t => {
+  const location = await directory(t);
+  const client = clientAt(t, location);
+  const original = JSON.parse(await client.get(key));
+  const first = { ...original, qaDailyCheck: 1 };
+  assert.equal(await client.commit([batch('daily-check', 1, original, first)]), true);
+  const second = { ...first, qaDailyCheck: 2 };
+  assert.equal(await client.commit([batch('daily-check', 2, first, second)]), true);
+
+  const recovery = path.join(location, 'recovery');
+  const daily = path.join(recovery, fs.readdirSync(recovery).find(file => /^auto-\d{4}-\d{2}-\d{2}\.json$/.test(file)));
+  const intact = fs.readFileSync(daily);
+  // Replace the file instead of writing into it: the generation may share its content with other hard links.
+  fs.unlinkSync(daily);
+  fs.writeFileSync(daily, 'SYNTHETIC DAMAGED DAILY GENERATION', { mode: 0o600 });
+  const before = sha(fs.readFileSync(primary(location)));
+  const third = { ...second, qaDailyCheck: 3 };
+  await assert.rejects(client.commit([batch('daily-check', 3, second, third)]));
+  assert.equal(sha(fs.readFileSync(primary(location))), before, 'nothing is published while the daily generation is unreadable');
+  assert.equal(fs.readFileSync(daily, 'utf8'), 'SYNTHETIC DAMAGED DAILY GENERATION', 'the damaged file is not replaced silently');
+
+  // Once the generation is readable again, the accepted edit is published by the retry.
+  fs.unlinkSync(daily);
+  fs.writeFileSync(daily, intact, { mode: 0o600 });
+  assert.equal(await client.flush(), true);
+  assert.deepEqual(JSON.parse(await client.get(key)), third);
+  await client.close();
+  assert.deepEqual(JSON.parse((await readConf(location)).get(key)), third);
+});
+
+test('a snapshot that is invalid at start is still refused on every write, not only on the first', async t => {
+  const future = JSON.stringify({ ...fixturePayload, schemaVersion: 2 });
+  const location = await directory(t, old => old.set(key, future));
+  const before = sha(fs.readFileSync(primary(location)));
+  const client = clientAt(t, location);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await assert.rejects(client.set('windowBounds', { width: 1000 + attempt, height: 700 }));
+    assert.equal(sha(fs.readFileSync(primary(location))), before);
+  }
+  assert.equal(fs.existsSync(path.join(location, 'recovery')) && fs.readdirSync(path.join(location, 'recovery')).some(file => file.startsWith('auto-')), false, 'an invalid snapshot never becomes a daily generation');
+});

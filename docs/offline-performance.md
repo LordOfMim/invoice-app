@@ -41,6 +41,18 @@ Seit der Auslagerung liegen Anhänge, Logos und das Unterschriftsbild als Dateie
 
 Die Umstellungszeit umfasst nur das Schreiben und Prüfen der Dateien, nicht das einmalige Laden des alten Bestands und dessen Wiederherstellungskopie. React, Electron-IPC und Mac-Hardware wurden nicht gemessen; die Werte der oberen Tabelle (Linux/Btrfs) sind damit nicht direkt vergleichbar.
 
+### Prüfungen vor dem Schreiben
+
+Vor jedem Schreiben prüfte der Worker den bisherigen Stand und die heutige Tageskopie vollständig neu (Lesen, Entschlüsseln, Parsen, Validieren), obwohl beide sich zwischen zwei Änderungen nicht ändern. Jetzt gilt ein Stand als geprüft, solange er exakt die Zeichenfolge ist, die beim Start validiert oder vom Worker selbst aus seinem validierten Spiegel geschrieben wurde; die Tageskopie wird erneut gelesen, sobald sich Identität, Größe oder Änderungszeit der Datei ändern. Messung wie oben (echter Worker, Windows 11 / NTFS, Node 22.23.3, Rechnungen mit sechs Positionen ohne Anhänge, Median aus sieben kleinen Änderungen):
+
+| Rechnungen | Datendatei | vorher | nachher |
+| ---: | ---: | ---: | ---: |
+| 1.000 | 1,5 MB | 90 ms | 65 ms |
+| 5.000 | 7,6 MB | 443 ms | 256 ms |
+| 10.000 | 15,1 MB | 840 ms | 435 ms |
+
+Die erste Änderung eines Tages legt zusätzlich die Tageskopie an und prüft sie; sie dauert so lange wie bisher.
+
 ## Dauerhaftes lokales Speichern
 
 Dateiname, Schlüssel, Verschlüsselung, App-ID und macOS-Datenordner bleiben kompatibel. Conf serialisiert und verschlüsselt mit dem bisherigen Format ausschließlich in eine neue Staging-Datei. Vor Veröffentlichung wird diese entschlüsselt und bytegenau mit der erwarteten Serialisierung verglichen, privat berechtigt und synchronisiert. Die bisherige bestätigte Generation bleibt als `last-good` erhalten; veröffentlicht wird per Umbenennen. Wo unterstützt wird auch das Verzeichnis synchronisiert. Fehler nach dem Umbenennen gelten ausdrücklich als unbestätigter Zustand, nicht als nachgewiesen unverändertes Original.
