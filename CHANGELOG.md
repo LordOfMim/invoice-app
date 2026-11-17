@@ -11,6 +11,7 @@ Bestehende Daten werden beim ersten Start automatisch umgestellt. Vorher legt He
 - **Anhänge, Logos und das Unterschriftsbild liegen als eigene Dateien** im Ordner `attachments` neben der Datendatei (Desktop-App). In den Daten steht nur noch ein Verweis mit Name, Größe und Prüfsumme. Bisher steckten die Dateien als Text in der Datendatei, die bei jeder Änderung vollständig neu geschrieben wird; mit einigen größeren Anhängen dauerte dadurch jedes Speichern spürbar länger. Gleiche Dateien, etwa dasselbe Logo auf vielen Rechnungen, werden nur einmal gespeichert.
 - **Datensicherung als ZIP** (Desktop-App): Die Sicherung von Hand enthält die Daten und alle Anhänge, Logos und Bilder in einer Datei. Die automatische Sicherung legt die Anhänge einmal im Unterordner `attachments` des Sicherungsordners ab, statt sie in jede Sicherungsdatei zu kopieren; Sicherungsdatei und Unterordner gehören zusammen. Sicherungen älterer Versionen (JSON) lassen sich weiterhin einlesen. Fehlen einer Sicherung Anhänge, nennt Helferlein die Anzahl, bevor es die Daten wiederherstellt.
 - Die Sicherung zum Wiederherstellen wird in der Desktop-App über den Öffnen-Dialog gewählt; Anhänge werden über „Speichern unter …“ gespeichert.
+- **Schnelleres Speichern bei großen Beständen**: Vor jedem Speichern wurden der bisherige Stand und die Tagessicherung vollständig neu geprüft. Das geschieht jetzt nur noch, wenn sich daran etwas geändert hat; bei 10.000 Rechnungen halbiert sich die Zeit bis zur Bestätigung etwa.
 
 ### Hinweise
 

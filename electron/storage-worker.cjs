@@ -13,6 +13,10 @@ const RECOVERY_PREFIX = `${DATA_KEY}:recovery:`;
 const AUX_KEY = 'fachunternehmer-defaults';
 const AUTO_LIMIT = 7;
 let Store, store, config, mirror, mirrorLoaded = false, dirty = false, signature;
+// What the checks before a write have already confirmed, so that an ordinary edit does not parse and validate the
+// whole history twice more: the exact snapshot string that passed validation (the one read at start, or the one
+// this worker wrote from its validated mirror), and the identity of today's daily copy once it was read back.
+let verifiedRaw, verifiedDaily;
 const sessions = new Map();
 const directory = workerData.directory;
 const recoveryDirectory = path.join(directory, 'recovery');
@@ -90,11 +94,14 @@ function autoBackup() {
   // An explicit, validated restoration may replace them only after preserving
   // the exact original separately. Patch/metadata writes cannot create a valid
   // mirror from an unreadable primary and continue to fail closed.
-  try { snapshot(config[DATA_KEY]); }
-  catch (error) {
-    if (!mirrorLoaded || !isValidPersistedData(mirror)) throw error;
-    writeRecovery(`${RECOVERY_PREFIX}before-replacement:${sha(config[DATA_KEY])}`, config[DATA_KEY]);
-    return;
+  if (config[DATA_KEY] !== verifiedRaw) {
+    try { snapshot(config[DATA_KEY]); }
+    catch (error) {
+      if (!mirrorLoaded || !isValidPersistedData(mirror)) throw error;
+      writeRecovery(`${RECOVERY_PREFIX}before-replacement:${sha(config[DATA_KEY])}`, config[DATA_KEY]);
+      return;
+    }
+    verifiedRaw = config[DATA_KEY];
   }
   ensureRecoveryDirectory();
   const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -124,8 +131,13 @@ function autoBackup() {
     } finally { try { fs.unlinkSync(temporary); } catch {} }
   }
   // Retain user/import/upgrade backups forever. Only the app's redundant daily
-  // generations rotate, and only after today's complete copy is readable.
-  snapshot(rawRecovery(destination));
+  // generations rotate, and only after today's complete copy is readable. The copy is read back once; it is read
+  // again only when the file is no longer the one that was checked (other identity, size or modification time).
+  const daily = `${destination}:${fileSignature(destination)}`;
+  if (daily !== verifiedDaily) {
+    snapshot(rawRecovery(destination));
+    verifiedDaily = daily;
+  }
   const generations = fs.readdirSync(recoveryDirectory).filter(name => /^auto-\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort().reverse();
   for (const name of generations.slice(AUTO_LIMIT)) fs.unlinkSync(path.join(recoveryDirectory, name));
   if (generations.length > AUTO_LIMIT) syncDirectory(recoveryDirectory);
@@ -141,6 +153,8 @@ function persist() {
   try {
     store._write(config);
     signature = fileSignature(store.path);
+    // The staged file was decrypted and compared with this serialization, which came from a validated mirror.
+    if (mirrorLoaded) verifiedRaw = config[DATA_KEY];
     dirty = false;
     return true;
   } catch (error) {
