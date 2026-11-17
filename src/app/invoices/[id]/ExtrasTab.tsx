@@ -1,15 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Choice, Field } from "@/components/ui/Field";
 import { DecimalInput } from "@/components/ui/DecimalInput";
 import { FormPage, FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
-import { Card, CardZone } from "@/components/ui/Layout";
+import { Card, CardZone, StatusNote } from "@/components/ui/Layout";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import type { Attachment, Invoice, InvoiceTemplateId, InvoiceTexts, Language, LayoutPreferences, LogoPosition, Tag, TemplateVariant } from "@/lib/domain";
 import { t } from "@/lib/i18n";
+import { keepFile, readFileAsDataUrl, saveStoredAttachment } from "@/lib/storage/files";
 import { removeAttachmentFromInvoice } from "@/lib/storage/store";
 import { fieldId } from "./fields";
 
@@ -81,30 +83,24 @@ export function ExtrasTab({
   const setLayout = (next: Partial<LayoutPreferences>) => save((prev) => ({ ...prev, layout: { ...prev.layout, ...next } }));
   const assigned = invoice.tagIds ?? [];
 
-  const addAttachments = (files: FileList) => {
+  const [attachmentError, setAttachmentError] = useState("");
+
+  // The desktop app keeps each file in its attachments folder and the invoice refers to it; the browser embeds it.
+  const addAttachments = async (files: File[]) => {
     const attachments: Attachment[] = [];
-    let remainingFiles = files.length;
-    const finish = () => {
-      if (remainingFiles === 0 && attachments.length > 0) {
-        save((prev) => ({ ...prev, attachments: [...(prev.attachments ?? []), ...attachments] }));
-      }
-    };
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result;
-        remainingFiles -= 1;
-        if (typeof dataUrl === "string") {
-          attachments.push({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, dataUrl, createdAt: new Date().toISOString() });
-        }
-        finish();
-      };
-      reader.onerror = () => {
-        remainingFiles -= 1;
-        finish();
-      };
-      reader.readAsDataURL(file);
-    });
+    for (const file of files) {
+      try {
+        const kept = await keepFile(await readFileAsDataUrl(file));
+        attachments.push({ id: crypto.randomUUID(), name: file.name, type: file.type, size: file.size, ...kept, createdAt: new Date().toISOString() });
+      } catch { /* An unreadable file is skipped; the others are still added. */ }
+    }
+    if (attachments.length > 0) save((prev) => ({ ...prev, attachments: [...(prev.attachments ?? []), ...attachments] }));
+  };
+
+  const downloadAttachment = async (attachment: Attachment) => {
+    setAttachmentError("");
+    try { await saveStoredAttachment(attachment); }
+    catch (error) { setAttachmentError(error instanceof Error ? error.message : "Die Datei konnte nicht gespeichert werden."); }
   };
 
   return (
@@ -176,15 +172,17 @@ export function ExtrasTab({
               if (!file) return;
               const reader = new FileReader();
               reader.onload = () => {
-                if (typeof reader.result === "string") save((prev) => ({ ...prev, logoDataUrl: reader.result as string }));
+                const result = reader.result;
+                if (typeof result !== "string") return;
+                void keepFile(result).then((kept) => save((prev) => ({ ...prev, logoFile: kept.file, logoDataUrl: kept.dataUrl })));
               };
               reader.readAsDataURL(file);
             }}
           />
         </Field>
-        {invoice.logoDataUrl && (
+        {(invoice.logoDataUrl || invoice.logoFile) && (
           <div className="@md:col-span-2">
-            <Button size="sm" onClick={() => save({ ...invoice, logoDataUrl: undefined })}>{de ? "Eigenes Logo entfernen" : "Remove invoice logo"}</Button>
+            <Button size="sm" onClick={() => save({ ...invoice, logoFile: undefined, logoDataUrl: undefined })}>{de ? "Eigenes Logo entfernen" : "Remove invoice logo"}</Button>
           </div>
         )}
       </FormSection>
@@ -269,11 +267,13 @@ export function ExtrasTab({
                   <div className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{fileSize(attachment.size)} · {new Date(attachment.createdAt).toLocaleDateString(locale)}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {attachment.dataUrl && (
+                  {attachment.dataUrl ? (
                     <a href={attachment.dataUrl} download={attachment.name} className="inline-flex h-8 items-center rounded-md bg-surface shadow-low px-3 font-sans text-base font-medium tracking-snug text-ink-secondary outline-none hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-ring/50">
                       {de ? "Herunterladen" : "Download"}
                     </a>
-                  )}
+                  ) : attachment.file ? (
+                    <Button size="sm" onClick={() => { void downloadAttachment(attachment); }}>{de ? "Speichern unter …" : "Save as …"}</Button>
+                  ) : null}
                   <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={de ? `Anhang ${attachment.name} entfernen` : `Remove attachment ${attachment.name}`} onClick={() => save(removeAttachmentFromInvoice(invoice, attachment.id))}>
                     {t(language, "actions.remove")}
                   </Button>
@@ -283,8 +283,10 @@ export function ExtrasTab({
           </Card>
         )}
         <Field label={de ? "Dateien hinzufügen" : "Add files"}>
-          <Input type="file" multiple onChange={(e) => { if (e.target.files) addAttachments(e.target.files); e.target.value = ""; }} />
+          {/* The list is copied before the input is cleared: clearing empties the live FileList. */}
+          <Input type="file" multiple onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void addAttachments(files); }} />
         </Field>
+        {attachmentError && <StatusNote tone="error" role="alert">{attachmentError}</StatusNote>}
       </FormSection>
     </FormPage>
   );

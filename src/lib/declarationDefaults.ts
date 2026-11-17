@@ -1,4 +1,6 @@
+import { isFileRef } from "../../electron/file-refs.cjs";
 import type { DeclarationDefaults } from "@/lib/documents";
+import type { FileRef } from "@/lib/domain";
 import type { StorageAdapter } from "@/lib/storage/types";
 
 /*
@@ -8,7 +10,11 @@ import type { StorageAdapter } from "@/lib/storage/types";
 
 export const DECLARATION_DEFAULTS_KEY = "fachunternehmer-defaults";
 
-export type StoredDeclarationDefaults = DeclarationDefaults & { signatureImage: string | null };
+/**
+ * The signature or stamp is a stored file (`signatureFile`, desktop app) or a data URL (`signatureImage`: data from
+ * versions up to 1.3 until it is moved into a file, and the browser).
+ */
+export type StoredDeclarationDefaults = DeclarationDefaults & { signatureImage: string | null; signatureFile?: FileRef };
 
 const EMPTY: StoredDeclarationDefaults = {
   senderAddress: "",
@@ -47,6 +53,7 @@ export function loadDeclarationDefaults(adapter: StorageAdapter): StoredDeclarat
       kommission: text("kommission"),
       signatureName: text("signatureName"),
       signatureImage: typeof record.signatureImage === "string" && record.signatureImage ? record.signatureImage : null,
+      ...(isFileRef(record.signatureFile) ? { signatureFile: record.signatureFile } : {}),
     };
   } catch {
     return EMPTY;

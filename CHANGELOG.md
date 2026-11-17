@@ -2,6 +2,22 @@
 
 Alle nennenswerten Änderungen an Helferlein. Versionen folgen [Semantic Versioning](https://semver.org/lang/de/).
 
+## Unveröffentlicht
+
+Bestehende Daten werden beim ersten Start automatisch umgestellt. Vorher legt Helferlein eine Wiederherstellungskopie des bisherigen Stands an.
+
+### Geändert
+
+- **Anhänge, Logos und das Unterschriftsbild liegen als eigene Dateien** im Ordner `attachments` neben der Datendatei (Desktop-App). In den Daten steht nur noch ein Verweis mit Name, Größe und Prüfsumme. Bisher steckten die Dateien als Text in der Datendatei, die bei jeder Änderung vollständig neu geschrieben wird; mit einigen größeren Anhängen dauerte dadurch jedes Speichern spürbar länger. Gleiche Dateien, etwa dasselbe Logo auf vielen Rechnungen, werden nur einmal gespeichert.
+- **Datensicherung als ZIP** (Desktop-App): Die Sicherung von Hand enthält die Daten und alle Anhänge, Logos und Bilder in einer Datei. Die automatische Sicherung legt die Anhänge einmal im Unterordner `attachments` des Sicherungsordners ab, statt sie in jede Sicherungsdatei zu kopieren; Sicherungsdatei und Unterordner gehören zusammen. Sicherungen älterer Versionen (JSON) lassen sich weiterhin einlesen. Fehlen einer Sicherung Anhänge, nennt Helferlein die Anzahl, bevor es die Daten wiederherstellt.
+- Die Sicherung zum Wiederherstellen wird in der Desktop-App über den Öffnen-Dialog gewählt; Anhänge werden über „Speichern unter …“ gespeichert.
+
+### Hinweise
+
+- Dateien im Ordner `attachments` werden nicht automatisch gelöscht, auch wenn ein Anhang aus einer Rechnung entfernt wird: Wiederherstellungspunkte und ältere Sicherungen können noch auf sie verweisen.
+- Eine einzelne Datei über 100 MB bleibt wie bisher in der Datendatei.
+- Versionen bis 1.3 kennen die ausgelagerten Dateien nicht. Wer zu einer älteren Version zurückkehrt, sieht dort Rechnungen ohne Logo und Anhänge ohne Inhalt; die Dateien bleiben im Ordner erhalten und erscheinen mit der neuen Version wieder.
+
 ## 1.3.0 – 2026-11-16
 
 Bestehende Daten werden unverändert übernommen; alle neuen Angaben sind freiwillig.

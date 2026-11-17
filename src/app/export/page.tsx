@@ -18,6 +18,7 @@ import { formatMoney } from "@/lib/money";
 import { safeFilePart } from "@/lib/pdf";
 import { waitForInvoicePrintReady } from "@/lib/printing";
 import { isElectron, saveTextFile } from "@/lib/storage/electronAdapter";
+import { logoUrl } from "@/lib/storage/files";
 import { usePersistedData } from "@/lib/storage/useStore";
 import { collectExportRows, customPeriod, exportCsv, periodFor, type ExportRow, type PeriodKind } from "@/lib/taxExport";
 
@@ -245,7 +246,7 @@ export default function TaxExportPage() {
       {printing && (
         <div className="invoice-preview-frame mt-6 max-h-80 overflow-hidden rounded-card-sm shadow-medium bg-surface-muted p-4" aria-hidden>
           <div id="invoice-preview" style={{ zoom: 0.35 }} className="print-area invoice-paper mx-auto min-h-[297mm] w-[210mm] bg-white p-[12mm]">
-            <InvoicePreview invoice={printing} currency={printing.currency || currency} logoDataUrl={printing.logoDataUrl || data?.settings.defaultLogoDataUrl} />
+            <InvoicePreview invoice={printing} currency={printing.currency || currency} logoDataUrl={logoUrl(printing, data?.settings)} />
           </div>
         </div>
       )}

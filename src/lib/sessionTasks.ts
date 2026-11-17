@@ -107,13 +107,13 @@ export function markBackupDone(adapter: StorageAdapter, today = todayLocalISO())
 }
 
 /** Write a backup into the chosen folder now. Throws with a message for the user when it fails. */
-export async function writeFolderBackup(adapter: StorageAdapter): Promise<{ file?: string; folder?: string }> {
+export async function writeFolderBackup(adapter: StorageAdapter): Promise<{ file?: string; folder?: string; missingFiles?: number }> {
   const api = window.electronAPI?.backup;
   if (!api) throw new Error("Die Sicherung in einen Ordner gibt es in der installierten Desktop-App.");
   const result = await api.write(exportData(adapter));
   if (!result.ok) throw new Error(result.error || "Die Sicherung ist fehlgeschlagen.");
   markBackupDone(adapter);
-  return { file: result.file, folder: result.folder };
+  return { file: result.file, folder: result.folder, missingFiles: result.missingFiles };
 }
 
 /**

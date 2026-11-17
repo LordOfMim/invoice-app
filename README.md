@@ -25,7 +25,7 @@ Lokale Rechnungsverwaltung für macOS, Windows und Linux – mit Kunden, Produkt
 - **Zahlungen, Teilzahlungen, Gutschriften und Stornos**, **Zahlungserinnerungen und Mahnungen** zu überfälligen Rechnungen sowie eine Auswertung offener und überfälliger Beträge
 - **Export für die Steuer**: Belege eines Zeitraums als CSV-Liste und, in der Desktop-App, als ZIP mit der Liste und den PDFs der Rechnungen (Stornos und Gutschriften stehen in der Liste)
 - **Wiederkehrende Rechnungen**, auf Wunsch beim Öffnen der App automatisch als Entwurf angelegt, sowie eine druckbare Fachunternehmererklärung, auch direkt aus einer Rechnung
-- **Datensicherung** als JSON-Export und -Import, automatische wöchentliche Sicherung in einen gewählten Ordner (Desktop-App) und Sicherung vor jedem Versionswechsel
+- **Datensicherung** als ZIP mit allen Anhängen und Bildern (Desktop-App; JSON-Sicherungen älterer Versionen lassen sich weiter einlesen), automatische wöchentliche Sicherung in einen gewählten Ordner und Sicherung vor jedem Versionswechsel
 - Wählbare **Schriftgröße** der Oberfläche
 - Oberfläche auf Deutsch und Englisch, keine Cloud, kein Konto, keine Telemetrie
 
@@ -93,6 +93,8 @@ Für die Installation auf einem produktiv genutzten Mac bleiben Signierung/Notar
 ## Bestandsdaten und Upgrade
 
 Anwendungs-ID, Produktname „Helferlein“, Speicherschlüssel und bisherige Verschlüsselung bleiben erhalten. Daten liegen auf macOS weiterhin unter `~/Library/Application Support/Helferlein`, unter Windows und Linux im Benutzerdatenordner der App (`%APPDATA%` bzw. `~/.config`). Das neue optionale E-Rechnungsmodell erfordert keine Umwandlung alter Rechnungen. Beim ersten Start einer neuen Version sichert Helferlein die vorhandene verschlüsselte Datei zusätzlich unverändert. Vor dem Installationswechsel trotzdem den vollständigen Datenordner kopieren und eine JSON-Sicherung aus der alten App exportieren.
+
+Anhänge, Logos und das Unterschriftsbild liegen in der Desktop-App als eigene Dateien im Unterordner `attachments` des Datenordners, benannt nach ihrer Prüfsumme; die Datendatei enthält nur Verweise darauf. Daten aus Versionen bis 1.3, in denen diese Dateien noch in der Datendatei steckten, stellt Helferlein beim ersten Start um und bewahrt den bisherigen Stand als Wiederherstellungskopie auf. Wer den Datenordner von Hand sichert oder umzieht, nimmt den Unterordner mit.
 
 Eine vorhandene gültige Desktop-Sicherung ist immer maßgeblich, auch wenn sie bewusst leer ist. Ungültige Daten werden nicht durch einen leeren Bestand ersetzt. Vor einem JSON-Import wird der bisherige Stand zusätzlich gesichert. Bei nicht lesbaren Daten bietet die Oberfläche Originalexport und Wiederherstellung an. Alte browserbasierte Daten eines anderen historischen localhost-Ports müssen aus der alten App als JSON exportiert werden.
 

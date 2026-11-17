@@ -29,8 +29,13 @@ declare global {
         chooseFolder: () => Promise<{ ok: boolean; canceled?: boolean; folder?: string | null; available?: boolean; error?: string }>;
         clearFolder: () => Promise<{ ok: boolean; error?: string }>;
         openFolder: () => Promise<{ ok: boolean; error?: string }>;
-        write: (json: string) => Promise<{ ok: boolean; file?: string; folder?: string; error?: string }>;
+        write: (json: string) => Promise<{ ok: boolean; file?: string; folder?: string; files?: number; missingFiles?: number; error?: string }>;
+        /** One ZIP with the data and its attachments, saved through the system dialog. */
+        saveArchive?: (json: string, filename: string) => Promise<{ ok: boolean; canceled?: boolean; file?: string; files?: number; missingFiles?: number; error?: string }>;
+        /** Pick a ZIP or JSON backup; its attachments are taken over and the data is returned for the import. */
+        open?: () => Promise<{ ok: boolean; canceled?: boolean; json?: string; missingFiles?: number; error?: string }>;
       };
+      files?: import("@/lib/storage/files").FilesApi;
       exportArchive?: {
         begin: (filename: string) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
         addPdf: (name: string) => Promise<{ ok: boolean; name?: string; error?: string }>;
