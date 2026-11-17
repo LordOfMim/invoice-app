@@ -27,7 +27,7 @@ export const AUTO_BACKUP_INTERVAL_DAYS = 7;
 /** Age from which a missing backup is pointed out. */
 export const BACKUP_HINT_AFTER_DAYS = 14;
 const HINT_SNOOZE_DAYS = 7;
-const BACKUP_HINT_ID = "backup-hint";
+export const BACKUP_HINT_ID = "backup-hint";
 
 const listeners = new Set<() => void>();
 let notices: SessionNotice[] | null = null;

@@ -207,7 +207,7 @@ export function ExtrasTab({
       <FormSection id="waehrung" title={t(language, "invoices.currency")} description={t(language, "invoices.multiCurrencyNote")}>
         <Field label={t(language, "invoices.currency")} id={fieldId("currency")} error={errors.currency}>
           <Select value={invoice.currency ?? "EUR"} onChange={(e) => save({ ...invoice, currency: e.target.value })}>
-            {CURRENCIES.map((cur) => <option key={cur.code} value={cur.code}>{cur.code} ({cur.symbol}) · {de ? cur.de : cur.en}</option>)}
+            {CURRENCIES.map((cur) => <option key={cur.code} value={cur.code}>{cur.code} ({cur.symbol}), {de ? cur.de : cur.en}</option>)}
           </Select>
         </Field>
         {invoice.currency && invoice.currency !== "EUR" && (
@@ -264,7 +264,7 @@ export function ExtrasTab({
               <CardZone key={attachment.id} padding="sm" className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate font-sans text-lg font-medium tracking-snug text-ink">{attachment.name}</div>
-                  <div className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{fileSize(attachment.size)} · {new Date(attachment.createdAt).toLocaleDateString(locale)}</div>
+                  <div className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{fileSize(attachment.size)}, {new Date(attachment.createdAt).toLocaleDateString(locale)}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {attachment.dataUrl ? (

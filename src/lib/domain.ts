@@ -30,6 +30,8 @@ export type Customer = {
   email?: string;
   phone?: string;
   taxId?: string;
+  /** Leitweg-ID or other buyer reference the customer asked for; goes into every E-Rechnung to this customer. */
+  buyerReference?: string;
   notes?: string;
   /** § 13b UStG: invoices to this customer shift the VAT liability to the recipient. */
   reverseCharge?: boolean;
@@ -414,6 +416,9 @@ export type AppSettings = {
   defaultSender: PartyDetails;
   defaultEInvoice?: EInvoiceDetails;
   defaultFooterText: string;
+  /** Two-column footer for new invoices (e.g. management and register left, phone and web right). */
+  defaultFooterLeftText?: string;
+  defaultFooterRightText?: string;
 
   defaultTemplateId: InvoiceTemplateId;
   defaultLayout: Omit<LayoutPreferences, "templateId">;

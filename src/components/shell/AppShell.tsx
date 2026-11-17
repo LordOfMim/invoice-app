@@ -7,7 +7,7 @@ import { BreadcrumbChevron, BreadcrumbLink } from "@/components/platform/breadcr
 import { HugeiconsIcon } from "@/components/platform/icon";
 import { cn } from "@/components/platform/lib/cn";
 import { TopBar } from "@/components/platform/top-bar";
-import { SessionNotices } from "@/components/SessionNotices";
+import { BackupHint, SessionNotices } from "@/components/SessionNotices";
 import { StorageStatus } from "@/components/StorageStatus";
 import { getMailState, getServerMailState, lastMailAttempt, loadMail, subscribeMail, syncMail, unreadCount } from "@/lib/mail";
 import { runSessionTasks } from "@/lib/sessionTasks";
@@ -152,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </a>
         <Sidebar groups={groups} active={item} pathname={pathname} label={de ? "Hauptnavigation" : "Main navigation"} badges={badges} />
         <div className="app-main-column flex min-w-0 flex-1 flex-col">
-          <TopBar className="no-print h-12 px-4" contentClassName="max-w-[1600px] gap-3" actions={<StorageStatus language={language} />}>
+          <TopBar className="no-print h-12 px-4" contentClassName="max-w-[1600px] gap-3" actions={<><BackupHint /><StorageStatus language={language} /></>}>
             <nav aria-label={de ? "Pfad" : "Breadcrumb"} className="flex min-w-0 items-center gap-2.5">
               {/* The logo lives in the sidebar from lg upwards. */}
               <HelferleinLogoLink className="lg:hidden" />

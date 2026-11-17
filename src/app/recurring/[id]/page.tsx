@@ -55,7 +55,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
   const handleSelectCustomer = (customerId: string) => {
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
-    save({ ...recurring, customerId, recipient: { name: customer.name, address: customer.address, contact: customer.contact } });
+    save({ ...recurring, customerId, recipient: { salutation: customer.salutation, name: customer.name, address: customer.address, contact: customer.contact } });
   };
 
   return (
@@ -160,7 +160,7 @@ export default function RecurringEditorPage({ params }: { params: Promise<{ id: 
         </FormSection>
 
         <RecordStamp>
-          {t(language, "common.created")}: {new Date(recurring.createdAt).toLocaleString(locale)} · {t(language, "common.updated")}: {new Date(recurring.updatedAt).toLocaleString(locale)}
+          {t(language, "common.created")}: {new Date(recurring.createdAt).toLocaleString(locale)}, {t(language, "common.updated")}: {new Date(recurring.updatedAt).toLocaleString(locale)}
         </RecordStamp>
       </FormPage>
 

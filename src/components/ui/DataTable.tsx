@@ -105,18 +105,17 @@ export function PrimaryCell({ title, href, sub, aside }: { title: ReactNode; hre
   );
 }
 
-/** Platform `Pager`: count left, previous/next as secondary buttons right. */
+/** Platform `Pager`: page left, previous/next as secondary buttons right. The count stands in the filter bar; one page needs no pager. */
 export function Pagination({ total, page, pageSize, unit, onPageChange, labels }: { total: number; page: number; pageSize: number; unit: string; onPageChange: (page: number) => void; labels: { nav: string; page: (page: number, pages: number) => string; previous: string; next: string } }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
   return (
     <nav aria-label={labels.nav} className="no-print flex flex-wrap items-center justify-between gap-3">
-      <span className="font-sans text-base tracking-snug text-ink-muted tabular-nums">{total} {unit} · {labels.page(page, pages)}</span>
-      {pages > 1 && (
-        <span className="flex gap-2">
-          <Button disabled={page <= 1} onClick={() => onPageChange(page - 1)}>{labels.previous}</Button>
-          <Button disabled={page >= pages} onClick={() => onPageChange(page + 1)}>{labels.next}</Button>
-        </span>
-      )}
+      <span className="font-sans text-base tracking-snug text-ink-muted tabular-nums" title={`${total} ${unit}`}>{labels.page(page, pages)}</span>
+      <span className="flex gap-2">
+        <Button disabled={page <= 1} onClick={() => onPageChange(page - 1)}>{labels.previous}</Button>
+        <Button disabled={page >= pages} onClick={() => onPageChange(page + 1)}>{labels.next}</Button>
+      </span>
     </nav>
   );
 }

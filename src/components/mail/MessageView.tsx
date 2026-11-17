@@ -102,12 +102,12 @@ export function MessageView({ message, collapsible = false, defaultOpen = true, 
       <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <span className={cn("min-w-0 break-words font-sans text-lg tracking-snug text-ink", unread ? "font-semibold" : "font-medium")}>
           {own ? "Sie" : customer?.name || personLabel(message.from)}
-          {!own && message.from.address && <span className="font-normal text-ink-muted"> · {message.from.address}</span>}
+          {!own && message.from.address && <span className="ml-2 font-normal text-ink-muted">{message.from.address}</span>}
         </span>
         <span className="shrink-0 font-sans text-base tabular-nums tracking-snug text-ink-muted">{formatMailDateTime(message.date)}</span>
       </span>
-      <span className="break-words font-sans text-base tracking-snug text-ink-muted">An: {recipients || "(kein Empfänger)"}{message.cc.length > 0 && ` · Kopie: ${message.cc.map(personLabel).join(", ")}`}</span>
-      {viaOther && <span className="break-words font-sans text-base tracking-snug text-ink-muted">Antwort an: {replyCustomer?.name || answerTo.name ? `${replyCustomer?.name || answerTo.name} · ` : ""}{answerTo.address}</span>}
+      <span className="break-words font-sans text-base tracking-snug text-ink-muted">An: {recipients || "(kein Empfänger)"}{message.cc.length > 0 && `, Kopie: ${message.cc.map(personLabel).join(", ")}`}</span>
+      {viaOther && <span className="break-words font-sans text-base tracking-snug text-ink-muted">Antwort an: {replyCustomer?.name || answerTo.name ? `${replyCustomer?.name || answerTo.name} <${answerTo.address}>` : answerTo.address}</span>}
     </span>
   );
 

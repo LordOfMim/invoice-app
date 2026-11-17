@@ -12,7 +12,12 @@ function createLoader() {
     mod.filename = filename;
     mod.paths = Module._nodeModulePaths(path.dirname(filename));
     cache.set(filename, mod);
-    mod.require = request => request.startsWith('@/') ? load(`src/${request.slice(2)}.ts`) : Module.prototype.require.call(mod, request);
+    mod.require = request => {
+      if (request.startsWith('@/')) return load(`src/${request.slice(2)}.ts`);
+      // Relative TypeScript modules ("./derived", "../calc") load the same way; everything else is plain Node.
+      if (request.startsWith('.') && fs.existsSync(path.resolve(path.dirname(filename), `${request}.ts`))) return load(path.resolve(path.dirname(filename), `${request}.ts`));
+      return Module.prototype.require.call(mod, request);
+    };
     mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
     return mod.exports;
   }

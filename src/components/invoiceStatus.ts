@@ -1,16 +1,16 @@
-import type { InvoiceBalance } from "@/lib/calc";
+import { isDraftInvoice, type InvoiceBalance } from "@/lib/calc";
 import type { Invoice, Language } from "@/lib/domain";
 import type { Tone } from "@/components/ui/Status";
 
 export type InvoiceStatusKey = "draft" | "paid" | "partial" | "overdue" | "open";
 
 /**
- * One status word per invoice, shared by the list and the editor. A blank, unnumbered invoice has nothing to pay
- * yet; it reads as a draft instead of the technically "fully paid" zero balance.
+ * One status word per invoice, shared by the list and the editor. An invoice without a number is a draft, whatever
+ * its amount (see isDraftInvoice): it is not open, not overdue and not paid yet.
  */
 export function invoiceStatus(invoice: Invoice, balance: InvoiceBalance, language: Language): { key: InvoiceStatusKey; tone: Tone; label: string } {
   const de = language === "de";
-  if (!invoice.invoiceNumber && balance.invoiceTotal === 0) return { key: "draft", tone: "muted", label: de ? "Entwurf" : "Draft" };
+  if (isDraftInvoice(invoice)) return { key: "draft", tone: "muted", label: de ? "Entwurf" : "Draft" };
   if (balance.isFullyPaid) return { key: "paid", tone: "success", label: de ? "Bezahlt" : "Paid" };
   if (balance.isPartiallyPaid) return { key: "partial", tone: "attention", label: de ? "Teilweise bezahlt" : "Partially paid" };
   if (balance.isOverdue) return { key: "overdue", tone: "error", label: de ? "Überfällig" : "Overdue" };

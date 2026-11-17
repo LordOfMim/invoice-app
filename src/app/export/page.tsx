@@ -139,7 +139,7 @@ export default function TaxExportPage() {
       render: (row) => (
         <span className="flex min-w-0 flex-col">
           <span className="text-ink">{row.customer || "Ohne Empfänger"}</span>
-          {(row.project || row.note) && <span className="font-sans text-base tracking-snug text-ink-muted">{[row.project, row.note].filter(Boolean).join(" · ")}</span>}
+          {(row.project || row.note) && <span className="font-sans text-base tracking-snug text-ink-muted">{[row.project, row.note].filter(Boolean).join(", ")}</span>}
         </span>
       ),
     },

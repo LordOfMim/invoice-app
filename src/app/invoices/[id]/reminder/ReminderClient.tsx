@@ -7,7 +7,7 @@ import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Field } from "@/components/ui/Field";
 import { FormSection } from "@/components/ui/FormLayout";
 import { Input } from "@/components/ui/Input";
-import { Page, PageHeader, StatusNote } from "@/components/ui/Layout";
+import { Facts, Page, PageHeader, StatusNote } from "@/components/ui/Layout";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { LetterPaper } from "@/components/LetterPaper";
@@ -163,7 +163,7 @@ function ReminderEditor({ invoice, creditNotes, currency, customerEmail, save }:
       <PageHeader
         className="no-print"
         title={`${title} zur Rechnung ${invoice.invoiceNumber || "ohne Nummer"}`}
-        description={[invoice.recipient.name || "Ohne Empfänger", `offen ${money(open)}`, dueDay && `${balance.isOverdue ? "fällig seit" : "fällig am"} ${dueDay}`].filter(Boolean).join(" · ")}
+        description={<Facts items={[invoice.recipient.name || "Ohne Empfänger", `offen ${money(open)}`, dueDay && `${balance.isOverdue ? "fällig seit" : "fällig am"} ${dueDay}`].filter(Boolean)} />}
         actions={<>
           <Button variant="primary" loading={busy === "pdf"} disabled={busy !== null || !!blocked} onClick={() => { void run("pdf"); }}>PDF speichern</Button>
           <Button loading={busy === "mail"} disabled={busy !== null || !!blocked} onClick={() => { void run("mail"); }}>{documentMail.available ? "Per E-Mail senden" : "Als E-Mail vorbereiten"}</Button>
@@ -215,7 +215,7 @@ function ReminderEditor({ invoice, creditNotes, currency, customerEmail, save }:
         <h1 className="mt-6 text-xl font-semibold">{title}</h1>
         <p className="mt-1 text-zinc-600">
           {invoice.texts.documentTitle || "Rechnung"} {invoice.invoiceNumber} vom {formatDocumentDate(invoice.invoiceDate, locale)}
-          {invoice.projectReference?.trim() ? ` · ${invoice.projectReference.trim()}` : ""}
+          {invoice.projectReference?.trim() ? `, ${invoice.projectReference.trim()}` : ""}
         </p>
 
         <p className="mt-8">{greetingFor(invoice)}</p>

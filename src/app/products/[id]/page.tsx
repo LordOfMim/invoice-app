@@ -75,7 +75,7 @@ export default function ProductEditorPage({ params }: { params: Promise<{ id: st
         </FormSection>
 
         <RecordStamp>
-          {t(language, "common.created")}: {new Date(product.createdAt).toLocaleString(de ? "de-DE" : "en-US")} · {t(language, "common.updated")}: {new Date(product.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
+          {t(language, "common.created")}: {new Date(product.createdAt).toLocaleString(de ? "de-DE" : "en-US")}, {t(language, "common.updated")}: {new Date(product.updatedAt).toLocaleString(de ? "de-DE" : "en-US")}
         </RecordStamp>
       </FormPage>
 

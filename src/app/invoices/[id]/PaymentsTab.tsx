@@ -134,7 +134,7 @@ export function PaymentsTab({
                   <div className="min-w-0">
                     <div className="font-sans text-lg font-semibold tracking-snug text-ink tabular-nums">{value}</div>
                     <div className="font-sans text-base tracking-snug text-ink-muted">
-                      {when} · {payment.method === "manual_paid" ? (de ? "Als bezahlt markiert" : "Marked as paid") : <>{(payment.method && methodLabel[payment.method]) || payment.method}{payment.reference ? ` · ${payment.reference}` : ""}</>}
+                      {when}, {payment.method === "manual_paid" ? (de ? "Als bezahlt markiert" : "Marked as paid") : <>{(payment.method && methodLabel[payment.method]) || payment.method}{payment.reference ? ` · ${payment.reference}` : ""}</>}
                     </div>
                     {payment.notes && <div className="font-sans text-base tracking-snug text-ink-muted">{payment.notes}</div>}
                   </div>
@@ -186,8 +186,8 @@ export function PaymentsTab({
                       {reminderTitle(reminder.level)}
                     </Link>
                     <div className="font-sans text-base tracking-snug text-ink-muted">
-                      vom {formatDay(reminder.date, locale)} · Frist bis {formatDay(reminder.dueDate, locale)}
-                      {reminder.fee ? ` · Mahngebühr ${formatMoney(reminder.fee, currency, locale)}` : ""}
+                      vom {formatDay(reminder.date, locale)}, Frist bis {formatDay(reminder.dueDate, locale)}
+                      {reminder.fee ? `, Mahngebühr ${formatMoney(reminder.fee, currency, locale)}` : ""}
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" className="text-danger-ink hover:bg-danger-tint" aria-label={`${reminderTitle(reminder.level)} vom ${formatDay(reminder.date, locale)} entfernen`} onClick={() => save({ ...invoice, reminders: (invoice.reminders ?? []).filter((entry) => entry.id !== reminder.id) })}>

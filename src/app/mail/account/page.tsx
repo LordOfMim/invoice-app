@@ -179,7 +179,7 @@ export default function MailAccountPage() {
             {suggestion && !suggestion.known && <StatusNote tone="info" className="@md:col-span-2">Für diese Adresse sind die Server nicht hinterlegt. Unter „Servereinstellungen“ stehen übliche Werte; die richtigen nennt Ihr Anbieter meist unter dem Stichwort „IMAP“.</StatusNote>}
           </FormSection>
 
-          <Disclosure title="Servereinstellungen" summary={form.imapHost ? `${form.imapHost} · ${form.smtpHost}` : "werden aus der Adresse vorgeschlagen"} defaultOpen={existing} open={serverProblem ? true : undefined}>
+          <Disclosure title="Servereinstellungen" summary={form.imapHost ? `${form.imapHost}, ${form.smtpHost}` : "werden aus der Adresse vorgeschlagen"} defaultOpen={existing} open={serverProblem ? true : undefined}>
             <FormSection title="Posteingang (IMAP)" columns={2}>
               <Field label="Server" error={fieldError("imapHost")}>
                 <Input type="text" spellCheck={false} autoComplete="off" value={form.imapHost} placeholder="imap.beispiel.de" onChange={(event) => { setServersTouched(true); set({ imapHost: event.target.value }); }} />

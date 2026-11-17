@@ -64,7 +64,7 @@ export default function RecurringPage() {
       header: de ? "Wiederkehrende Rechnung" : "Recurring invoice",
       render: (ri) => <PrimaryCell title={ri.name || t(language, "common.unnamed")} href={`/recurring/${ri.id}`} sub={ri.recipient.name || t(language, "recurring.noRecipient")} />,
     },
-    { key: "frequency", header: de ? "Rhythmus" : "Frequency", width: "10rem", render: (ri) => `${frequencyLabel(ri.frequency)} · ${ri.lineItems.length} ${t(language, "recurring.items")}` },
+    { key: "frequency", header: de ? "Rhythmus" : "Frequency", width: "10rem", render: (ri) => `${frequencyLabel(ri.frequency)}, ${ri.lineItems.length} ${t(language, "recurring.items")}` },
     {
       key: "next",
       header: t(language, "recurring.nextRun"),

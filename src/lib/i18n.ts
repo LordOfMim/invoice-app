@@ -141,14 +141,14 @@ const de = {
   "invoice.deleteTitle": "Rechnung löschen",
   "invoice.deleteDescription": "Möchten Sie diese Rechnung wirklich löschen?",
   // Customers
-  "customers.title": "Kundenverwaltung",
+  "customers.title": "Kunden",
   "customers.empty": "Noch keine Kunden.",
   "customers.name": "Name",
   "customers.address": "Adresse",
   "customers.contact": "Kontakt",
   "customers.email": "E-Mail",
   "customers.phone": "Telefon",
-  "customers.taxId": "Steuernummer",
+  "customers.taxId": "USt-IdNr. (falls vorhanden)",
   "customers.notes": "Notizen",
   "customers.new": "Neuer Kunde",
   "customers.description": "Empfänger speichern und beim Erstellen von Rechnungen auswählen.",
@@ -161,7 +161,7 @@ const de = {
   "customers.addressContact": "Adresse & Kontakt",
   "customers.salutation": "Anrede",
   // Products
-  "products.title": "Produkte & Leistungen",
+  "products.title": "Produkte und Leistungen",
   "products.empty": "Noch keine Produkte.",
   "products.name": "Name",
   "products.description": "Beschreibung",
@@ -182,7 +182,7 @@ const de = {
   "products.tax": "MwSt.",
   "products.noTax": "keine MwSt.",
   // Tags
-  "tags.title": "Tags & Projekte",
+  "tags.title": "Schlagwörter",
   "tags.empty": "Noch keine Tags.",
   "tags.name": "Name",
   "tags.color": "Farbe",
@@ -225,7 +225,7 @@ const de = {
   "recurring.settings": "Einstellungen",
   "recurring.daysBeforeNextRun": "Tage vor nächster Ausführung",
   // Credit Notes
-  "creditNotes.title": "Gutschriften & Stornos",
+  "creditNotes.title": "Gutschriften und Stornos",
   "creditNotes.empty": "Noch keine Gutschriften.",
   "creditNotes.storno": "Storno",
   "creditNotes.gutschrift": "Gutschrift",
@@ -242,7 +242,7 @@ const de = {
   "creditNotes.details": "Gutschrift-Details",
   "creditNotes.recipientFromInvoice": "Empfänger (aus Rechnung)",
   // Dashboard
-  "dashboard.title": "Dashboard",
+  "dashboard.title": "Auswertung",
   "dashboard.unpaidTotal": "Offene Beträge",
   "dashboard.overdueCount": "Überfällige Rechnungen",
   "dashboard.overdueTotal": "Überfälliger Betrag",
@@ -254,7 +254,7 @@ const de = {
   "dashboard.description": "Überblick über deine Rechnungsaktivität",
   "dashboard.revenueEmpty": "Umsatzdaten erscheinen hier, sobald du Rechnungen erstellst.",
   // Templates
-  "templates.title": "Vorlagen-Editor",
+  "templates.title": "Vorlagen",
   "templates.empty": "Noch keine benutzerdefinierten Vorlagen.",
   "templates.new": "Neue Vorlage",
   "templates.baseTemplate": "Basis-Vorlage",
@@ -287,7 +287,7 @@ const de = {
   "templates.underlined": "Unterstrichen",
   "templates.preview": "Vorschau",
   // Backup
-  "backup.title": "Backup & Daten",
+  "backup.title": "Datensicherung",
   "backup.export": "Daten exportieren",
   "backup.import": "Daten importieren",
   "backup.lastBackup": "Letztes Backup",
@@ -485,7 +485,7 @@ const en: Record<TranslationKey, string> = {
   "invoice.deleteTitle": "Delete invoice",
   "invoice.deleteDescription": "Are you sure you want to delete this invoice?",
   // Customers
-  "customers.title": "Customer Directory",
+  "customers.title": "Customers",
   "customers.empty": "No customers yet.",
   "customers.name": "Name",
   "customers.address": "Address",
@@ -505,7 +505,7 @@ const en: Record<TranslationKey, string> = {
   "customers.addressContact": "Address & contact",
   "customers.salutation": "Salutation",
   // Products
-  "products.title": "Products & Services",
+  "products.title": "Products and services",
   "products.empty": "No products yet.",
   "products.name": "Name",
   "products.description": "Description",
@@ -526,7 +526,7 @@ const en: Record<TranslationKey, string> = {
   "products.tax": "tax",
   "products.noTax": "no tax",
   // Tags
-  "tags.title": "Tags & Projects",
+  "tags.title": "Tags",
   "tags.empty": "No tags yet.",
   "tags.name": "Name",
   "tags.color": "Color",
@@ -569,7 +569,7 @@ const en: Record<TranslationKey, string> = {
   "recurring.settings": "Settings",
   "recurring.daysBeforeNextRun": "Days before next run",
   // Credit Notes
-  "creditNotes.title": "Credit Notes & Cancellations",
+  "creditNotes.title": "Credit notes and cancellations",
   "creditNotes.empty": "No credit notes yet.",
   "creditNotes.storno": "Cancellation",
   "creditNotes.gutschrift": "Credit note",
@@ -586,7 +586,7 @@ const en: Record<TranslationKey, string> = {
   "creditNotes.details": "Credit note details",
   "creditNotes.recipientFromInvoice": "Recipient (from invoice)",
   // Dashboard
-  "dashboard.title": "Dashboard",
+  "dashboard.title": "Insights",
   "dashboard.unpaidTotal": "Outstanding",
   "dashboard.overdueCount": "Overdue invoices",
   "dashboard.overdueTotal": "Overdue amount",
@@ -598,7 +598,7 @@ const en: Record<TranslationKey, string> = {
   "dashboard.description": "Overview of your invoicing activity",
   "dashboard.revenueEmpty": "Revenue data will appear here once you create invoices.",
   // Templates
-  "templates.title": "Template Editor",
+  "templates.title": "Templates",
   "templates.empty": "No custom templates yet.",
   "templates.new": "New template",
   "templates.baseTemplate": "Base template",
@@ -631,7 +631,7 @@ const en: Record<TranslationKey, string> = {
   "templates.underlined": "Underlined",
   "templates.preview": "Preview",
   // Backup
-  "backup.title": "Backup & Data",
+  "backup.title": "Backup",
   "backup.export": "Export data",
   "backup.import": "Import data",
   "backup.lastBackup": "Last backup",

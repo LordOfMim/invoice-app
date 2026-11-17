@@ -35,14 +35,14 @@ export function initialsOf(name: string) {
 }
 
 function MetaRow({ items }: { items: readonly ReactNode[] }) {
+  return <Facts items={items} />;
+}
+
+/** Facts in one line, set apart by space instead of a separator dot; they wrap as whole items. */
+export function Facts({ items, className }: { items: readonly ReactNode[]; className?: string }) {
   return (
-    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {Children.toArray(items).map((item, index) => (
-        <span key={index} className="contents">
-          {index > 0 && <span aria-hidden="true" className="text-line-dash">·</span>}
-          <span className="min-w-0">{item}</span>
-        </span>
-      ))}
+    <span className={cn("flex flex-wrap items-baseline gap-x-5 gap-y-1", className)}>
+      {Children.toArray(items).map((item, index) => <span key={index} className="min-w-0">{item}</span>)}
     </span>
   );
 }
@@ -199,7 +199,7 @@ export function KeyFigures({ items, className }: { items: readonly KeyFigure[]; 
           <StatCell
             label={<span className="text-base text-ink-muted">{item.label}</span>}
             value={<span className="text-2xl tabular-nums">{item.value}</span>}
-            tone={figureTone[item.tone ?? "neutral"]}
+            tone={item.tone && item.tone !== "neutral" ? figureTone[item.tone] : null}
             footer={item.hint ? <span className="font-sans text-base tracking-snug text-ink-muted">{item.hint}</span> : undefined}
             className="min-w-0"
           />
@@ -221,7 +221,7 @@ export type StatusNoteTone = "ok" | "attention" | "error" | "info";
 export function StatusNote({ tone = "info", title, action, className, children, ...props }: Omit<HTMLAttributes<HTMLDivElement>, "title"> & { tone?: StatusNoteTone; title?: ReactNode; action?: ReactNode }) {
   const variant = tone === "error" ? "danger" : tone === "ok" ? "success" : "info";
   return (
-    <Alert variant={variant} className={cn("min-w-0 flex-col gap-1", tone === "attention" && "border-warn-line bg-warn-tint text-warn-ink", className)} {...props}>
+    <Alert variant={variant} className={cn("min-w-0 flex-col gap-1 animate-in fade-in-0 duration-200 ease-out motion-reduce:animate-none", tone === "attention" && "border-warn-line bg-warn-tint text-warn-ink", className)} {...props}>
       {title && <p className="font-medium">{title}</p>}
       {children && <div className="[&_li]:mt-0.5 [&_ul]:list-disc [&_ul]:pl-4">{children}</div>}
       {action && <div className="mt-1.5 flex flex-wrap gap-2">{action}</div>}

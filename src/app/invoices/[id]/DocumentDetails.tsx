@@ -62,6 +62,20 @@ export function DocumentDetails({ invoice, kind, documents, invoices, creditNote
       `Jede Nummer darf nur einmal vergeben werden.`
     : "";
 
+  // Projects of earlier invoices and quotes to the same customer, newest first: chosen instead of typed again, so
+  // the exact wording that links advance and final invoices stays the same.
+  const projectSuggestions = useMemo(() => {
+    const own = invoice.customerId || invoice.recipient.name.trim();
+    if (!own) return [];
+    const seen = new Set<string>();
+    return [...invoices, ...documents]
+      .filter((document) => document.id !== invoice.id && (document.customerId || document.recipient.name.trim()) === own && document.projectReference?.trim())
+      .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate))
+      .map((document) => document.projectReference!.trim())
+      .filter((project) => !seen.has(project) && seen.add(project))
+      .slice(0, 12);
+  }, [documents, invoices, invoice.customerId, invoice.id, invoice.recipient.name]);
+
   const invoiceKind = invoiceKindOf(invoice);
   const deductions = invoice.advanceDeductions ?? [];
   const payable = computeInvoicePayable(invoice);
@@ -156,14 +170,16 @@ export function DocumentDetails({ invoice, kind, documents, invoices, creditNote
       <Field
         label={invoice.texts.projectReferenceLabel?.trim() || "Bauvorhaben / Kommission"}
         id={fieldId("projectReference")}
-        hint={`Steht auf ${isQuote ? "dem Angebot" : "der Rechnung"} und hilft beim Wiederfinden.`}
+        hint={projectSuggestions.length ? "Frühere Bauvorhaben dieses Kunden stehen beim Tippen zur Auswahl." : `Steht auf ${isQuote ? "dem Angebot" : "der Rechnung"} und hilft beim Wiederfinden.`}
         className={isQuote ? "@md:col-span-2" : "@md:col-span-1 @2xl:col-span-2"}
       >
         <Input
           value={invoice.projectReference ?? ""}
           placeholder="z. B. Pohlstraße 40, Berlin"
+          list={projectSuggestions.length ? `${invoice.id}-projects` : undefined}
           onChange={(e) => save({ ...invoice, projectReference: e.target.value || undefined })}
         />
+        {projectSuggestions.length > 0 && <datalist id={`${invoice.id}-projects`}>{projectSuggestions.map((project) => <option key={project} value={project} />)}</datalist>}
       </Field>
 
       {!isQuote && (
@@ -219,7 +235,7 @@ export function DocumentDetails({ invoice, kind, documents, invoices, creditNote
                   </div>
                   <p className="mt-2 font-sans text-base tracking-snug text-ink-muted">
                     Brutto {money(entry.net + entry.tax)}
-                    {source && <> · <Link href={`/invoices/${source.id}`} className="text-link underline-offset-3 hover:underline">Abschlagsrechnung öffnen</Link></>}
+                    {source && <>, <Link href={`/invoices/${source.id}`} className="text-link underline-offset-3 hover:underline">Abschlagsrechnung öffnen</Link></>}
                   </p>
                   {issue?.kind === "missing" && (
                     <StatusNote
@@ -275,7 +291,7 @@ export function DocumentDetails({ invoice, kind, documents, invoices, creditNote
               <ul className="mt-1 flex flex-col gap-2">
                 {candidates.map((candidate) => (
                   <li key={candidate.id} className="flex flex-wrap items-center gap-3">
-                    <span>{candidate.invoiceNumber} vom {formatDocumentDate(candidate.invoiceDate, locale)} · {money(computeInvoicePayable(candidate).total)}</span>
+                    <span>{candidate.invoiceNumber} vom {formatDocumentDate(candidate.invoiceDate, locale)}, {money(computeInvoicePayable(candidate).total)}</span>
                     <Button size="sm" onClick={() => addDeduction(advanceDeductionFrom(candidate, creditNotes))}>Abziehen</Button>
                   </li>
                 ))}
